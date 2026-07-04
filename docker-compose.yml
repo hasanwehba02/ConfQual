@@ -5,9 +5,11 @@ services:
     restart: unless-stopped
 
     environment:
-      POSTGRES_USER: hasan
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: conference_quality
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-conference_quality}
+    env_file:
+      - backend/.env
 
     ports:
       - "5432:5432"
