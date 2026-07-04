@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: conference-db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: hasan
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: conference_quality
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
