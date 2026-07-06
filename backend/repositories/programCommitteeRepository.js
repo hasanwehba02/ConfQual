@@ -38,6 +38,16 @@ async function createProgramCommitteeMember(member) {
     return result.rows[0];
 }
 
+async function findByExternalPersonId(externalPersonId) {
+    const query = `
+        SELECT * FROM program_committee_member
+        WHERE external_person_id = $1
+    `;
+    const result = await client.query(query, [externalPersonId]);
+    return result.rows.length > 0 ? result.rows[0] : null;
+}
+
 module.exports = {
-    createProgramCommitteeMember
+    createProgramCommitteeMember,
+    findByExternalPersonId
 };

@@ -1,4 +1,4 @@
-const readWorkbook = require("../workbookReader");
+const { readWorkbook } = require("../workbookReader");
 const mapComment = require("../mappers/commentMapper");
 const commentService = require("../../services/commentService");
 

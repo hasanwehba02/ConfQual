@@ -1,4 +1,4 @@
-const readWorkbook = require("../workbookReader");
+const { readWorkbook } = require("../workbookReader");
 const mapBid = require("../mappers/bidMapper");
 const bidService = require("../../services/bidService");
 

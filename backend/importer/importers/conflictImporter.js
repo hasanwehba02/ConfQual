@@ -1,4 +1,4 @@
-const readWorkbook = require("../workbookReader");
+const { readWorkbook } = require("../workbookReader");
 const mapConflict = require("../mappers/conflictMapper");
 const conflictService = require("../../services/conflictService");
 
