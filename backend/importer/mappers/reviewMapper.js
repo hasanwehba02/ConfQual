@@ -2,6 +2,9 @@ function mapReview(row) {
     return {
         externalSubmissionId: row.getCell(2).value,
         externalPersonId: row.getCell(13).value || row.getCell(3).value, // fallback to member # if person # is missing
+        reviewerFirstName: row.getCell(10).value,
+        reviewerLastName: row.getCell(11).value,
+        reviewerEmail: row.getCell(12).value,
         reviewNumber: row.getCell(5).value,
         version: row.getCell(6).value,
         reviewText: row.getCell(7).value,

@@ -1,4 +1,4 @@
-const readWorkbook = require("../workbookReader");
+const { readWorkbook } = require("../workbookReader");
 const mapMetaReview = require("../mappers/metaReviewMapper");
 const metaReviewService = require("../../services/metaReviewService");
 

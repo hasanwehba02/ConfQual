@@ -13,7 +13,7 @@ async function createPaper(paper) {
             reviews_sent
         )
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-        ON CONFLICT (conference_id, external_submission_id)
+        ON CONFLICT (external_submission_id)
         DO NOTHING
         RETURNING *;
     `;

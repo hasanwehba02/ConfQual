@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ConfQual | Analytics</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Global Overlays -->
+    <div id="global-drag-overlay" class="global-overlay hidden">
+        <h2 style="font-family: 'Roboto Mono', monospace; font-size: 2rem;">Drop dataset to import</h2>
+    </div>
+    <div id="global-loading-overlay" class="global-overlay hidden">
+        <div class="spinner" style="width: 48px; height: 48px; border-width: 4px; margin-bottom: 1rem;"></div>
+        <h2 style="font-family: 'Roboto Mono', monospace; font-size: 1.5rem;">Importing dataset...</h2>
+        <p class="text-muted">This may take a few moments</p>
+    </div>
+
+    <header class="app-header">
+        <div class="brand">
+            <i class="ph-fill ph-square text-primary"></i>
+            <h1>ConfQual</h1>
+        </div>
+        <div class="header-actions">
+            <button id="reset-btn" class="btn btn-outline" style="margin-right: 10px;">Purge Data</button>
+            <button id="upload-btn" class="btn btn-primary">Upload Dataset</button>
+        </div>
+    </header>
+
+    <div class="layout-grid">
+        <!-- Triage Sidebar -->
+        <aside class="triage-sidebar hidden" id="triage-sidebar">
+            <div class="sidebar-header">
+                <h2>Action Center</h2>
+            </div>
+            <div class="alerts-container" id="alerts-list">
+                <div class="empty-alerts text-muted">No actions required.</div>
+            </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="main-workspace hidden" id="dashboard-content">
+            <nav class="nav-tabs" id="main-tabs">
+                <button class="tab-btn active" data-target="tab-papers">Paper Explorer</button>
+                <button class="tab-btn" data-target="tab-reviewers">Reviewer Explorer</button>
+                <button class="tab-btn" data-target="tab-analytics">System Analytics</button>
+                <button class="tab-btn" data-target="tab-quality-profile">Quality Profile</button>
+            </nav>
+
+            <!-- PAPER EXPLORER -->
+            <div id="tab-papers" class="tab-content active">
+                <div class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h2>Paper Explorer</h2>
+                        <p class="text-muted">Investigate submission scores and discussion health.</p>
+                    </div>
+                    <button class="btn btn-outline" onclick="exportTableToCSV('papers-table-body', 'papers_export.csv')">
+                        Export CSV
+                    </button>
+                </div>
+                
+                <div id="paper-filter-banner" class="filter-banner hidden">
+                    <div class="filter-info">
+                        <span>FILTER ACTIVE: <strong id="paper-filter-count">0</strong> records matching criteria.</span>
+                    </div>
+                    <button class="btn btn-outline btn-sm" onclick="clearFilters('paper')">Clear Filter</button>
+                </div>
+                
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>TITLE</th>
+                                <th>REVS</th>
+                                <th>AVG</th>
+                                <th style="width: 150px;">VARIANCE</th>
+                                <th>CMTS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="papers-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- REVIEWER EXPLORER -->
+            <div id="tab-reviewers" class="tab-content hidden">
+                <div class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h2>Reviewer Explorer</h2>
+                        <p class="text-muted">Audit Program Committee workload and calibration.</p>
+                    </div>
+                    <button class="btn btn-outline" onclick="exportTableToCSV('reviewers-table-body', 'reviewers_export.csv')">
+                        Export CSV
+                    </button>
+                </div>
+                
+                <div id="reviewer-filter-banner" class="filter-banner hidden">
+                    <div class="filter-info">
+                        <span>FILTER ACTIVE: <strong id="reviewer-filter-count">0</strong> records matching criteria.</span>
+                    </div>
+                    <button class="btn btn-outline btn-sm" onclick="clearFilters('reviewer')">Clear Filter</button>
+                </div>
+                
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>NAME</th>
+                                <th>ROLE</th>
+                                <th>DONE</th>
+                                <th>W/C</th>
+                                <th>AVG</th>
+                                <th>MATCH %</th>
+                                <th style="width: 150px;">CALIBRATION</th>
+                                <th>CMTS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reviewers-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SYSTEM ANALYTICS -->
+            <div id="tab-analytics" class="tab-content hidden">
+                <div class="page-header">
+                    <h2>System Analytics</h2>
+                    <p class="text-muted">High-level metrics and macro trends.</p>
+                </div>
+                
+                <div class="scorecard-container mb-4">
+                    <h3 class="chart-title mb-2">Quality Scorecard</h3>
+                    <div class="scorecard-grid" id="quality-scorecard"></div>
+                </div>
+
+                <div class="metrics-grid mb-4">
+                    <div class="metric-card">
+                        <span class="metric-label">Total Papers</span>
+                        <span class="metric-value" id="stat-papers">--</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Total Reviewers</span>
+                        <span class="metric-value" id="stat-reviewers">--</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Completed Reviews</span>
+                        <span class="metric-value" id="stat-reviews">--</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Expertise Mismatches</span>
+                        <span class="metric-value" id="stat-mismatches">--</span>
+                    </div>
+                </div>
+                
+                <div class="charts-row">
+                    <div class="chart-card">
+                        <h3 class="chart-title">PC Composition</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="reviewerChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h3 class="chart-title">Debate Distribution</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="debatesChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- QUALITY PROFILE -->
+            <div id="tab-quality-profile" class="tab-content hidden">
+                <div class="page-header">
+                    <h2>Quality Profile</h2>
+                    <p class="text-muted">Standardized evaluation against CORE/GII-GRIN-SCIE.</p>
+                </div>
+                
+                <div class="chart-card mb-4" style="border-left: 4px solid var(--primary);">
+                    <h3 class="chart-title">Compatibility Statement</h3>
+                    <p id="compatibility-statement" style="font-family: 'Roboto Mono', monospace;">--</p>
+                </div>
+
+                <div class="metrics-grid mb-4">
+                    <div class="metric-card">
+                        <span class="metric-label">Acceptance Rate</span>
+                        <span class="metric-value" id="stat-acceptance-rate">--%</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Selectivity Rank</span>
+                        <span class="metric-value" id="stat-selectivity-rank">--</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Reviews per Paper</span>
+                        <span class="metric-value" id="stat-avg-reviews">--</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-label">Intl PC Members</span>
+                        <span class="metric-value" id="stat-international-pc">--%</span>
+                    </div>
+                </div>
+
+                <div class="charts-row">
+                    <div class="chart-card">
+                        <h3 class="chart-title">Thematic Competence</h3>
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>TOPIC</th>
+                                        <th>PAPERS</th>
+                                        <th>EXPERTS</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="thematic-competence-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h3 class="chart-title">Geographic Diversity</h3>
+                        <div class="chart-wrapper" style="display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; height: 100%;">
+                            <h1 id="international-percentage" style="font-size: 4rem; color: var(--text-main); margin-bottom: 0;">--%</h1>
+                            <p class="text-muted">International Representation</p>
+                            <p id="geographic-breakdown" class="mt-2 text-small">--</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <main class="empty-state" id="empty-state">
+            <h2 style="font-family: 'Roboto Mono', monospace;">No Data Loaded</h2>
+            <p>Awaiting dataset injection.</p>
+        </main>
+    </div>
+
+    <!-- Context Drawer: Upload -->
+    <aside id="upload-drawer" class="context-drawer closed">
+        <div class="drawer-header">
+            <h2>Upload Dataset</h2>
+            <button id="close-upload-drawer" class="btn-icon"><i class="ph ph-x"></i></button>
+        </div>
+        <div class="drawer-body">
+            <form id="upload-form">
+                <div class="drop-zone" id="drop-zone">
+                    <p>DRAG & DROP .XLSX HERE</p>
+                    <input type="file" id="excelFile" accept=".xlsx" required hidden>
+                    <button type="button" class="btn btn-outline mt-4" onclick="document.getElementById('excelFile').click()">BROWSE</button>
+                </div>
+                <div class="form-actions mt-4">
+                    <button type="submit" class="btn btn-primary w-full" id="submit-upload">PROCESS</button>
+                </div>
+                <div id="loading-state" class="hidden">
+                    <div class="spinner"></div>
+                    <p style="font-family: 'Roboto Mono', monospace; font-size: 0.8rem; text-align: center; margin-top: 1rem;">PROCESSING...</p>
+                </div>
+            </form>
+        </div>
+    </aside>
+
+    <!-- Context Drawer: Detail -->
+    <aside id="detail-drawer" class="context-drawer closed">
+        <div class="drawer-header">
+            <h2 id="detail-drawer-title">Details</h2>
+            <button id="close-detail-drawer" class="btn-icon"><i class="ph ph-x"></i></button>
+        </div>
+        <div class="drawer-body" id="detail-drawer-body">
+            <div class="spinner"></div>
+        </div>
+    </aside>
+
+    <script src="app.js"></script>
+</body>
+</html>

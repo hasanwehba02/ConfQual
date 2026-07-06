@@ -1,8 +1,8 @@
-const readWorkbook = require("../workbookReader");
+const { readWorkbook } = require("../workbookReader");
 const mapReview = require("../mappers/reviewMapper");
 const reviewService = require("../../services/reviewService");
 
-async function importReviewsForSheet(workbook, sheetName) {
+async function importReviewsForSheet(workbook, sheetName, isSuperseded = false) {
     const sheet = workbook.getWorksheet(sheetName);
 
     if (!sheet) {
@@ -22,6 +22,7 @@ async function importReviewsForSheet(workbook, sheetName) {
             continue;
         }
 
+        reviewDto.isSuperseded = isSuperseded;
         const savedReview = await reviewService.createReview(reviewDto);
 
         if (savedReview) {
@@ -38,8 +39,8 @@ async function importReviewsForSheet(workbook, sheetName) {
 async function importReviews() {
     const workbook = await readWorkbook();
     
-    await importReviewsForSheet(workbook, "Reviews");
-    await importReviewsForSheet(workbook, "Superseded reviews");
+    await importReviewsForSheet(workbook, "Reviews", false);
+    await importReviewsForSheet(workbook, "Superseded reviews", true);
 
     console.log("Reviews imported successfully.\n");
 }

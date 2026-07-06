@@ -12,9 +12,10 @@ async function createReview(reviewData) {
             total_score,
             review_date,
             review_time,
-            has_attachment
+            has_attachment,
+            is_superseded
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *;
     `;
 
@@ -28,7 +29,8 @@ async function createReview(reviewData) {
         reviewData.totalScore,
         reviewData.reviewDate,
         reviewData.reviewTime,
-        reviewData.hasAttachment
+        reviewData.hasAttachment,
+        reviewData.isSuperseded
     ];
 
     const result = await client.query(query, values);

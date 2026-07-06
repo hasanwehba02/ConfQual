@@ -11,12 +11,24 @@ const importMetaReviews = require("./importers/metaReviewImporter");
 const importTopics = require("./importers/topicImporter");
 const client = require("../config/database");
 
-async function runImporter() {
+const { setFilePath } = require("./workbookReader");
+
+async function runImporter(filePath) {
+    if (filePath) {
+        setFilePath(filePath);
+    }
+    
     console.log("Starting ConfQual import...\n");
+    
+    try {
+        await client.query('BEGIN');
+        
+        console.log("Wiping existing data...");
+        await client.query('TRUNCATE TABLE conference CASCADE;');
 
-    const conference = await importConference();
+        const conference = await importConference();
 
-    console.log("");
+        console.log("");
 
     await importProgramCommittee(conference);
 
@@ -34,18 +46,27 @@ async function runImporter() {
 
     await importComments();
 
-    await importMetaReviews();
+        await importMetaReviews();
 
-    await importTopics();
+        await importTopics(conference);
 
-    console.log("Import completed successfully!");
+        await client.query('COMMIT');
+        console.log("\nImport Complete! All data committed to database.");
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error("\nImport Failed! Transaction rolled back.", error);
+        throw error;
+    }
 }
 
-runImporter()
-    .catch((err) => {
-        console.error("Import failed:");
+module.exports = runImporter;
+
+if (require.main === module) {
+    const args = process.argv.slice(2);
+    runImporter(args[0]).then(() => {
+        process.exit(0);
+    }).catch(err => {
         console.error(err);
-    })
-    .finally(() => {
-        client.end();
+        process.exit(1);
     });
+}

@@ -1,4 +1,4 @@
-const readWorkbook = require("../workbookReader");
+const { readWorkbook } = require("../workbookReader");
 const mapProgramCommitteeMember = require("../mappers/programCommitteeMapper");
 const programCommitteeService = require("../../services/programCommitteeService");
 
