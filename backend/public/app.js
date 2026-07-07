@@ -130,20 +130,108 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!res.ok) throw new Error("Failed to fetch");
             const paper = await res.json();
             
+            let mismatchCount = 0;
+            if (paper.reviews && paper.reviews.length > 0) {
+                const stopWords = new Set(['and', 'the', 'for', 'with', 'from', 'based', 'system', 'systems', 'science', 'engineering']);
+                const extractWords = (str) => {
+                    if (!str) return [];
+                    return str.toLowerCase()
+                              .replace(/[^a-z0-9]/g, ' ')
+                              .split(/\s+/)
+                              .filter(w => w.length > 2 && !stopWords.has(w));
+                };
+
+                const checkMismatch = (pTopics, rTopics) => {
+                    if (!pTopics || !rTopics) return false;
+                    const pArr = pTopics.split(', ').map(t => t.trim().toLowerCase());
+                    const rArr = rTopics.split(', ').map(t => t.trim().toLowerCase());
+                    if (pArr.some(pt => rArr.includes(pt))) return false;
+                    
+                    const pWords = extractWords(pTopics);
+                    const rWords = extractWords(rTopics);
+                    return !pWords.some(pw => rWords.includes(pw));
+                };
+
+                paper.reviews.forEach(r => {
+                    r.isMismatch = checkMismatch(paper.topics, r.topics);
+                    if (r.isMismatch) mismatchCount++;
+                });
+
+                paper.reviews.sort((a, b) => {
+                    if (a.isMismatch && !b.isMismatch) return -1;
+                    if (!a.isMismatch && b.isMismatch) return 1;
+                    return 0;
+                });
+            }
+
+            const mismatchBadgeHtml = mismatchCount > 0 
+                ? `<span style="background: #e63946; color: white; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; font-weight: bold;">${mismatchCount} MISMATCHED REVIEW(S)</span>` 
+                : '';
+
             let html = `
-                <h3 style="font-family: 'Inter', sans-serif;">${paper.title}</h3>
+                <h3 style="font-family: 'Inter', sans-serif; display: flex; align-items: center; justify-content: space-between;">
+                    <span>${paper.title}</span>
+                    ${mismatchBadgeHtml}
+                </h3>
+                <p style="font-family: 'Roboto Mono', monospace; font-size: 0.85rem; margin-bottom: 1.5rem; color: var(--text-muted);">
+                    <strong>PAPER TOPICS:</strong> ${paper.topics || 'None'}
+                </p>
                 
                 <h3>REVIEWS (${paper.reviews ? paper.reviews.length : 0})</h3>
                 <div class="detail-list">
             `;
             
             if (paper.reviews && paper.reviews.length > 0) {
+                // Same fuzzy logic as backend
+                const stopWords = new Set(['and', 'the', 'for', 'with', 'from', 'based', 'system', 'systems', 'science', 'engineering']);
+                const extractWords = (str) => {
+                    if (!str) return [];
+                    return str.toLowerCase()
+                              .replace(/[^a-z0-9]/g, ' ')
+                              .split(/\s+/)
+                              .filter(w => w.length > 2 && !stopWords.has(w));
+                };
+
+                const checkMismatch = (pTopics, rTopics) => {
+                    if (!pTopics || !rTopics) return false; // If either has no topics, it's not flagged as mismatch by backend
+                    
+                    // Exact topic check
+                    const pArr = pTopics.split(', ').map(t => t.trim().toLowerCase());
+                    const rArr = rTopics.split(', ').map(t => t.trim().toLowerCase());
+                    if (pArr.some(pt => rArr.includes(pt))) return false;
+                    
+                    // Fuzzy check
+                    const pWords = extractWords(pTopics);
+                    const rWords = extractWords(rTopics);
+                    const hasOverlap = pWords.some(pw => rWords.includes(pw));
+                    return !hasOverlap;
+                };
+
+                // Add isMismatch flag to each review
                 paper.reviews.forEach(r => {
+                    r.isMismatch = checkMismatch(paper.topics, r.topics);
+                });
+
+                // Sort reviews so mismatches appear first
+                paper.reviews.sort((a, b) => {
+                    if (a.isMismatch && !b.isMismatch) return -1;
+                    if (!a.isMismatch && b.isMismatch) return 1;
+                    return 0;
+                });
+
+                paper.reviews.forEach(r => {
+                    const mismatchBadge = r.isMismatch 
+                        ? `<span style="background: #e63946; color: white; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 8px;">MISMATCH</span>` 
+                        : '';
+                        
                     html += `
-                        <div class="detail-item">
+                        <div class="detail-item" style="${r.isMismatch ? 'border-left: 3px solid #e63946;' : ''}">
                             <div class="detail-item-header">
-                                <span>${r.first_name} ${r.last_name}</span>
+                                <span>${r.first_name || ''} ${r.last_name || r.id} ${mismatchBadge}</span>
                                 <span>SCORE: ${r.total_score}</span>
+                            </div>
+                            <div class="detail-text" style="font-family: 'Roboto Mono', monospace; font-size: 0.75rem; margin-bottom: 0.5rem;">
+                                <strong>REVIEWER EXPERTISE:</strong> ${r.topics || 'None'}
                             </div>
                             <div class="detail-text">${r.review_text || 'No review text'}</div>
                         </div>
@@ -220,11 +308,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="detail-item">
                             <div class="detail-item-header">
                                 <span>#${a.external_submission_id}</span>
-                                <span>GIVEN SCORE: ${a.given_score || 'PENDING'}</span>
+                                <span>GIVEN SCORE: ${a.given_score ?? 'PENDING'}</span>
                             </div>
                             <div class="detail-text" style="margin-bottom: 0.5rem;">${a.title}</div>
                             <div class="detail-text" style="font-family: 'Roboto Mono', monospace; font-size: 0.75rem;">
-                                <strong>BID STATUS:</strong> ${a.bid_status || 'NO BID'}
+                                <strong>BID STATUS:</strong> ${a.bid_status ?? 'NO BID'}
                             </div>
                             ${commentsHtml}
                         </div>
@@ -234,6 +322,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 html += '<p class="text-muted">No assignments found.</p>';
             }
             
+            html += `</div>`;
+
+            html += `<h3>SUBMITTED BIDS (${rev.bids ? rev.bids.length : 0})</h3>`;
+            html += `<div class="detail-list" style="margin-top: 1rem;">`;
+            
+            if (rev.bids && rev.bids.length > 0) {
+                // Highlight 'yes' or 'maybe' bids differently from 'no' or 'conflict'
+                rev.bids.sort((a, b) => {
+                    const order = { 'yes': 1, 'maybe': 2, 'no': 3, 'conflict': 4 };
+                    return (order[a.bid.toLowerCase()] || 5) - (order[b.bid.toLowerCase()] || 5);
+                });
+
+                rev.bids.forEach(b => {
+                    let bidColor = 'var(--text-muted)';
+                    if (b.bid.toLowerCase() === 'yes') bidColor = '#4caf50';
+                    if (b.bid.toLowerCase() === 'maybe') bidColor = '#ff9800';
+                    if (b.bid.toLowerCase() === 'no') bidColor = '#e63946';
+
+                    html += `
+                        <div class="detail-item" style="padding: 0.75rem;">
+                            <div class="detail-item-header" style="margin-bottom: 0.25rem;">
+                                <span>#${b.external_submission_id}</span>
+                                <span style="color: ${bidColor}; font-weight: bold; text-transform: uppercase;">${b.bid}</span>
+                            </div>
+                            <div class="detail-text" style="font-size: 0.8rem;">${b.title}</div>
+                        </div>
+                    `;
+                });
+            } else {
+                html += '<p class="text-muted" style="margin-bottom: 2rem;">No bids recorded for this reviewer.</p>';
+            }
             html += '</div>';
             drawerBody.innerHTML = html;
         } catch (error) {

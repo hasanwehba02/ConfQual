@@ -233,6 +233,8 @@ CREATE TABLE review (
 
     has_attachment BOOLEAN,
 
+    is_superseded BOOLEAN DEFAULT FALSE,
+
     CONSTRAINT fk_review_paper
         FOREIGN KEY (paper_id)
         REFERENCES paper(id)
