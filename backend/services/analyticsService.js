@@ -13,10 +13,39 @@ async function getPaperDebates() {
 }
 
 async function getExpertiseMismatches() {
-    const mismatches = await analyticsRepository.getExpertiseMismatches();
+    const allReviewsWithTopics = await analyticsRepository.getExpertiseMismatches();
     
-    // Group mismatches by paper or calculate the overall percentage
-    // For now, we return the raw list of mismatched reviews
+    // Fuzzy matching logic: Stop words to ignore when comparing topics
+    const stopWords = new Set(['and', 'the', 'for', 'with', 'from', 'based', 'system', 'systems', 'science', 'engineering']);
+    
+    const extractWords = (str) => {
+        if (!str) return [];
+        return str.toLowerCase()
+                  .replace(/[^a-z0-9]/g, ' ')
+                  .split(/\s+/)
+                  .filter(w => w.length > 2 && !stopWords.has(w));
+    };
+
+    const mismatches = allReviewsWithTopics.filter(r => {
+        // First check if they have an exact topic match
+        if (r.paper_topics && r.reviewer_topics) {
+            const pTopics = r.paper_topics.split(', ').map(t => t.trim().toLowerCase());
+            const rTopics = r.reviewer_topics.split(', ').map(t => t.trim().toLowerCase());
+            if (pTopics.some(pt => rTopics.includes(pt))) {
+                return false; // Not a mismatch, they share an exact topic
+            }
+        }
+        
+        // If no exact match, check for fuzzy word overlap
+        const paperWords = extractWords(r.paper_topics);
+        const reviewerWords = extractWords(r.reviewer_topics);
+        
+        const hasOverlap = paperWords.some(pw => reviewerWords.includes(pw));
+        
+        // If there is ANY overlapping significant word, we accept it as related (not a mismatch)
+        return !hasOverlap;
+    });
+    
     return {
         totalMismatches: mismatches.length,
         details: mismatches
@@ -59,16 +88,16 @@ async function getAlerts() {
     }
 
     // Alert: Missing Reviews (Less than 3)
-    const missingReviews = papers.filter(p => p.total_reviews < 3);
-    if (missingReviews.length > 0) {
+    const alertMissingReviews = papers.filter(p => p.total_reviews < 3 && (!p.decision || !p.decision.toLowerCase().includes('desk reject')));
+    if (alertMissingReviews.length > 0) {
         alerts.push({
             type: 'warning',
             title: 'Missing Reviews',
-            message: `${missingReviews.length} papers have fewer than 3 completed reviews.`,
+            message: `${alertMissingReviews.length} papers have fewer than 3 completed reviews.`,
             action: 'View Papers',
             target: 'tab-papers',
             filterKey: 'paper',
-            affectedIds: missingReviews.map(p => p.external_submission_id)
+            affectedIds: alertMissingReviews.map(p => p.external_submission_id)
         });
     }
     
@@ -100,13 +129,13 @@ async function getAlerts() {
     }
 
     // Alert: Low Bidding Satisfaction
-    const unhappyReviewers = reviewers.filter(r => r.bidding_match_percentage !== null && parseFloat(r.bidding_match_percentage) < 50);
+    const unhappyReviewers = reviewers.filter(r => r.bidding_match_percentage !== null && parseFloat(r.bidding_match_percentage) <= 50);
     if (unhappyReviewers.length > 0) {
         alerts.push({
             type: 'warning',
             title: 'Low Bidding Satisfaction',
-            message: `${unhappyReviewers.length} reviewers were assigned a workload where less than 50% matched their bids.`,
-            action: 'View Reviewers',
+            message: `${unhappyReviewers.length} reviewers were assigned a workload where 50% or less matched their bids.`,
+            action: 'Check Reviewers',
             target: 'tab-reviewers',
             filterKey: 'reviewer',
             affectedIds: unhappyReviewers.map(r => r.id)
@@ -160,13 +189,15 @@ async function getQualityScorecard(health) {
         discussion: { score: 100, deductions: [] }
     };
 
-    // Coverage: Percentage of papers with < 3 reviews
-    const missingReviews = papers.filter(p => p.total_reviews < 3);
+    // Coverage: Percentage of valid papers with < 3 reviews
+    const validPapers = papers.filter(p => !p.decision || !p.decision.toLowerCase().includes('desk reject'));
+    const totalValidPapers = validPapers.length > 0 ? validPapers.length : 1;
+    const missingReviews = validPapers.filter(p => p.total_reviews < 3);
     if (missingReviews.length > 0) {
-        const deduction = Math.round((missingReviews.length / totalPapers) * 100);
+        const deduction = Math.round((missingReviews.length / totalValidPapers) * 100);
         scorecard.coverage.score -= deduction;
         scorecard.coverage.deductions.push({
-            text: `-${deduction}%: ${missingReviews.length} out of ${totalPapers} papers have fewer than 3 reviews.`,
+            text: `-${deduction}%: ${missingReviews.length} out of ${totalValidPapers} valid papers have fewer than 3 reviews.`,
             affectedIds: missingReviews.map(p => p.external_submission_id),
             target: 'tab-papers',
             filterKey: 'paper',
@@ -208,12 +239,12 @@ async function getQualityScorecard(health) {
     scorecard.integrity.score -= integrityDeduction;
 
     // Satisfaction: Percentage of unhappy reviewers
-    const unhappyReviewers = reviewers.filter(r => r.bidding_match_percentage !== null && parseFloat(r.bidding_match_percentage) < 50);
+    const unhappyReviewers = reviewers.filter(r => r.bidding_match_percentage !== null && parseFloat(r.bidding_match_percentage) <= 50);
     if (unhappyReviewers.length > 0) {
         const deduction = Math.round((unhappyReviewers.length / totalReviewers) * 100);
         scorecard.satisfaction.score -= deduction;
         scorecard.satisfaction.deductions.push({
-            text: `-${deduction}%: ${unhappyReviewers.length} out of ${totalReviewers} reviewers have low bidding satisfaction (<50%).`,
+            text: `-${deduction}%: ${unhappyReviewers.length} out of ${totalReviewers} reviewers have low bidding satisfaction (<=50%).`,
             affectedIds: unhappyReviewers.map(r => r.id),
             target: 'tab-reviewers',
             filterKey: 'reviewer',

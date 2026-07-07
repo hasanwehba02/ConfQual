@@ -35,11 +35,16 @@ async function getReviewerQuality() {
             JOIN PaperStats ps ON r.paper_id = ps.paper_id
             WHERE r.is_superseded = false
             GROUP BY r.program_committee_member_id
+            HAVING COUNT(r.id) > 1
         ),
         ReviewerBidding AS (
             SELECT 
                 a.program_committee_member_id,
-                ROUND(COUNT(b.id) * 100.0 / NULLIF(COUNT(a.id), 0), 2) as bidding_match_percentage
+                CASE 
+                    WHEN EXISTS (SELECT 1 FROM bid WHERE program_committee_member_id = a.program_committee_member_id AND LOWER(bid) IN ('yes', 'maybe'))
+                    THEN ROUND(COUNT(b.id) * 100.0 / NULLIF(COUNT(a.id), 0), 2)
+                    ELSE NULL
+                END as bidding_match_percentage
             FROM assignment a
             LEFT JOIN bid b ON a.paper_id = b.paper_id 
                 AND a.program_committee_member_id = b.program_committee_member_id 
@@ -57,7 +62,7 @@ async function getReviewerQuality() {
             pcm.last_name,
             pcm.role,
             COUNT(DISTINCT r.id) as total_reviews_completed,
-            ROUND(AVG(LENGTH(r.review_text) - LENGTH(REPLACE(r.review_text, ' ', '')) + 1), 0) as avg_word_count,
+            ROUND(AVG(cardinality(regexp_split_to_array(trim(r.review_text), '\\s+'))), 0) as avg_word_count,
             ROUND(AVG(r.total_score), 2) as avg_score_given,
             COALESCE(rc.total_comments, 0) as total_comments,
             rb.bidding_match_percentage,
@@ -80,13 +85,13 @@ async function getPaperDebates() {
             p.id,
             p.external_submission_id,
             p.title,
+            p.decision,
             COUNT(DISTINCT r.id) as total_reviews,
             ROUND(AVG(r.total_score), 2) as average_score,
-            ROUND(STDDEV(r.total_score), 2) as score_variance,
-            COUNT(DISTINCT c.id) as total_comments
+            ROUND(VARIANCE(r.total_score), 2) as score_variance,
+            COALESCE((SELECT COUNT(*) FROM comment c WHERE c.paper_id = p.id), 0) as total_comments
         FROM paper p
         LEFT JOIN review r ON p.id = r.paper_id AND r.is_superseded = false
-        LEFT JOIN comment c ON p.id = c.paper_id
         GROUP BY p.id
         ORDER BY score_variance DESC NULLS LAST, total_comments DESC
     `;
@@ -102,15 +107,18 @@ async function getExpertiseMismatches() {
             p.title as paper_title,
             pcm.first_name as reviewer_first_name,
             pcm.last_name as reviewer_last_name,
-            r.total_score
+            r.total_score,
+            (SELECT STRING_AGG(t.name, ', ') FROM paper_topic pt JOIN topic t ON pt.topic_id = t.id WHERE pt.paper_id = p.id) as paper_topics,
+            (SELECT STRING_AGG(t.name, ', ') FROM program_committee_member_topic pcmt JOIN topic t ON pcmt.topic_id = t.id WHERE pcmt.program_committee_member_id = pcm.id) as reviewer_topics
         FROM review r
         JOIN paper p ON r.paper_id = p.id
         JOIN program_committee_member pcm ON r.program_committee_member_id = pcm.id
-        WHERE r.is_superseded = false AND NOT EXISTS (
-            SELECT 1 
-            FROM paper_topic pt
-            JOIN program_committee_member_topic pcmt ON pt.topic_id = pcmt.topic_id
-            WHERE pt.paper_id = p.id AND pcmt.program_committee_member_id = pcm.id
+        WHERE r.is_superseded = false 
+        AND EXISTS (
+            SELECT 1 FROM paper_topic pt WHERE pt.paper_id = p.id
+        )
+        AND EXISTS (
+            SELECT 1 FROM program_committee_member_topic pcmt WHERE pcmt.program_committee_member_id = pcm.id
         )
     `;
     const result = await client.query(query);
@@ -139,13 +147,13 @@ async function getMissingMetareviews() {
         SELECT 
             p.external_submission_id,
             p.title,
-            ROUND(STDDEV(r.total_score), 2) as score_variance
+            ROUND(VARIANCE(r.total_score), 2) as score_variance
         FROM paper p
         JOIN review r ON p.id = r.paper_id AND r.is_superseded = false
         LEFT JOIN meta_review mr ON p.id = mr.paper_id
         WHERE mr.id IS NULL
         GROUP BY p.id, p.external_submission_id, p.title
-        HAVING STDDEV(r.total_score) > 1.0
+        HAVING VARIANCE(r.total_score) > 1.0
     `;
     const result = await client.query(query);
     return result.rows;
@@ -153,7 +161,11 @@ async function getMissingMetareviews() {
 
 async function getPaperDetails(externalSubmissionId) {
     const query = `
-        SELECT p.id, p.title, p.external_submission_id
+        SELECT p.id, p.title, p.external_submission_id,
+               (SELECT STRING_AGG(t.name, ', ')
+                FROM paper_topic pt
+                JOIN topic t ON pt.topic_id = t.id
+                WHERE pt.paper_id = p.id) as topics
         FROM paper p
         WHERE p.external_submission_id = $1
     `;
@@ -163,7 +175,11 @@ async function getPaperDetails(externalSubmissionId) {
     const paper = paperRes.rows[0];
 
     const reviewsQuery = `
-        SELECT r.id, pcm.first_name, pcm.last_name, r.total_score, r.review_text
+        SELECT r.id, pcm.first_name, pcm.last_name, r.total_score, r.review_text,
+               (SELECT STRING_AGG(t.name, ', ')
+                FROM program_committee_member_topic pcmt
+                JOIN topic t ON pcmt.topic_id = t.id
+                WHERE pcmt.program_committee_member_id = pcm.id) as topics
         FROM review r
         JOIN program_committee_member pcm ON r.program_committee_member_id = pcm.id
         WHERE r.paper_id = $1 AND r.is_superseded = false
@@ -216,6 +232,15 @@ async function getReviewerDetails(reviewerId) {
     `;
     const assignmentsRes = await client.query(assignmentsQuery, [reviewer.id]);
     reviewer.assignments = assignmentsRes.rows;
+
+    const bidsQuery = `
+        SELECT p.external_submission_id, p.title, b.bid
+        FROM bid b
+        JOIN paper p ON b.paper_id = p.id
+        WHERE b.program_committee_member_id = $1
+    `;
+    const bidsRes = await client.query(bidsQuery, [reviewer.id]);
+    reviewer.bids = bidsRes.rows;
 
     return reviewer;
 }
