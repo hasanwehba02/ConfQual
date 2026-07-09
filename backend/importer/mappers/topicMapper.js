@@ -1,14 +1,16 @@
+const { extractValue } = require('../../utils/excelHelper');
+
 function mapPcTopic(row) {
     return {
-        externalPersonId: row.getCell(1).value,
-        topicName: row.getCell(3).value
+        externalPersonId: extractValue(row.getCell(1)),
+        topicName: extractValue(row.getCell(3))
     };
 }
 
 function mapSubmissionTopic(row) {
     return {
-        externalSubmissionId: row.getCell(1).value,
-        topicName: row.getCell(2).value
+        externalSubmissionId: extractValue(row.getCell(1)),
+        topicName: extractValue(row.getCell(2))
     };
 }
 

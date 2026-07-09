@@ -14,9 +14,17 @@ async function importMetaReviews() {
     let imported = 0;
     let skipped = 0;
 
+    const headerRow = metaReviewsSheet.getRow(1);
+    const headerMap = {};
+    headerRow.eachCell((cell, colNumber) => {
+        if (cell.value) {
+            headerMap[cell.value.toString().toLowerCase()] = colNumber;
+        }
+    });
+
     for (let i = 2; i <= metaReviewsSheet.rowCount; i++) {
         const row = metaReviewsSheet.getRow(i);
-        const metaReviewDto = mapMetaReview(row);
+        const metaReviewDto = mapMetaReview(row, headerMap);
 
         if (!metaReviewDto.externalSubmissionId || !metaReviewDto.externalPersonId) {
             skipped++;

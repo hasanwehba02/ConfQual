@@ -1,6 +1,7 @@
 const { readWorkbook } = require("../workbookReader");
 const mapReview = require("../mappers/reviewMapper");
 const reviewService = require("../../services/reviewService");
+const analyticsMath = require("../../utils/analyticsMath");
 
 async function importReviewsForSheet(workbook, sheetName, isSuperseded = false) {
     const sheet = workbook.getWorksheet(sheetName);
@@ -23,6 +24,9 @@ async function importReviewsForSheet(workbook, sheetName, isSuperseded = false) 
         }
 
         reviewDto.isSuperseded = isSuperseded;
+        
+        // Calculate sentiment score using the utility
+        reviewDto.sentimentScore = analyticsMath.analyzeReviewSentiment(reviewDto.reviewText);
         const savedReview = await reviewService.createReview(reviewDto);
 
         if (savedReview) {

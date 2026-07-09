@@ -10,9 +10,10 @@ async function createPaper(paper) {
             last_updated_at,
             decision,
             notified,
-            reviews_sent
+            reviews_sent,
+            is_deleted
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
         ON CONFLICT (external_submission_id)
         DO NOTHING
         RETURNING *;
@@ -26,7 +27,8 @@ async function createPaper(paper) {
         paper.lastUpdatedAt,
         paper.decision,
         paper.notified,
-        paper.reviewsSent
+        paper.reviewsSent,
+        paper.isDeleted || false
     ];
 
     const result = await client.query(query, values);

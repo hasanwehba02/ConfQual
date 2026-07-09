@@ -52,6 +52,7 @@
             <nav class="nav-tabs" id="main-tabs">
                 <button class="tab-btn active" data-target="tab-papers">Paper Explorer</button>
                 <button class="tab-btn" data-target="tab-reviewers">Reviewer Explorer</button>
+                <button class="tab-btn" data-target="tab-submissions">Review Submissions</button>
                 <button class="tab-btn" data-target="tab-analytics">System Analytics</button>
                 <button class="tab-btn" data-target="tab-quality-profile">Quality Profile</button>
             </nav>
@@ -66,6 +67,26 @@
                     <button class="btn btn-outline" onclick="exportTableToCSV('papers-table-body', 'papers_export.csv')">
                         Export CSV
                     </button>
+                </div>
+                
+                <div class="controls-bar" style="display: flex; gap: 10px; margin-top: 15px; margin-bottom: 15px; align-items: center;">
+                    <select id="paper-sort" class="form-select" style="padding: 5px; border-radius: 4px; border: 1px solid #ccc;" onchange="fetchPapers()">
+                        <option value="score_variance_desc">Variance (High to Low)</option>
+                        <option value="score_variance_asc">Variance (Low to High)</option>
+                        <option value="external_submission_id_asc">ID (Low to High)</option>
+                        <option value="external_submission_id_desc">ID (High to Low)</option>
+                        <option value="average_score_desc">Avg Score (High to Low)</option>
+                        <option value="average_score_asc">Avg Score (Low to High)</option>
+                        <option value="total_comments_desc">Comments (Most to Least)</option>
+                    </select>
+                    <select id="paper-filter" class="form-select" style="padding: 5px; border-radius: 4px; border: 1px solid #ccc;" onchange="fetchPapers()">
+                        <option value="all">Filter: All Papers</option>
+                        <option value="no_comments">Filter: No Comments</option>
+                        <option value="high_variance">Filter: High Variance (>1.0)</option>
+                        <option value="low_variance">Filter: High Agreement (<0.2)</option>
+                        <option value="unanimous_reject">Filter: Unanimous Rejects (Avg <= -1.5)</option>
+                        <option value="unanimous_accept">Filter: Unanimous Accepts (Avg >= 1.5)</option>
+                    </select>
                 </div>
                 
                 <div id="paper-filter-banner" class="filter-banner hidden">
@@ -104,6 +125,27 @@
                     </button>
                 </div>
                 
+                <div class="controls-bar" style="display: flex; gap: 10px; margin-top: 15px; margin-bottom: 15px; align-items: center;">
+                    <select id="reviewer-sort" class="form-select" style="padding: 5px; border-radius: 4px; border: 1px solid #ccc;" onchange="fetchReviewers()">
+                        <option value="avg_word_count_desc">Word Count (High to Low)</option>
+                        <option value="avg_word_count_asc">Word Count (Low to High)</option>
+                        <option value="total_reviews_completed_desc">Reviews Done (Most to Least)</option>
+                        <option value="total_reviews_completed_asc">Reviews Done (Least to Most)</option>
+                        <option value="avg_score_given_desc">Avg Score (High to Low)</option>
+                        <option value="avg_score_given_asc">Avg Score (Low to High)</option>
+                        <option value="total_comments_desc">Comments (Most to Least)</option>
+                        <option value="total_comments_asc">Comments (Least to Most)</option>
+                        <option value="calibration_index_desc">Calibration (High to Low)</option>
+                        <option value="calibration_index_asc">Calibration (Low to High)</option>
+                    </select>
+                    <select id="reviewer-filter" class="form-select" style="padding: 5px; border-radius: 4px; border: 1px solid #ccc; margin-left: 10px;" onchange="fetchReviewers()">
+                        <option value="all">Filter: All Reviewers</option>
+                        <option value="no_comments">Filter: No Comments</option>
+                        <option value="has_comments">Filter: Has Comments</option>
+                        <option value="high_variance">Filter: High Calibration Variance</option>
+                    </select>
+                </div>
+                
                 <div id="reviewer-filter-banner" class="filter-banner hidden">
                     <div class="filter-info">
                         <span>FILTER ACTIVE: <strong id="reviewer-filter-count">0</strong> records matching criteria.</span>
@@ -130,7 +172,54 @@
                 </div>
             </div>
 
-            <!-- SYSTEM ANALYTICS -->
+            <!-- Tab: Submissions Timeline -->
+            <div id="tab-submissions" class="tab-content hidden">
+                <div class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h2>Review Submissions Timeline</h2>
+                        <p class="text-muted">Track when reviews were submitted.</p>
+                    </div>
+                    <button class="btn btn-outline" onclick="exportTableToCSV('submissions-table-body', 'submissions_export.csv')">
+                        Export CSV
+                    </button>
+                </div>
+                
+                <div class="controls-bar" style="display: flex; gap: 10px; margin-top: 15px; margin-bottom: 15px; align-items: center;">
+                    <select id="submission-sort" class="form-select" style="padding: 5px; border-radius: 4px; border: 1px solid #ccc;" onchange="fetchSubmissions()">
+                        <option value="review_date_desc">Date (Newest First)</option>
+                        <option value="review_date_asc">Date (Oldest First)</option>
+                        <option value="id_asc">ID (Low to High)</option>
+                        <option value="id_desc">ID (High to Low)</option>
+                        <option value="total_score_desc">Score (High to Low)</option>
+                        <option value="total_score_asc">Score (Low to High)</option>
+                    </select>
+                    <select id="submission-filter" class="form-select" style="padding: 5px; border-radius: 4px; border: 1px solid #ccc;" onchange="fetchSubmissions()">
+                        <option value="all">Filter: All Submissions</option>
+                        <option value="high_score">Filter: High Scores (>= 2)</option>
+                        <option value="low_score">Filter: Low Scores (<= -2)</option>
+                    </select>
+                </div>
+                
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>REVIEW ID</th>
+                                <th>REVIEWER</th>
+                                <th>PAPER</th>
+                                <th>SCORE</th>
+                                <th>DATE</th>
+                                <th>TIME</th>
+                            </tr>
+                        </thead>
+                        <tbody id="submissions-table-body">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tab: System Analytics -->
             <div id="tab-analytics" class="tab-content hidden">
                 <div class="page-header">
                     <h2>System Analytics</h2>
@@ -277,6 +366,6 @@
         </div>
     </aside>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=5"></script>
 </body>
 </html>

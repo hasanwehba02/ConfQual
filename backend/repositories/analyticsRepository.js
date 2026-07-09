@@ -1,9 +1,17 @@
 const client = require("../config/database");
 
+function buildOrderBy(sortBy, sortOrder, defaultOrder, allowedSortCols) {
+    if (sortBy && allowedSortCols.includes(sortBy)) {
+        const dir = (sortOrder && sortOrder.toUpperCase() === 'ASC') ? 'ASC' : 'DESC';
+        return `ORDER BY ${sortBy} ${dir} NULLS LAST`;
+    }
+    return `ORDER BY ${defaultOrder}`;
+}
+
 async function getConferenceHealth() {
     const query = `
         SELECT 
-            (SELECT COUNT(*) FROM paper) as total_papers,
+            (SELECT COUNT(*) FROM paper WHERE is_deleted = false) as total_papers,
             (SELECT COUNT(*) FROM program_committee_member) as total_reviewers,
             (SELECT COUNT(*) FROM review WHERE is_superseded = false) as total_reviews,
             (SELECT COUNT(*) FROM assignment) as total_assignments,
@@ -14,17 +22,24 @@ async function getConferenceHealth() {
     return result.rows[0];
 }
 
-async function getReviewerQuality() {
+async function getReviewerQuality(options = {}) {
     const query = `
         WITH PaperStats AS (
-            SELECT paper_id, SUM(total_score) as sum_score, COUNT(id) as review_count
-            FROM review
-            WHERE is_superseded = false
-            GROUP BY paper_id
+            SELECT r.paper_id, SUM(r.total_score) as sum_score, COUNT(r.id) as review_count
+            FROM review r
+            JOIN paper p ON r.paper_id = p.id AND p.is_deleted = false
+            WHERE r.is_superseded = false AND p.is_deleted = false
+            GROUP BY r.paper_id
         ),
         ReviewerCalibration AS (
             SELECT 
                 r.program_committee_member_id,
+                ROUND(AVG(
+                    CASE 
+                        WHEN ps.review_count <= 1 THEN r.total_score
+                        ELSE ((ps.sum_score - r.total_score) / (ps.review_count - 1))
+                    END
+                ), 2) as peers_avg,
                 ROUND(AVG(
                     CASE 
                         WHEN ps.review_count <= 1 THEN 0
@@ -64,6 +79,7 @@ async function getReviewerQuality() {
             COUNT(DISTINCT r.id) as total_reviews_completed,
             ROUND(AVG(cardinality(regexp_split_to_array(trim(r.review_text), '\\s+'))), 0) as avg_word_count,
             ROUND(AVG(r.total_score), 2) as avg_score_given,
+            rcal.peers_avg,
             COALESCE(rc.total_comments, 0) as total_comments,
             rb.bidding_match_percentage,
             rcal.calibration_index
@@ -72,14 +88,40 @@ async function getReviewerQuality() {
         LEFT JOIN ReviewerComments rc ON pcm.id = rc.program_committee_member_id
         LEFT JOIN ReviewerBidding rb ON pcm.id = rb.program_committee_member_id
         LEFT JOIN ReviewerCalibration rcal ON pcm.id = rcal.program_committee_member_id
-        GROUP BY pcm.id, pcm.first_name, pcm.last_name, pcm.role, rc.total_comments, rb.bidding_match_percentage, rcal.calibration_index
-        ORDER BY avg_word_count DESC NULLS LAST
+        WHERE 1=1
+        ${options.filterMode === 'no_comments' ? 'AND COALESCE(rc.total_comments, 0) = 0' : ''}
+        ${options.filterMode === 'has_comments' ? 'AND COALESCE(rc.total_comments, 0) > 0' : ''}
+        ${options.filterMode === 'high_variance' ? 'AND ABS(rcal.calibration_index) > 1.5' : ''}
+        GROUP BY pcm.id, pcm.first_name, pcm.last_name, pcm.role, rc.total_comments, rb.bidding_match_percentage, rcal.peers_avg, rcal.calibration_index
+        ${buildOrderBy(options.sortBy, options.sortOrder, 'avg_word_count DESC NULLS LAST', ['id', 'first_name', 'last_name', 'total_reviews_completed', 'avg_word_count', 'avg_score_given', 'total_comments', 'calibration_index', 'peers_avg'])}
     `;
     const result = await client.query(query);
     return result.rows;
 }
 
-async function getPaperDebates() {
+async function getSubmissions(options = {}) {
+    const query = `
+        SELECT 
+            p.id,
+            p.external_submission_id as paper_id,
+            p.title as paper_title,
+            pcm.first_name || ' ' || pcm.last_name as reviewer_name,
+            r.total_score,
+            r.review_date,
+            r.review_time
+        FROM review r
+        JOIN paper p ON r.paper_id = p.id
+        JOIN program_committee_member pcm ON r.program_committee_member_id = pcm.id
+        WHERE r.is_superseded = false AND p.is_deleted = false
+        ${options.filterMode === 'high_score' ? 'AND r.total_score >= 2' : ''}
+        ${options.filterMode === 'low_score' ? 'AND r.total_score <= -2' : ''}
+        ${buildOrderBy(options.sortBy, options.sortOrder, 'r.review_date DESC NULLS LAST, r.review_time DESC NULLS LAST', ['id', 'review_date', 'total_score'])}
+    `;
+    const result = await client.query(query);
+    return result.rows;
+}
+
+async function getPaperDebates(options = {}) {
     const query = `
         SELECT 
             p.id,
@@ -92,8 +134,15 @@ async function getPaperDebates() {
             COALESCE((SELECT COUNT(*) FROM comment c WHERE c.paper_id = p.id), 0) as total_comments
         FROM paper p
         LEFT JOIN review r ON p.id = r.paper_id AND r.is_superseded = false
+        WHERE p.is_deleted = false
         GROUP BY p.id
-        ORDER BY score_variance DESC NULLS LAST, total_comments DESC
+        HAVING 1=1
+        ${options.filterMode === 'no_comments' || options.noComments === 'true' ? 'AND COALESCE((SELECT COUNT(*) FROM comment c WHERE c.paper_id = p.id), 0) = 0' : ''}
+        ${options.filterMode === 'high_variance' ? 'AND VARIANCE(r.total_score) > 1.0' : ''}
+        ${options.filterMode === 'low_variance' ? 'AND VARIANCE(r.total_score) < 0.2' : ''}
+        ${options.filterMode === 'unanimous_reject' ? 'AND AVG(r.total_score) <= -1.5' : ''}
+        ${options.filterMode === 'unanimous_accept' ? 'AND AVG(r.total_score) >= 1.5' : ''}
+        ${buildOrderBy(options.sortBy, options.sortOrder, 'score_variance DESC NULLS LAST, total_comments DESC', ['id', 'external_submission_id', 'title', 'total_reviews', 'average_score', 'score_variance', 'total_comments'])}
     `;
     const result = await client.query(query);
     return result.rows;
@@ -135,7 +184,7 @@ async function getCOIViolations() {
             pcm.last_name as reviewer_last_name
         FROM assignment a
         JOIN conflict c ON a.paper_id = c.paper_id AND a.program_committee_member_id = c.program_committee_member_id
-        JOIN paper p ON a.paper_id = p.id
+        JOIN paper p ON a.paper_id = p.id AND p.is_deleted = false
         JOIN program_committee_member pcm ON a.program_committee_member_id = pcm.id
     `;
     const result = await client.query(query);
@@ -151,7 +200,7 @@ async function getMissingMetareviews() {
         FROM paper p
         JOIN review r ON p.id = r.paper_id AND r.is_superseded = false
         LEFT JOIN meta_review mr ON p.id = mr.paper_id
-        WHERE mr.id IS NULL
+        WHERE mr.id IS NULL AND p.is_deleted = false
         GROUP BY p.id, p.external_submission_id, p.title
         HAVING VARIANCE(r.total_score) > 1.0
     `;
@@ -167,7 +216,7 @@ async function getPaperDetails(externalSubmissionId) {
                 JOIN topic t ON pt.topic_id = t.id
                 WHERE pt.paper_id = p.id) as topics
         FROM paper p
-        WHERE p.external_submission_id = $1
+        WHERE p.external_submission_id = $1 AND p.is_deleted = false
     `;
     const paperRes = await client.query(query, [externalSubmissionId]);
     if (paperRes.rows.length === 0) return null;
@@ -218,7 +267,12 @@ async function getReviewerDetails(reviewerId) {
                    SELECT json_agg(c.comment_text)
                    FROM comment c
                    WHERE c.paper_id = p.id AND c.program_committee_member_id = $1
-               ) as comments
+               ) as comments,
+               (
+                   SELECT AVG(r2.total_score)
+                   FROM review r2
+                   WHERE r2.paper_id = p.id AND r2.is_superseded = false
+               ) as peer_average
         FROM (
             SELECT paper_id, program_committee_member_id FROM assignment WHERE program_committee_member_id = $1
             UNION
@@ -226,7 +280,7 @@ async function getReviewerDetails(reviewerId) {
             UNION
             SELECT paper_id, program_committee_member_id FROM comment WHERE program_committee_member_id = $1
         ) combined
-        JOIN paper p ON combined.paper_id = p.id
+        JOIN paper p ON combined.paper_id = p.id AND p.is_deleted = false
         LEFT JOIN review r ON combined.paper_id = r.paper_id AND combined.program_committee_member_id = r.program_committee_member_id AND r.is_superseded = false
         LEFT JOIN bid b ON combined.paper_id = b.paper_id AND combined.program_committee_member_id = b.program_committee_member_id
     `;
@@ -236,7 +290,7 @@ async function getReviewerDetails(reviewerId) {
     const bidsQuery = `
         SELECT p.external_submission_id, p.title, b.bid
         FROM bid b
-        JOIN paper p ON b.paper_id = p.id
+        JOIN paper p ON b.paper_id = p.id AND p.is_deleted = false
         WHERE b.program_committee_member_id = $1
     `;
     const bidsRes = await client.query(bidsQuery, [reviewer.id]);
@@ -251,6 +305,7 @@ async function getAcceptanceRate() {
             COUNT(CASE WHEN decision ILIKE '%accept%' THEN 1 END) as accepted_papers,
             COUNT(*) as total_papers
         FROM paper
+        WHERE is_deleted = false
     `;
     const result = await client.query(query);
     return result.rows[0];
@@ -298,5 +353,6 @@ module.exports = {
     getReviewerDetails,
     getAcceptanceRate,
     getGeographicDiversity,
-    getThematicCompetence
+    getThematicCompetence,
+    getSubmissions
 };

@@ -1,15 +1,16 @@
 const analyticsRepository = require("../repositories/analyticsRepository");
+const analyticsMath = require("../utils/analyticsMath");
 
 async function getConferenceHealth() {
     return await analyticsRepository.getConferenceHealth();
 }
 
-async function getReviewerQuality() {
-    return await analyticsRepository.getReviewerQuality();
+async function getReviewerQuality(options = {}) {
+    return await analyticsRepository.getReviewerQuality(options);
 }
 
-async function getPaperDebates() {
-    return await analyticsRepository.getPaperDebates();
+async function getPaperDebates(options = {}) {
+    return await analyticsRepository.getPaperDebates(options);
 }
 
 async function getExpertiseMismatches() {
@@ -160,13 +161,41 @@ async function getAlerts() {
 }
 
 // 2. Paper Explorer
-async function getPapers() {
-    return await getPaperDebates();
+async function getPapers(options = {}) {
+    let papers = await getPaperDebates(options);
+    if (options.zeroActivity === 'true') {
+        papers = papers.filter(p => parseInt(p.total_reviews) === 0 && parseInt(p.total_comments) === 0);
+    }
+    return papers;
+}
+
+// Late Submissions (After deadline)
+async function getLateSubmissions() {
+    const client = require("../config/database");
+    
+    const query = `
+        SELECT 
+            p.external_submission_id,
+            p.title,
+            p.submitted_at,
+            c.submission_deadline
+        FROM paper p
+        CROSS JOIN conference c
+        WHERE p.submitted_at > c.submission_deadline
+        AND p.is_deleted = false
+    `;
+    const result = await client.query(query);
+    return result.rows;
 }
 
 // 3. Reviewer Explorer
-async function getReviewers() {
-    return await getReviewerQuality();
+async function getReviewers(options) {
+    return await getReviewerQuality(options);
+}
+
+// 5. Submissions Timeline
+async function getSubmissions(options = {}) {
+    return await analyticsRepository.getSubmissions(options);
 }
 
 // 4. System Analytics
@@ -420,5 +449,7 @@ module.exports = {
     getQualityScorecard,
     getPaperDetails,
     getReviewerDetails,
-    getAcademicQualityProfile
+    getAcademicQualityProfile,
+    getLateSubmissions,
+    getSubmissions
 };

@@ -1,11 +1,13 @@
+const { extractValue } = require('../../utils/excelHelper');
+
 function mapAuthor(row) {
     return {
-        externalPersonId: row.getCell(7).value,
-        firstName: row.getCell(2).value,
-        lastName: row.getCell(3).value,
-        email: row.getCell(4).value,
-        country: row.getCell(5).value,
-        affiliation: row.getCell(6).value
+        externalPersonId: extractValue(row.getCell(7)),
+        firstName: extractValue(row.getCell(2)),
+        lastName: extractValue(row.getCell(3)),
+        email: extractValue(row.getCell(4)),
+        country: extractValue(row.getCell(5)),
+        affiliation: extractValue(row.getCell(6))
     };
 }
 

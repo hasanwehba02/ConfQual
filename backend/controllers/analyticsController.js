@@ -12,7 +12,7 @@ async function getConferenceHealth(req, res) {
 
 async function getReviewerQuality(req, res) {
     try {
-        const data = await analyticsService.getReviewerQuality();
+        const data = await analyticsService.getReviewerQuality(req.query);
         res.json(data);
     } catch (error) {
         console.error("Error getting reviewer quality:", error);
@@ -22,7 +22,7 @@ async function getReviewerQuality(req, res) {
 
 async function getPaperDebates(req, res) {
     try {
-        const data = await analyticsService.getPaperDebates();
+        const data = await analyticsService.getPaperDebates(req.query);
         res.json(data);
     } catch (error) {
         console.error("Error getting paper debates:", error);
@@ -52,7 +52,7 @@ async function getAlerts(req, res) {
 
 async function getPapers(req, res) {
     try {
-        const data = await analyticsService.getPapers();
+        const data = await analyticsService.getPapers(req.query);
         res.json(data);
     } catch (error) {
         console.error("Error getting papers:", error);
@@ -60,12 +60,32 @@ async function getPapers(req, res) {
     }
 }
 
+async function getLateSubmissions(req, res) {
+    try {
+        const data = await analyticsService.getLateSubmissions();
+        res.json(data);
+    } catch (error) {
+        console.error("Error getting late submissions:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+}
+
 async function getReviewers(req, res) {
     try {
-        const data = await analyticsService.getReviewers();
+        const data = await analyticsService.getReviewers(req.query);
         res.json(data);
     } catch (error) {
         console.error("Error getting reviewers:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+}
+
+async function getSubmissions(req, res) {
+    try {
+        const data = await analyticsService.getSubmissions(req.query);
+        res.json(data);
+    } catch (error) {
+        console.error("Error getting submissions:", error);
         res.status(500).json({ error: "Internal server error" });
     }
 }
@@ -143,7 +163,9 @@ module.exports = {
     getExpertiseMismatches,
     getAlerts,
     getPapers,
+    getLateSubmissions,
     getReviewers,
+    getSubmissions,
     getSystemAnalytics,
     getPaperDetails,
     getReviewerDetails,

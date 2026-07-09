@@ -17,8 +17,10 @@ router.get("/expertise-match", analyticsController.getExpertiseMismatches);
 router.get("/alerts", analyticsController.getAlerts);
 router.get("/papers", analyticsController.getPapers);
 router.get("/reviewers", analyticsController.getReviewers);
+router.get("/submissions", analyticsController.getSubmissions);
 router.get("/system-analytics", analyticsController.getSystemAnalytics);
 router.get("/quality-profile", analyticsController.getQualityProfile);
+router.get("/late-submissions", analyticsController.getLateSubmissions);
 
 // Deep Drill-Down Endpoints
 router.get("/papers/:id", analyticsController.getPaperDetails);

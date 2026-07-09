@@ -1,7 +1,9 @@
+const { extractValue } = require('../../utils/excelHelper');
+
 function mapAssignment(row) {
     return {
-        externalPersonId: row.getCell(1).value,
-        externalSubmissionId: row.getCell(2).value
+        externalPersonId: extractValue(row.getCell(1)),
+        externalSubmissionId: extractValue(row.getCell(2))
     };
 }
 
