@@ -1,53 +1,50 @@
-# ConfQual
+# ConfQual - Conference Quality Proof-of-Concept
 
-ConfQual is a decision-support analytics dashboard for academic Program Chairs. It parses conference data to audit the scientific review process.
-
-The system ingests raw academic conference data via EasyChair Excel exports and translates it into an interactive dashboard. The dashboard flags critical issues, calculates scientific quality scores, and provides tools to drill down into specific reviewers and papers.
+ConfQual is a decision-support analytics dashboard designed for academic Program Chairs. It parses raw conference data (e.g., EasyChair exports) to audit the scientific review process, flag critical issues, and calculate scientific quality scores.
 
 ## Technology Stack
 
-The project relies on a full-stack architecture running locally.
+The project relies on a full-stack architecture running locally:
 
-Backend:
-- Node.js and Express.js handle the REST API and serve the static frontend.
-- PostgreSQL stores the relationships between papers, reviewers, bids, conflicts, and scores.
-- Docker is used to run the PostgreSQL database.
-- ExcelJS and SheetJS parse the multi-sheet EasyChair Excel files.
-- Multer handles multipart/form-data for file uploads.
+*   **Backend:** Node.js and Express.js handle the REST API and serve the static frontend.
+*   **Database:** PostgreSQL stores the normalized schema (papers, reviewers, reviews, comments).
+*   **Data Parsing:** `exceljs` robustly parses complex `.xlsx` datasets, resolving formula errors and handling raw values.
+*   **Frontend:** Vanilla JavaScript, HTML5, and Vanilla CSS3 ensure high performance without heavy client-side frameworks. Google Fonts (Outfit) and Phosphor Icons are used for UI aesthetics.
+*   **Infrastructure:** Docker is used to run the PostgreSQL database locally.
 
-Frontend:
-- Vanilla JavaScript manages client-side routing, API fetching, and DOM manipulation.
-- HTML5 and Vanilla CSS3 handle layouts and custom styles.
-- Chart.js generates data visualizations.
-- Phosphor Icons provides SVG iconography.
-- Google Fonts (Outfit) handles typography.
+## Core Features & Analytics
 
-## Analytics and Metrics
+The dashboard is split into several core analytical modules:
 
-The system tracks several metrics to audit the reviewing process.
+### 1. Action Center (System Analytics)
+Provides an overview of the conference's metrics and flags urgent administrative issues:
+*   **COI Violations:** Flags instances where a reviewer was assigned to a paper despite a registered Conflict of Interest.
+*   **Missing Meta-Reviews:** Highlights papers lacking a final decision metareview.
+*   **Expertise Mismatches:** Flags potential misalignments between a reviewer's declared topics and their assigned paper's topics using fuzzy string matching.
 
-Action Center Alerts flag the following issues:
-- Conflict of Interest Violations when a reviewer is assigned to a paper they declared a conflict with.
-- Missing Reviews for papers with fewer than 3 reviews.
-- Missing Metareviews for debated papers (score variance > 1.0) lacking a conclusive metareview.
-- Unresolved Debates for papers with high score variance but zero discussion comments.
-- Expertise Mismatches for reviews assigned to members who share no common topics with the paper.
-- Low Effort Reviewers with an average review length under 50 words.
-- Low Bidding Satisfaction for reviewers whose assignments match less than 50% of their bids.
+### 2. Paper Explorer
+Investigates individual submissions to identify controversial or neglected papers.
+*   Tracks Average Score, Score Variance, and Total Discussion Comments.
+*   Features custom filters for **High Variance (>1.0)**, **High Agreement (<0.2)**, **Unanimous Rejects** (Avg <= -1.5), and **Unanimous Accepts** (Avg >= 1.5).
 
-The Quality Scorecard grades the conference out of 100% across four dimensions. Deductions are calculated as a percentage of the total pool:
-- Review Coverage checks if papers are receiving sufficient peer review.
-- Conflict Integrity audits the fairness of the assignment process.
-- Bidding Satisfaction measures reviewer workload fairness.
-- Discussion Health measures the depth of academic discourse.
+### 3. Reviewer Explorer
+Evaluates the performance and strictness of the Program Committee.
+*   Tracks Total Reviews, Average Word Count, and Total Comments.
+*   Calculates the **Reviewer Calibration Index**, comparing a reviewer's average score against the peer average for the exact same papers to identify harsh or lenient reviewers.
 
-The Academic Quality Profile maps the conference data against international scientific standards:
-- Selectivity calculates the Acceptance Rate and categorizes the conference against CORE A/A* (<25%) and CORE B (25%-35%) baselines.
-- Review Rigor measures the percentage of submissions that meet the European baseline of having 3 or more independent external reviews.
-- Internationalization evaluates geographic diversity to classify the Program Committee according to GII-GRIN-SCIE definitions.
-- Thematic Competence identifies expertise gaps by mapping submitted topics against PC member specializations.
+### 4. Review Submissions Timeline
+A temporal view of the review process tracking when reviews are submitted.
+*   Tracks submission timestamps and scores.
+*   Filters available for **High Scores (>= 2)** and **Low Scores (<= -2)** based on a -3 to +3 grading scale.
 
-Reviewer Calibration compares individual scores against the average score a paper received from others. Negative values indicate a harsh reviewer, while positive values indicate a lenient reviewer.
+### 5. Quality Profile
+Evaluates the conference against broader academic standards (e.g., CORE/GII-GRIN-SCIE).
+*   Calculates the true **Acceptance Rate**, strictly excluding withdrawn or desk-rejected papers (`is_deleted=true`) to maintain statistical integrity.
+
+## Scripts & Utilities
+
+*   **Data Anonymization Pipeline:** Includes a Node.js script (`scripts/anonymizeData.js`) that safely masks names and emails in the raw dataset while maintaining relational integrity.
+*   **Robust Importer:** The `importer/` module is capable of intelligently tracking sub-reviewer delegations across columns.
 
 ## Setup & Installation
 
@@ -61,7 +58,7 @@ The project includes a `docker-compose.yml` file to quickly spin up a PostgreSQL
 docker-compose up -d
 ```
 
-### 2. Install Backend Dependencies
+### 2. Install Dependencies
 ```bash
 cd backend
 npm install
@@ -74,9 +71,6 @@ npm run dev
 The application will be available at `http://localhost:3000`.
 
 ## Usage
-
-When the backend server starts, it initializes the database schema (and drops existing tables to ensure a clean state).
-
-Users can upload an EasyChair Excel file through the dashboard either by clicking the **"Import Data"** button or by simply **dragging and dropping** the Excel file anywhere on the dashboard. The backend parses the sheets (Submissions, PC, Reviews, Bids, Conflicts) and populates the database. 
-
-The dashboard provides an Action Center where users can click on alerts to filter the Explorer tables. Clicking on specific papers or reviewers opens a modal with review texts, scores, and bidding statuses. Table views can be exported to CSV.
+1.  Upon starting, the server initializes the database schema (running `database/schema.sql`).
+2.  Use the included test scripts or the web UI to import `.xlsx` conference datasets.
+3.  The dashboard will automatically generate actionable insights and analytics.

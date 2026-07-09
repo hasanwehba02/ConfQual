@@ -13,9 +13,14 @@ async function createReview(reviewData) {
             review_date,
             review_time,
             has_attachment,
-            is_superseded
+            is_superseded,
+            sub_reviewer_person_id,
+            sub_reviewer_first_name,
+            sub_reviewer_last_name,
+            sub_reviewer_email,
+            sentiment_score
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING *;
     `;
 
@@ -30,7 +35,12 @@ async function createReview(reviewData) {
         reviewData.reviewDate,
         reviewData.reviewTime,
         reviewData.hasAttachment,
-        reviewData.isSuperseded
+        reviewData.isSuperseded,
+        reviewData.subReviewerPersonId,
+        reviewData.subReviewerFirstName,
+        reviewData.subReviewerLastName,
+        reviewData.subReviewerEmail,
+        reviewData.sentimentScore
     ];
 
     const result = await client.query(query, values);

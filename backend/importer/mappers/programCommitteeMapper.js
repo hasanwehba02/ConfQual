@@ -1,13 +1,15 @@
+const { extractValue } = require('../../utils/excelHelper');
+
 function mapProgramCommitteeMember(row, conferenceId) {
     return {
         conferenceId: conferenceId,
-        externalPersonId: row.getCell(2).value,
-        firstName: row.getCell(3).value,
-        lastName: row.getCell(4).value,
-        email: row.getCell(5).value,
-        country: row.getCell(6).value,
-        affiliation: row.getCell(7).value,
-        role: row.getCell(8).value
+        externalPersonId: extractValue(row.getCell(2)),
+        firstName: extractValue(row.getCell(3)),
+        lastName: extractValue(row.getCell(4)),
+        email: extractValue(row.getCell(5)),
+        country: extractValue(row.getCell(6)),
+        affiliation: extractValue(row.getCell(7)),
+        role: extractValue(row.getCell(8))
     };
 }
 

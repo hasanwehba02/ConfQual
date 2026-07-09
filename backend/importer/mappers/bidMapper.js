@@ -1,8 +1,10 @@
+const { extractValue } = require('../../utils/excelHelper');
+
 function mapBid(row) {
     return {
-        externalPersonId: row.getCell(1).value,
-        externalSubmissionId: row.getCell(2).value,
-        bid: row.getCell(3).value
+        externalPersonId: extractValue(row.getCell(1)),
+        externalSubmissionId: extractValue(row.getCell(2)),
+        bid: extractValue(row.getCell(3))
     };
 }
 

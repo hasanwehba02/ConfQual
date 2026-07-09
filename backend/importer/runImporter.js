@@ -34,7 +34,7 @@ async function runImporter(filePath) {
 
     await importSubmissions(conference);
 
-    await importAuthors();
+    // await importAuthors(); // Authors tables were dropped per requirements
 
     await importAssignments();
 

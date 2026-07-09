@@ -308,7 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="detail-item">
                             <div class="detail-item-header">
                                 <span>#${a.external_submission_id}</span>
-                                <span>GIVEN SCORE: ${a.given_score ?? 'PENDING'}</span>
+                                <span>GIVEN: ${a.given_score ?? 'PENDING'} | PAPER AVG: ${a.peer_average ? parseFloat(a.peer_average).toFixed(2) : '-'}</span>
                             </div>
                             <div class="detail-text" style="margin-bottom: 0.5rem;">${a.title}</div>
                             <div class="detail-text" style="font-family: 'Roboto Mono', monospace; font-size: 0.75rem;">
@@ -521,15 +521,68 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- Fetch specific datasets for sorting/filtering ---
+    window.fetchPapers = async function() {
+        const sortVal = document.getElementById('paper-sort')?.value || 'score_variance_desc';
+        const lastUnderscore = sortVal.lastIndexOf('_');
+        const sortBy = sortVal.substring(0, lastUnderscore);
+        const sortOrder = sortVal.substring(lastUnderscore + 1).toUpperCase();
+        
+        const filterMode = document.getElementById('paper-filter')?.value || 'all';
+        
+        try {
+            const res = await fetch(`/api/analytics/papers?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}`);
+            allPapers = await res.json();
+            renderPapersTable(allPapers);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    window.fetchReviewers = async function() {
+        const sortVal = document.getElementById('reviewer-sort')?.value || 'avg_word_count_desc';
+        const lastUnderscore = sortVal.lastIndexOf('_');
+        const sortBy = sortVal.substring(0, lastUnderscore);
+        const sortOrder = sortVal.substring(lastUnderscore + 1).toUpperCase();
+        
+        const filterMode = document.getElementById('reviewer-filter')?.value || 'all';
+        
+        try {
+            const res = await fetch(`/api/analytics/reviewers?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}`);
+            allReviewers = await res.json();
+            renderReviewersTable(allReviewers);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    window.fetchSubmissions = async function() {
+        const sortVal = document.getElementById('submission-sort')?.value || 'review_date_desc';
+        const lastUnderscore = sortVal.lastIndexOf('_');
+        const sortBy = sortVal.substring(0, lastUnderscore);
+        const sortOrder = sortVal.substring(lastUnderscore + 1).toUpperCase();
+        
+        const filterMode = document.getElementById('submission-filter')?.value || 'all';
+        
+        try {
+            const res = await fetch(`/api/analytics/submissions?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}`);
+            const submissions = await res.json();
+            renderSubmissionsTable(submissions);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
     // --- Dashboard Data Loading ---
     async function loadDashboardData() {
         try {
-            const [alertsRes, papersRes, reviewersRes, analyticsRes, qualityRes] = await Promise.all([
+            const [alertsRes, papersRes, reviewersRes, analyticsRes, qualityRes, submissionsRes] = await Promise.all([
                 fetch('/api/analytics/alerts'),
                 fetch('/api/analytics/papers'),
                 fetch('/api/analytics/reviewers'),
                 fetch('/api/analytics/system-analytics'),
-                fetch('/api/analytics/quality-profile')
+                fetch('/api/analytics/quality-profile'),
+                fetch('/api/analytics/submissions')
             ]);
 
             const alerts = await alertsRes.json();
@@ -537,12 +590,14 @@ document.addEventListener('DOMContentLoaded', () => {
             allReviewers = await reviewersRes.json();
             const analytics = await analyticsRes.json();
             const qualityProfile = await qualityRes.json();
+            const submissions = await submissionsRes.json();
 
             renderAlerts(alerts);
             renderPapersTable(allPapers);
             renderReviewersTable(allReviewers);
             renderAnalytics(analytics);
             renderQualityProfile(qualityProfile);
+            renderSubmissionsTable(submissions);
 
         } catch (error) {
             console.error("Error loading dashboard data:", error);
@@ -696,6 +751,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </td>
                 <td style="font-family: 'Roboto Mono', monospace;">${r.total_comments || '0'}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function renderSubmissionsTable(submissions) {
+        const tbody = document.getElementById('submissions-table-body');
+        tbody.innerHTML = '';
+        if (!submissions || submissions.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No submissions found.</td></tr>';
+            return;
+        }
+
+        submissions.forEach(sub => {
+            const tr = document.createElement('tr');
+            
+            const dateStr = sub.review_date ? new Date(sub.review_date).toLocaleDateString() : '-';
+            const timeStr = sub.review_time ? sub.review_time : '-';
+            
+            tr.innerHTML = `
+                <td style="font-family: 'Roboto Mono', monospace;">#${sub.id}</td>
+                <td style="font-weight: bold;">${sub.first_name} ${sub.last_name}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">#${sub.external_submission_id}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${sub.total_score}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${dateStr}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${timeStr}</td>
             `;
             tbody.appendChild(tr);
         });

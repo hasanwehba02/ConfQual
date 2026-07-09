@@ -1,11 +1,13 @@
 CREATE TABLE conference (
     id SERIAL PRIMARY KEY,
 
-    name VARCHAR(255) NOT NULL,
+    name TEXT NOT NULL,
 
-    short_name VARCHAR(100),
+    short_name TEXT,
 
     year INT,
+
+    submission_deadline TIMESTAMP,
 
     uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -18,17 +20,17 @@ CREATE TABLE program_committee_member (
 
     external_person_id INT UNIQUE,
 
-    first_name VARCHAR(100) NOT NULL,
+    first_name TEXT NOT NULL,
 
-    last_name VARCHAR(100) NOT NULL,
+    last_name TEXT NOT NULL,
 
-    email VARCHAR(255),
+    email TEXT,
 
-    affiliation VARCHAR(255),
+    affiliation TEXT,
 
-    country VARCHAR(100),
+    country TEXT,
 
-   role VARCHAR(100) NOT NULL,
+   role TEXT NOT NULL,
 
     CONSTRAINT fk_pcm_conference
         FOREIGN KEY (conference_id)
@@ -50,11 +52,13 @@ CREATE TABLE paper (
 
     last_updated_at TIMESTAMP,
 
-    decision VARCHAR(100),
+    decision TEXT,
 
     notified BOOLEAN,
 
     reviews_sent BOOLEAN,
+
+    is_deleted BOOLEAN DEFAULT FALSE,
 
     CONSTRAINT fk_paper_conference
         FOREIGN KEY (conference_id)
@@ -63,49 +67,10 @@ CREATE TABLE paper (
 );
 
 
-CREATE TABLE author (
-    id SERIAL PRIMARY KEY,
-
-    external_person_id INT UNIQUE,
-
-    first_name VARCHAR(100) NOT NULL,
-
-    last_name VARCHAR(100) NOT NULL,
-
-    email VARCHAR(255),
-
-    affiliation VARCHAR(255),
-
-    country VARCHAR(100)
-);
-
-
-CREATE TABLE paper_author (
-    paper_id INT NOT NULL,
-
-    author_id INT NOT NULL,
-
-    author_order INT,
-
-    is_corresponding BOOLEAN DEFAULT FALSE,
-
-    PRIMARY KEY (paper_id, author_id),
-
-    CONSTRAINT fk_pa_paper
-        FOREIGN KEY (paper_id)
-        REFERENCES paper(id)
-        ON DELETE CASCADE,
-
-    CONSTRAINT fk_pa_author
-        FOREIGN KEY (author_id)
-        REFERENCES author(id)
-);
-
-
 CREATE TABLE topic (
     id SERIAL PRIMARY KEY,
 
-    name VARCHAR(255) NOT NULL UNIQUE
+    name TEXT NOT NULL UNIQUE
 );
 
 
@@ -173,7 +138,7 @@ CREATE TABLE bid (
 
     program_committee_member_id INT NOT NULL,
 
-    bid VARCHAR(50),
+    bid TEXT,
 
     CONSTRAINT fk_bid_paper
         FOREIGN KEY (paper_id)
@@ -235,6 +200,16 @@ CREATE TABLE review (
 
     is_superseded BOOLEAN DEFAULT FALSE,
 
+    sub_reviewer_person_id INT,
+
+    sub_reviewer_first_name TEXT,
+
+    sub_reviewer_last_name TEXT,
+
+    sub_reviewer_email TEXT,
+
+    sentiment_score DECIMAL(5,2),
+
     CONSTRAINT fk_review_paper
         FOREIGN KEY (paper_id)
         REFERENCES paper(id)
@@ -277,7 +252,7 @@ CREATE TABLE meta_review (
 
     program_committee_member_id INT NOT NULL,
 
-    recommendation VARCHAR(100),
+    recommendation TEXT,
 
     review_text TEXT,
 

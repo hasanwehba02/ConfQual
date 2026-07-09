@@ -1,11 +1,18 @@
-function mapMetaReview(row) {
+const { extractValue } = require('../../utils/excelHelper');
+
+function mapMetaReview(row, headerMap) {
+    const getValue = (header) => {
+        const index = headerMap[header.toLowerCase()];
+        return index ? extractValue(row.getCell(index)) : null;
+    };
+
     return {
-        externalSubmissionId: row.getCell(1).value,
-        externalPersonId: row.getCell(2).value,
-        recommendation: row.getCell(4).value,
-        reviewText: row.getCell(5).value,
-        reviewDate: row.getCell(6).value,
-        reviewTime: row.getCell(7).value
+        externalSubmissionId: getValue('submission #'),
+        externalPersonId: getValue('member #'),
+        recommendation: getValue('recommendation'),
+        reviewText: getValue('text'),
+        reviewDate: getValue('date'),
+        reviewTime: getValue('time')
     };
 }
 

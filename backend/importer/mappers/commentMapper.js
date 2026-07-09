@@ -1,10 +1,12 @@
+const { extractValue } = require('../../utils/excelHelper');
+
 function mapComment(row) {
     return {
-        externalSubmissionId: row.getCell(1).value,
-        externalPersonId: row.getCell(2).value,
-        commentText: row.getCell(4).value,
-        commentDate: row.getCell(5).value,
-        commentTime: row.getCell(6).value
+        externalSubmissionId: extractValue(row.getCell(1)),
+        externalPersonId: extractValue(row.getCell(2)),
+        commentText: extractValue(row.getCell(4)),
+        commentDate: extractValue(row.getCell(5)),
+        commentTime: extractValue(row.getCell(6))
     };
 }
 
