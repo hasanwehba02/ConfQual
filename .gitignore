@@ -1,2 +1,9 @@
 excel/
 .DS_Store
+.env
+.env.local
+node_modules/
+.agents/
+skills-lock.json
+.neon/
+database/confqual_er_diagram_v1.png

@@ -14,6 +14,7 @@ async function importReviewsForSheet(workbook, sheetName, isSuperseded = false) 
     let imported = 0;
     let skipped = 0;
 
+    const dtos = [];
     for (let i = 2; i <= sheet.rowCount; i++) {
         const row = sheet.getRow(i);
         const reviewDto = mapReview(row);
@@ -27,12 +28,18 @@ async function importReviewsForSheet(workbook, sheetName, isSuperseded = false) 
         
         // Calculate sentiment score using the utility
         reviewDto.sentimentScore = analyticsMath.analyzeReviewSentiment(reviewDto.reviewText);
-        const savedReview = await reviewService.createReview(reviewDto);
+        dtos.push(reviewDto);
+    }
 
-        if (savedReview) {
-            imported++;
-        } else {
-            skipped++;
+    const chunkSize = 30;
+    for (let i = 0; i < dtos.length; i += chunkSize) {
+        const chunk = dtos.slice(i, i + chunkSize);
+        const results = await Promise.all(
+            chunk.map(dto => reviewService.createReview(dto))
+        );
+        for (const savedReview of results) {
+            if (savedReview) imported++;
+            else skipped++;
         }
     }
 

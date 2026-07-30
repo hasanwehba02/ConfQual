@@ -61,7 +61,20 @@ async function getAlerts() {
     const mismatches = await getExpertiseMismatches();
     const coiViolations = await analyticsRepository.getCOIViolations();
     const missingMetareviews = await analyticsRepository.getMissingMetareviews();
+    const sentimentMismatches = await analyticsRepository.getSentimentMismatches();
     
+    // Alert: Sentiment Mismatches
+    if (sentimentMismatches.length > 0) {
+        alerts.push({
+            type: 'warning',
+            title: 'Sentiment Mismatches',
+            message: `${sentimentMismatches.length} positive reviews were given low scores (<= 1).`,
+            action: 'Audit Reviews',
+            target: 'tab-papers',
+            filterKey: 'paper',
+            affectedIds: [...new Set(sentimentMismatches.map(s => s.external_submission_id))]
+        });
+    }
     // Alert: COI Violations
     if (coiViolations.length > 0) {
         alerts.push({
@@ -335,6 +348,11 @@ async function getSystemAnalytics() {
     const reviewers = await getReviewerQuality();
     const coiViolations = await analyticsRepository.getCOIViolations();
     const scorecard = await getQualityScorecard(health);
+    const distributions = await analyticsRepository.getSystemDistributions();
+    
+    const topPapers = await analyticsRepository.getTopPapers();
+    const topReviewers = await analyticsRepository.getTopReviewers();
+    const sessionClusters = await analyticsRepository.getSessionClusters();
     
     return {
         health,
@@ -342,7 +360,11 @@ async function getSystemAnalytics() {
         debates,
         reviewers,
         coiViolations,
-        scorecard
+        scorecard,
+        distributions,
+        topPapers,
+        topReviewers,
+        sessionClusters
     };
 }
 
@@ -437,6 +459,10 @@ async function getAcademicQualityProfile() {
     };
 }
 
+async function updatePaperDecision(id, decision) {
+    return await analyticsRepository.updatePaperDecision(id, decision);
+}
+
 module.exports = {
     getConferenceHealth,
     getReviewerQuality,
@@ -451,5 +477,6 @@ module.exports = {
     getReviewerDetails,
     getAcademicQualityProfile,
     getLateSubmissions,
-    getSubmissions
+    getSubmissions,
+    updatePaperDecision
 };

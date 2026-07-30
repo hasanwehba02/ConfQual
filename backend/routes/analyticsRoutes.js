@@ -24,9 +24,11 @@ router.get("/late-submissions", analyticsController.getLateSubmissions);
 
 // Deep Drill-Down Endpoints
 router.get("/papers/:id", analyticsController.getPaperDetails);
+router.put("/papers/:id/decision", analyticsController.updatePaperDecision);
 router.get("/reviewers/:id", analyticsController.getReviewerDetails);
 router.post("/reset", analyticsController.resetDb);
 
 router.post("/process-conference", upload.single('excelFile'), analyticsController.processUpload);
 
+router.post("/log", (req, res) => { console.log("FRONTEND LOG:", req.body); res.sendStatus(200); });
 module.exports = router;

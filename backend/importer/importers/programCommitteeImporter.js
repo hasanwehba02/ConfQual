@@ -7,25 +7,38 @@ async function importProgramCommittee(conference) {
 
     const sheet = workbook.getWorksheet("Program committee");
 
+    let roleIndex = 8; // Default
+    const headerRow = sheet.getRow(1);
+    headerRow.eachCell((cell, colNumber) => {
+        if (cell.value && typeof cell.value === 'string' && cell.value.toLowerCase() === 'role') {
+            roleIndex = colNumber;
+        }
+    });
+
     let imported = 0;
     let skipped = 0;
 
+    const dtos = [];
     for (let i = 2; i <= sheet.rowCount; i++) {
         const row = sheet.getRow(i);
-
-        const member = mapProgramCommitteeMember(row, conference.id);
+        const member = mapProgramCommitteeMember(row, conference.id, roleIndex);
 
         if (!member.externalPersonId) {
             skipped++;
             continue;
         }
+        dtos.push(member);
+    }
 
-        const savedMember = await programCommitteeService.createProgramCommitteeMember(member);
-
-        if (savedMember) {
-            imported++;
-        } else {
-            skipped++;
+    const chunkSize = 30;
+    for (let i = 0; i < dtos.length; i += chunkSize) {
+        const chunk = dtos.slice(i, i + chunkSize);
+        const results = await Promise.all(
+            chunk.map(member => programCommitteeService.createProgramCommitteeMember(member))
+        );
+        for (const savedMember of results) {
+            if (savedMember) imported++;
+            else skipped++;
         }
     }
 

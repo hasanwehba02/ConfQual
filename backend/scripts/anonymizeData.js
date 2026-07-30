@@ -19,9 +19,9 @@ async function anonymizeData() {
         
         let pcCount = 0;
         for (const row of pcResult.rows) {
-            const newFirstName = `PC_First_${row.id}`;
-            const newLastName = `PC_Last_${row.id}`;
-            const newEmail = `pc_${row.id}@example.com`;
+            const newFirstName = `Reviewer_${row.id}`;
+            const newLastName = ``;
+            const newEmail = `reviewer_${row.id}@example.com`;
             
             await pool.query(
                 "UPDATE program_committee_member SET first_name = $1, last_name = $2, email = $3 WHERE id = $4",
@@ -37,8 +37,8 @@ async function anonymizeData() {
         
         let subRevCount = 0;
         for (const row of reviewResult.rows) {
-            const newFirstName = `SubRev_First_${row.id}`;
-            const newLastName = `SubRev_Last_${row.id}`;
+            const newFirstName = `SubRev_${row.id}`;
+            const newLastName = ``;
             const newEmail = `subrev_${row.id}@example.com`;
             
             await pool.query(

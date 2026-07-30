@@ -1,7 +1,50 @@
+
+window.onerror = function(message, source, lineno, colno, error) {
+    fetch('/api/analytics/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'error', message, lineno, colno, stack: error ? error.stack : '' })
+    });
+};
+window.addEventListener('unhandledrejection', function(event) {
+    fetch('/api/analytics/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'unhandledrejection', message: event.reason ? event.reason.message : 'Unknown' })
+    });
+});
+
+const originalConsoleError = console.error;
+console.error = function(...args) {
+    fetch('/api/analytics/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'console.error', args })
+    });
+    originalConsoleError.apply(console, args);
+};
+
+const originalConsoleLog = console.log;
+console.log = function(...args) {
+    fetch('/api/analytics/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'console.log', args })
+    });
+    originalConsoleLog.apply(console, args);
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     const uploadBtn = document.getElementById('upload-btn');
     const uploadDrawer = document.getElementById('upload-drawer');
     const closeUploadDrawer = document.getElementById('close-upload-drawer');
+    const settingsBtn = document.getElementById('settings-btn');
+    const settingsDrawer = document.getElementById('settings-drawer');
+    const closeSettingsDrawer = document.getElementById('close-settings-drawer');
+    const settingsForm = document.getElementById('settings-form');
+    const isAnonymizedCheckbox = document.getElementById('isAnonymized');
+    const decisionEditingEnabledCheckbox = document.getElementById('decisionEditingEnabled');
+    const anonymizationPrefixInput = document.getElementById('anonymizationPrefix');
     const uploadForm = document.getElementById('upload-form');
     const fileInput = document.getElementById('excelFile');
     const dropZone = document.getElementById('drop-zone');
@@ -20,6 +63,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let reviewerChartInstance = null;
     let debatesChartInstance = null;
+    let decisionChartInstance = null;
+    let scoreChartInstance = null;
     
     let allPapers = [];
     let allReviewers = [];
@@ -109,6 +154,44 @@ document.addEventListener('DOMContentLoaded', () => {
         const link = document.createElement("a");
         link.setAttribute("href", url);
         link.setAttribute("download", filename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    window.exportAnalyticsSummary = function() {
+        let csvContent = "\uFEFF";
+        csvContent += "--- SYSTEM ANALYTICS SUMMARY ---\r\n";
+        csvContent += "Metric,Value\r\n";
+        
+        const tryGet = (id) => { const el = document.getElementById(id); return el ? el.innerText.replace(/\n/g, ' ') : '0'; };
+        
+        csvContent += `"Total Papers","${tryGet('stat-papers')}"\r\n`;
+        csvContent += `"Total Reviewers","${tryGet('stat-reviewers')}"\r\n`;
+        csvContent += `"Completed Reviews","${tryGet('stat-reviews')}"\r\n`;
+        csvContent += `"Expertise Mismatches","${tryGet('stat-mismatches')}"\r\n\r\n`;
+        
+        csvContent += "--- AWARDS & HIGHLIGHTS NOMINEES ---\r\n";
+        csvContent += "TOP REVIEWERS\r\n";
+        
+        const revRows = document.querySelectorAll('#top-reviewers-body tr');
+        revRows.forEach(row => {
+            const cols = Array.from(row.querySelectorAll('td')).map(td => `"${(td.textContent || '').trim().replace(/"/g, '""')}"`);
+            csvContent += cols.join(",") + "\r\n";
+        });
+        
+        csvContent += "\r\nBEST PAPERS\r\n";
+        const papRows = document.querySelectorAll('#top-papers-body tr');
+        papRows.forEach(row => {
+            const cols = Array.from(row.querySelectorAll('td')).map(td => `"${(td.textContent || '').trim().replace(/"/g, '""')}"`);
+            csvContent += cols.join(",") + "\r\n";
+        });
+        
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", "system_analytics_summary.csv");
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -411,6 +494,68 @@ document.addEventListener('DOMContentLoaded', () => {
         uploadDrawer.classList.add('closed');
     });
 
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', async () => {
+            // Fetch current settings
+            try {
+                const response = await fetch('/api/settings');
+                if (response.ok) {
+                    const settings = await response.json();
+                    isAnonymizedCheckbox.checked = settings.is_anonymized;
+                    decisionEditingEnabledCheckbox.checked = settings.decision_editing_enabled;
+                    anonymizationPrefixInput.value = settings.anonymization_prefix || 'CAiSE_26_Tech';
+                }
+            } catch (e) {
+                console.error("Error fetching settings:", e);
+            }
+            settingsDrawer.classList.add('open');
+            settingsDrawer.classList.remove('closed');
+        });
+    }
+
+    if (closeSettingsDrawer) {
+        closeSettingsDrawer.addEventListener('click', () => {
+            settingsDrawer.classList.remove('open');
+            settingsDrawer.classList.add('closed');
+        });
+    }
+
+    if (settingsForm) {
+        settingsForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitSettingsBtn = document.getElementById('submit-settings');
+            submitSettingsBtn.textContent = 'SAVING...';
+            submitSettingsBtn.disabled = true;
+
+            try {
+                const res = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        is_anonymized: isAnonymizedCheckbox.checked,
+                        anonymization_prefix: anonymizationPrefixInput.value,
+                        decision_editing_enabled: decisionEditingEnabledCheckbox.checked
+                    })
+                });
+                
+                if (res.ok) {
+                    settingsDrawer.classList.remove('open');
+                    settingsDrawer.classList.add('closed');
+                    // Reload data to reflect new settings
+                    await loadDashboardData();
+                } else {
+                    alert('Failed to save settings.');
+                }
+            } catch (error) {
+                console.error(error);
+                alert('An error occurred while saving settings.');
+            } finally {
+                submitSettingsBtn.textContent = 'SAVE SETTINGS';
+                submitSettingsBtn.disabled = false;
+            }
+        });
+    }
+
     const resetBtn = document.getElementById('reset-btn');
     if (resetBtn) {
         resetBtn.addEventListener('click', async () => {
@@ -513,7 +658,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             submitBtn.classList.remove('hidden');
             dropZone.classList.remove('hidden');
-            loadingState.classList.add('hidden');
+            loadingState.classList.remove('hidden');
             const globalLoadingOverlay = document.getElementById('global-loading-overlay');
             if (globalLoadingOverlay) globalLoadingOverlay.classList.add('hidden');
             uploadForm.reset();
@@ -523,7 +668,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Fetch specific datasets for sorting/filtering ---
     window.fetchPapers = async function() {
-        const sortVal = document.getElementById('paper-sort')?.value || 'score_variance_desc';
+        const sortVal = document.getElementById('paper-sort')?.value || 'score_spread_desc';
         const lastUnderscore = sortVal.lastIndexOf('_');
         const sortBy = sortVal.substring(0, lastUnderscore);
         const sortOrder = sortVal.substring(lastUnderscore + 1).toUpperCase();
@@ -598,6 +743,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderAnalytics(analytics);
             renderQualityProfile(qualityProfile);
             renderSubmissionsTable(submissions);
+            renderAwardsTab(analytics);
 
         } catch (error) {
             console.error("Error loading dashboard data:", error);
@@ -664,36 +810,73 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function renderPapersTable(papers) {
+    window.handlePaperSearch = function() {
+        if (allPapers) renderPapersTable(allPapers);
+    };
+
+    window.handleReviewerSearch = function() {
+        if (allReviewers) renderReviewersTable(allReviewers);
+    };
+
+    async function renderPapersTable(papers) {
         const tbody = document.getElementById('papers-table-body');
         tbody.innerHTML = '';
         
-        const dataToRender = activePaperFilter ? papers.filter(p => activePaperFilter.includes(parseInt(p.external_submission_id, 10))) : papers;
+        let dataToRender = activePaperFilter ? papers.filter(p => activePaperFilter.includes(parseInt(p.external_submission_id, 10))) : papers;
         
-        // Find max variance to scale sparkline
-        let maxVariance = 0;
+        const searchInput = document.getElementById('paper-search');
+        if (searchInput && searchInput.value) {
+            const query = searchInput.value.toLowerCase();
+            dataToRender = dataToRender.filter(p => 
+                (p.title && p.title.toLowerCase().includes(query)) ||
+                (p.external_submission_id && p.external_submission_id.toString().includes(query))
+            );
+        }
+
+        const response = await fetch('/api/settings');
+        let settings = {};
+        if (response.ok) {
+            settings = await response.json();
+        }
+        const selectDisabled = settings.decision_editing_enabled ? '' : 'disabled';
+        
+        // Find max spread to scale sparkline
+        let maxSpread = 0;
         dataToRender.forEach(p => {
-            const val = parseFloat(p.score_variance || 0);
-            if (val > maxVariance) maxVariance = val;
+            const val = parseFloat(p.score_spread || 0);
+            if (val > maxSpread) maxSpread = val;
         });
 
         dataToRender.forEach(p => {
-            const varVal = parseFloat(p.score_variance || 0);
-            const varWidth = maxVariance > 0 ? (varVal / maxVariance) * 100 : 0;
-            const sparkClass = varVal > 2.0 ? 'danger' : (varVal > 1.0 ? 'warning' : '');
+            const sprVal = parseFloat(p.score_spread || 0);
+            const sprWidth = maxSpread > 0 ? (sprVal / maxSpread) * 100 : 0;
+            const sparkClass = sprVal > 2.0 ? 'danger' : (sprVal > 1.0 ? 'warning' : '');
+
+            const currentDec = p.decision ? p.decision.toLowerCase() : '';
 
             const tr = document.createElement('tr');
             tr.onclick = () => openPaperModal(p.external_submission_id);
             tr.innerHTML = `
-                <td style="font-family: 'Roboto Mono', monospace;">${p.external_submission_id}</td>
+                <td style="font-family: 'Roboto Mono', monospace; display: flex; align-items: center;">
+                    ${p.external_submission_id} 
+                    ${p.total_reviews < 3 ? '<span title="At Risk: Less than 3 reviews" style="cursor:help; margin-left: 6px;">⚠️</span>' : ''}
+                </td>
                 <td>${p.title}</td>
+                <td>
+                    <select class="form-select" style="padding: 2px 5px; border-radius: 4px; font-size: 0.75rem; border: 1px solid #ccc;" onclick="event.stopPropagation()" onchange="updatePaperDecision(${p.id}, this.value)" ${selectDisabled}>
+                        <option value="Accept" ${currentDec.includes('accept') && !currentDec.includes('reject') ? 'selected' : ''}>Accept</option>
+                        <option value="Reject" ${currentDec === 'reject' ? 'selected' : ''}>Reject</option>
+                        <option value="Desk Reject" ${currentDec.includes('desk reject') ? 'selected' : ''}>Desk Reject</option>
+                        <option value="No Decision" ${currentDec === 'no decision' || !p.decision ? 'selected' : ''}>No Decision</option>
+                    </select>
+                </td>
                 <td style="font-family: 'Roboto Mono', monospace;">${p.total_reviews}</td>
                 <td style="font-family: 'Roboto Mono', monospace;">${p.average_score || '-'}</td>
                 <td>
                     <div class="sparkline-container">
-                        <span style="font-family: 'Roboto Mono', monospace; width: 40px;">${p.score_variance || '0.00'}</span>
+                        <span style="font-family: 'Roboto Mono', monospace; width: 40px;">${parseFloat(p.score_spread || 0).toFixed(2)}</span>
                         <div style="flex: 1; background: #eee;">
-                            <div class="sparkline-bar ${sparkClass}" style="width: ${varWidth}%"></div>
+                            <div class="sparkline-bar ${sparkClass}" style="width: ${sprWidth}%"></div>
                         </div>
                     </div>
                 </td>
@@ -707,7 +890,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const tbody = document.getElementById('reviewers-table-body');
         tbody.innerHTML = '';
         
-        const dataToRender = activeReviewerFilter ? reviewers.filter(r => activeReviewerFilter.includes(parseInt(r.id, 10))) : reviewers;
+        let dataToRender = activeReviewerFilter ? reviewers.filter(r => activeReviewerFilter.includes(parseInt(r.id, 10))) : reviewers;
+
+        const searchInput = document.getElementById('reviewer-search');
+        if (searchInput && searchInput.value) {
+            const query = searchInput.value.toLowerCase();
+            dataToRender = dataToRender.filter(r => 
+                (r.first_name && r.first_name.toLowerCase().includes(query)) ||
+                (r.last_name && r.last_name.toLowerCase().includes(query)) ||
+                (r.reviewer_id && r.reviewer_id.toString().includes(query))
+            );
+        }
 
         // Find max abs calibration for scaling
         let maxCal = 0;
@@ -732,10 +925,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const bm = parseFloat(r.bidding_match_percentage);
             const bmHtml = bm < 50 ? `<strong class="text-danger">${bm}%</strong>` : `${bm}%`;
+            
+            const warningHtml = parseInt(r.total_reviews_completed) === 0 ? '<span title="At Risk: 0 reviews completed" style="cursor:help;">⚠️</span>' : '';
 
             const tr = document.createElement('tr');
             tr.onclick = () => openReviewerModal(r.id, `${r.first_name} ${r.last_name}`);
             tr.innerHTML = `
+                <td style="font-family: 'Roboto Mono', monospace;">${r.reviewer_id || '-'} ${warningHtml}</td>
                 <td style="font-weight: bold;">${r.first_name} ${r.last_name}</td>
                 <td><span class="badge bg-neutral">${r.role}</span></td>
                 <td style="font-family: 'Roboto Mono', monospace;">${r.total_reviews_completed}</td>
@@ -838,11 +1034,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (reviewerChartInstance) reviewerChartInstance.destroy();
         if (debatesChartInstance) debatesChartInstance.destroy();
+        if (decisionChartInstance) decisionChartInstance.destroy();
+        if (scoreChartInstance) scoreChartInstance.destroy();
 
         // Monochromatic Chart configurations (Tufte-inspired)
         Chart.defaults.font.family = "'Roboto Mono', monospace";
         Chart.defaults.color = '#000000';
 
+        if (reviewerChartInstance) reviewerChartInstance.destroy();
         const ctxPie = document.getElementById('reviewerChart').getContext('2d');
         const mainReviewers = parseInt(analytics.health.total_reviewers) - parseInt(analytics.health.total_sub_reviewers);
         
@@ -870,6 +1069,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
+        if (debatesChartInstance) debatesChartInstance.destroy();
         const ctxBar = document.getElementById('debatesChart').getContext('2d');
         const topDebates = analytics.debates.slice(0, 7);
         
@@ -878,8 +1078,8 @@ document.addEventListener('DOMContentLoaded', () => {
             data: {
                 labels: topDebates.map(d => `#${d.external_submission_id}`),
                 datasets: [{
-                    label: 'VARIANCE',
-                    data: topDebates.map(d => parseFloat(d.score_variance)),
+                    label: 'SPREAD',
+                    data: topDebates.map(d => parseFloat(d.score_spread)),
                     backgroundColor: '#000000', // Solid black
                     borderColor: '#000000',
                     borderWidth: 0,
@@ -904,5 +1104,239 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         });
+
+        const ctxDecision = document.getElementById('decisionChart');
+        if (ctxDecision) {
+            let acceptCount = 0;
+            let rejectCount = 0;
+            let deskRejectCount = 0;
+            let noDecisionCount = 0;
+
+            if (analytics.distributions && analytics.distributions.decisions) {
+                analytics.distributions.decisions.forEach(d => {
+                    const dec = d.decision ? d.decision.toLowerCase() : '';
+                    const count = parseInt(d.count, 10) || 0;
+                    if (dec.includes('desk reject') || dec.includes('desk-reject') || dec.includes('desk_reject')) { deskRejectCount += count; }
+                    else if (dec === 'no decision' || dec === '') { noDecisionCount += count; }
+                    else if (dec.includes('accept')) { acceptCount += count; }
+                    else if (dec.includes('reject')) { rejectCount += count; }
+                    else { noDecisionCount += count; }
+                });
+            }
+
+            if (decisionChartInstance) decisionChartInstance.destroy();
+            decisionChartInstance = new Chart(ctxDecision.getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Accept', 'Reject', 'Desk Reject', 'No Decision'],
+                    datasets: [{
+                        data: [acceptCount, rejectCount, deskRejectCount, noDecisionCount],
+                        backgroundColor: ['#2ecc71', '#e74c3c', '#c0392b', '#95a5a6'],
+                        borderWidth: 1,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'right', labels: { font: { family: "'Roboto Mono', monospace" } } } },
+                    cutout: '50%'
+                }
+            });
+        }
+
+        const ctxScore = document.getElementById('scoreChart');
+        if (ctxScore) {
+            // Count distribution from -3 to 3
+            const scoreCounts = { '-3': 0, '-2': 0, '-1': 0, '0': 0, '1': 0, '2': 0, '3': 0 };
+            
+            if (analytics.distributions && analytics.distributions.scores) {
+                analytics.distributions.scores.forEach(s => {
+                    const scoreStr = s.rounded_score ? s.rounded_score.toString() : '';
+                    if (scoreCounts[scoreStr] !== undefined) {
+                        scoreCounts[scoreStr] += (parseInt(s.count, 10) || 0);
+                    }
+                });
+            }
+
+            if (scoreChartInstance) scoreChartInstance.destroy();
+            scoreChartInstance = new Chart(ctxScore.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: ['-3', '-2', '-1', '0', '1', '2', '3'],
+                    datasets: [{
+                        label: 'Papers count',
+                        data: Object.values(scoreCounts),
+                        backgroundColor: '#000000',
+                        borderColor: '#000000',
+                        borderWidth: 0,
+                        borderRadius: 0,
+                        barPercentage: 0.8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { display: false, drawBorder: true, borderColor: '#000' } },
+                        x: { grid: { display: false, drawBorder: true, borderColor: '#000' } }
+                    }
+                }
+            });
+        }
     }
+
+    function renderAwardsTab(data) {
+        if (!data) return;
+
+        // TOP 5 REVIEWERS
+        const revBody = document.getElementById('top-reviewers-body');
+        if (revBody) {
+            if (data.topReviewers && data.topReviewers.length > 0) {
+                revBody.innerHTML = data.topReviewers.map(r => `
+                    <tr onclick="openReviewerModal('${r.id}', '${r.first_name} ${r.last_name}')" style="cursor:pointer;">
+                        <td style="font-weight: bold;">${r.first_name} ${r.last_name}</td>
+                        <td style="font-family: 'Roboto Mono', monospace;">${r.reviews_done}</td>
+                        <td style="font-family: 'Roboto Mono', monospace;">${r.avg_word_count}</td>
+                        <td style="font-family: 'Roboto Mono', monospace;">${parseFloat(r.calibration_index||0).toFixed(2)}</td>
+                    </tr>
+                `).join('');
+            } else {
+                revBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No candidate reviewers found</td></tr>';
+            }
+        }
+
+        // TOP 5 PAPERS
+        const papBody = document.getElementById('top-papers-body');
+        if (papBody) {
+            if (data.topPapers && data.topPapers.length > 0) {
+                papBody.innerHTML = data.topPapers.map(p => `
+                    <tr onclick="openPaperModal('${p.id}')" style="cursor:pointer;">
+                        <td style="font-family: 'Roboto Mono', monospace;">${p.id}</td>
+                        <td style="font-weight: bold;">${p.title}</td>
+                        <td style="font-family: 'Roboto Mono', monospace;">${parseFloat(p.avg_score||0).toFixed(2)}</td>
+                        <td style="font-family: 'Roboto Mono', monospace;">${parseFloat(p.spread||0).toFixed(2)}</td>
+                    </tr>
+                `).join('');
+            } else {
+                papBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No candidate papers found</td></tr>';
+            }
+        }
+
+        // SESSION CLUSTERS
+        const clustersContainer = document.getElementById('session-clusters-container');
+        if (clustersContainer) {
+            clustersContainer.innerHTML = '';
+            if (data.sessionClusters && Object.keys(data.sessionClusters).length > 0) {
+                for (const [topic, papers] of Object.entries(data.sessionClusters)) {
+                    const card = document.createElement('div');
+                    card.style = 'background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);';
+                    
+                    let paperListHtml = papers.map(p => `
+                        <div style="font-size: 0.85rem; padding: 6px 0; border-bottom: 1px solid #f1f5f9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${p.title}">
+                            <span style="font-family: 'Roboto Mono', monospace; color: var(--primary); margin-right: 5px;">#${p.id}</span>
+                            ${p.title}
+                        </div>
+                    `).join('');
+                    
+                    card.innerHTML = `
+                        <h4 style="margin-top: 0; margin-bottom: 10px; color: var(--text-main); font-size: 1rem;">${topic} <span class="badge bg-neutral" style="float: right;">${papers.length}</span></h4>
+                        <div style="max-height: 150px; overflow-y: auto;">
+                            ${paperListHtml}
+                        </div>
+                    `;
+                    clustersContainer.appendChild(card);
+                }
+            } else {
+                clustersContainer.innerHTML = '<div class="text-muted" style="grid-column: 1 / -1;">No accepted papers with topics found. Try accepting some papers.</div>';
+            }
+        }
+    }
+
+    window.updatePaperDecision = async function(internalId, newDecision) {
+        try {
+            const res = await fetch(`/api/analytics/papers/${internalId}/decision`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ decision: newDecision })
+            });
+            if (res.ok) {
+                // Instantly refresh everything
+                await loadDashboardData();
+            } else {
+                console.error("Failed to update decision");
+                alert("Failed to update decision. Check console for errors.");
+            }
+        } catch (err) {
+            console.error("Error updating decision", err);
+        }
+    };
+
+    window.openProjectorView = async function(externalId) {
+        try {
+            const res = await fetch(`/api/analytics/papers/${externalId}`);
+            if (!res.ok) throw new Error("Failed to fetch");
+            const paper = await res.json();
+            
+            document.getElementById('projector-title').textContent = `#${externalId}: ${paper.title}`;
+            
+            const scoresContainer = document.getElementById('projector-scores');
+            const disagreementsContainer = document.getElementById('projector-disagreements');
+            
+            scoresContainer.innerHTML = '';
+            disagreementsContainer.innerHTML = '';
+            
+            if (paper.reviews && paper.reviews.length > 0) {
+                // Map backend fields to frontend expectations
+                paper.reviews.forEach(r => {
+                    r.reviewer_name = `${r.first_name || ''} ${r.last_name || ''}`.trim() || `Reviewer ${r.id}`;
+                    r.text = r.review_text || 'No review text provided.';
+                });
+
+                // Sort reviews by score (highest to lowest)
+                paper.reviews.sort((a, b) => b.total_score - a.total_score);
+                
+                paper.reviews.forEach(r => {
+                    const scoreColor = r.total_score >= 1 ? '#10b981' : (r.total_score <= -1 ? '#ef4444' : '#64748b');
+                    scoresContainer.innerHTML += `
+                        <div style="background: #1e293b; border-left: 4px solid ${scoreColor}; padding: 15px 25px; border-radius: 8px; text-align: center; flex: 1; min-width: 150px;">
+                            <div style="font-size: 0.9rem; color: #94a3b8; margin-bottom: 5px; text-transform: uppercase;">${r.reviewer_name}</div>
+                            <div style="font-size: 2.5rem; font-weight: bold; color: white;">${r.total_score > 0 ? '+'+r.total_score : r.total_score}</div>
+                        </div>
+                    `;
+                });
+                
+                const highest = paper.reviews[0];
+                const lowest = paper.reviews[paper.reviews.length - 1];
+                
+                if (highest.total_score - lowest.total_score > 1) {
+                    disagreementsContainer.innerHTML = `
+                        <div style="background: #1e293b; padding: 20px; border-radius: 8px; border-left: 4px solid #10b981;">
+                            <h4 style="color: #10b981; margin-top: 0;">Highest Score: ${highest.total_score > 0 ? '+'+highest.total_score : highest.total_score} (${highest.reviewer_name})</h4>
+                            <p style="color: #e2e8f0; line-height: 1.6; font-size: 1.1rem; margin-bottom: 0;">"${highest.text}"</p>
+                        </div>
+                        <div style="background: #1e293b; padding: 20px; border-radius: 8px; border-left: 4px solid #ef4444;">
+                            <h4 style="color: #ef4444; margin-top: 0;">Lowest Score: ${lowest.total_score > 0 ? '+'+lowest.total_score : lowest.total_score} (${lowest.reviewer_name})</h4>
+                            <p style="color: #e2e8f0; line-height: 1.6; font-size: 1.1rem; margin-bottom: 0;">"${lowest.text}"</p>
+                        </div>
+                    `;
+                } else {
+                    disagreementsContainer.innerHTML = `
+                        <div style="background: #1e293b; padding: 20px; border-radius: 8px; text-align: center; color: #94a3b8;">
+                            Reviewers generally agree on this paper. (Spread is low)
+                        </div>
+                    `;
+                }
+            } else {
+                scoresContainer.innerHTML = '<div style="color: #94a3b8;">No reviews available.</div>';
+            }
+            
+            document.getElementById('projector-modal').classList.remove('hidden');
+            document.getElementById('projector-modal').style.display = 'flex';
+        } catch(err) {
+            console.error(err);
+            alert("Error loading projector view.");
+        }
+    };
 });

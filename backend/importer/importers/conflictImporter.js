@@ -14,6 +14,7 @@ async function importConflicts() {
     let imported = 0;
     let skipped = 0;
 
+    const dtos = [];
     for (let i = 2; i <= conflictsSheet.rowCount; i++) {
         const row = conflictsSheet.getRow(i);
         const conflictDto = mapConflict(row);
@@ -22,16 +23,18 @@ async function importConflicts() {
             skipped++;
             continue;
         }
+        dtos.push(conflictDto);
+    }
 
-        const savedConflict = await conflictService.createConflict(
-            conflictDto.externalSubmissionId,
-            conflictDto.externalPersonId
+    const chunkSize = 30;
+    for (let i = 0; i < dtos.length; i += chunkSize) {
+        const chunk = dtos.slice(i, i + chunkSize);
+        const results = await Promise.all(
+            chunk.map(dto => conflictService.createConflict(dto.externalSubmissionId, dto.externalPersonId))
         );
-
-        if (savedConflict) {
-            imported++;
-        } else {
-            skipped++;
+        for (const savedConflict of results) {
+            if (savedConflict) imported++;
+            else skipped++;
         }
     }
 

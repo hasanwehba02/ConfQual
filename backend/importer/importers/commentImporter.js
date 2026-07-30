@@ -14,6 +14,7 @@ async function importComments() {
     let imported = 0;
     let skipped = 0;
 
+    const dtos = [];
     for (let i = 2; i <= commentsSheet.rowCount; i++) {
         const row = commentsSheet.getRow(i);
         const commentDto = mapComment(row);
@@ -22,13 +23,18 @@ async function importComments() {
             skipped++;
             continue;
         }
+        dtos.push(commentDto);
+    }
 
-        const savedComment = await commentService.createComment(commentDto);
-
-        if (savedComment) {
-            imported++;
-        } else {
-            skipped++;
+    const chunkSize = 30;
+    for (let i = 0; i < dtos.length; i += chunkSize) {
+        const chunk = dtos.slice(i, i + chunkSize);
+        const results = await Promise.all(
+            chunk.map(dto => commentService.createComment(dto))
+        );
+        for (const savedComment of results) {
+            if (savedComment) imported++;
+            else skipped++;
         }
     }
 

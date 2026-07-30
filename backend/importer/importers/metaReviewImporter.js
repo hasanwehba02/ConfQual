@@ -22,6 +22,7 @@ async function importMetaReviews() {
         }
     });
 
+    const dtos = [];
     for (let i = 2; i <= metaReviewsSheet.rowCount; i++) {
         const row = metaReviewsSheet.getRow(i);
         const metaReviewDto = mapMetaReview(row, headerMap);
@@ -30,13 +31,18 @@ async function importMetaReviews() {
             skipped++;
             continue;
         }
+        dtos.push(metaReviewDto);
+    }
 
-        const savedMetaReview = await metaReviewService.createMetaReview(metaReviewDto);
-
-        if (savedMetaReview) {
-            imported++;
-        } else {
-            skipped++;
+    const chunkSize = 30;
+    for (let i = 0; i < dtos.length; i += chunkSize) {
+        const chunk = dtos.slice(i, i + chunkSize);
+        const results = await Promise.all(
+            chunk.map(dto => metaReviewService.createMetaReview(dto))
+        );
+        for (const savedMetaReview of results) {
+            if (savedMetaReview) imported++;
+            else skipped++;
         }
     }
 
