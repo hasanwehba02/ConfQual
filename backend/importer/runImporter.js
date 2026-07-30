@@ -21,8 +21,6 @@ async function runImporter(filePath) {
     console.log("Starting ConfQual import...\n");
     
     try {
-        await client.query('BEGIN');
-        
         console.log("Wiping existing data...");
         await client.query('TRUNCATE TABLE conference CASCADE;');
 
@@ -34,7 +32,7 @@ async function runImporter(filePath) {
 
     await importSubmissions(conference);
 
-    // await importAuthors(); // Authors tables were dropped per requirements
+    await importAuthors();
 
     await importAssignments();
 
@@ -50,11 +48,9 @@ async function runImporter(filePath) {
 
         await importTopics(conference);
 
-        await client.query('COMMIT');
         console.log("\nImport Complete! All data committed to database.");
     } catch (error) {
-        await client.query('ROLLBACK');
-        console.error("\nImport Failed! Transaction rolled back.", error);
+        console.error("\nImport Failed!", error);
         throw error;
     }
 }

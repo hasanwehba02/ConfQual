@@ -9,6 +9,7 @@ async function importPcTopics(workbook) {
     let imported = 0;
     let skipped = 0;
 
+    const dtos = [];
     for (let i = 2; i <= sheet.rowCount; i++) {
         const row = sheet.getRow(i);
         const dto = mapPcTopic(row);
@@ -17,10 +18,19 @@ async function importPcTopics(workbook) {
             skipped++;
             continue;
         }
+        dtos.push(dto);
+    }
 
-        const saved = await topicService.createPcTopic(dto);
-        if (saved) imported++;
-        else skipped++;
+    const chunkSize = 30;
+    for (let i = 0; i < dtos.length; i += chunkSize) {
+        const chunk = dtos.slice(i, i + chunkSize);
+        const results = await Promise.all(
+            chunk.map(dto => topicService.createPcTopic(dto))
+        );
+        for (const saved of results) {
+            if (saved) imported++;
+            else skipped++;
+        }
     }
 
     console.log(`Imported PC topics: ${imported}`);
@@ -34,6 +44,7 @@ async function importSubmissionTopics(workbook) {
     let imported = 0;
     let skipped = 0;
 
+    const dtos = [];
     for (let i = 2; i <= sheet.rowCount; i++) {
         const row = sheet.getRow(i);
         const dto = mapSubmissionTopic(row);
@@ -42,10 +53,19 @@ async function importSubmissionTopics(workbook) {
             skipped++;
             continue;
         }
+        dtos.push(dto);
+    }
 
-        const saved = await topicService.createPaperTopic(dto);
-        if (saved) imported++;
-        else skipped++;
+    const chunkSize = 30;
+    for (let i = 0; i < dtos.length; i += chunkSize) {
+        const chunk = dtos.slice(i, i + chunkSize);
+        const results = await Promise.all(
+            chunk.map(dto => topicService.createPaperTopic(dto))
+        );
+        for (const saved of results) {
+            if (saved) imported++;
+            else skipped++;
+        }
     }
 
     console.log(`Imported Submission topics: ${imported}`);

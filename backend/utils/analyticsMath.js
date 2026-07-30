@@ -9,7 +9,7 @@ const sentimentAnalyzer = new Sentiment();
 function analyzeReviewSentiment(reviewText) {
     if (!reviewText || typeof reviewText !== 'string') return 0;
     const result = sentimentAnalyzer.analyze(reviewText);
-    return result.comparative;
+    return result.score;
 }
 
 /**

@@ -14,6 +14,7 @@ async function importAssignments() {
     let imported = 0;
     let skipped = 0;
 
+    const dtos = [];
     for (let i = 2; i <= assignmentsSheet.rowCount; i++) {
         const row = assignmentsSheet.getRow(i);
         const assignmentDto = mapAssignment(row);
@@ -22,16 +23,18 @@ async function importAssignments() {
             skipped++;
             continue;
         }
+        dtos.push(assignmentDto);
+    }
 
-        const savedAssignment = await assignmentService.createAssignment(
-            assignmentDto.externalSubmissionId,
-            assignmentDto.externalPersonId
+    const chunkSize = 30;
+    for (let i = 0; i < dtos.length; i += chunkSize) {
+        const chunk = dtos.slice(i, i + chunkSize);
+        const results = await Promise.all(
+            chunk.map(dto => assignmentService.createAssignment(dto.externalSubmissionId, dto.externalPersonId))
         );
-
-        if (savedAssignment) {
-            imported++;
-        } else {
-            skipped++;
+        for (const savedAssignment of results) {
+            if (savedAssignment) imported++;
+            else skipped++;
         }
     }
 

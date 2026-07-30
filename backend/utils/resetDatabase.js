@@ -11,6 +11,7 @@ async function resetDatabase() {
         
         // Drop existing tables first
         const dropSql = `
+            DROP TABLE IF EXISTS settings CASCADE;
             DROP TABLE IF EXISTS meta_review CASCADE;
             DROP TABLE IF EXISTS comment CASCADE;
             DROP TABLE IF EXISTS review CASCADE;

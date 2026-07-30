@@ -272,3 +272,36 @@ CREATE TABLE meta_review (
     CONSTRAINT uq_meta_review
         UNIQUE (paper_id)
 );
+
+CREATE TABLE settings (
+    id SERIAL PRIMARY KEY,
+    is_anonymized BOOLEAN DEFAULT false,
+    anonymization_prefix TEXT DEFAULT 'CAiSE_26_Tech',
+    decision_editing_enabled BOOLEAN DEFAULT false
+);
+
+CREATE TABLE author (
+    id SERIAL PRIMARY KEY,
+    external_person_id INT UNIQUE,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    email TEXT,
+    country TEXT,
+    affiliation TEXT
+);
+
+CREATE TABLE paper_author (
+    paper_id INT NOT NULL,
+    author_id INT NOT NULL,
+    author_order INT,
+    is_corresponding BOOLEAN DEFAULT false,
+    PRIMARY KEY (paper_id, author_id),
+    CONSTRAINT fk_pa_paper
+        FOREIGN KEY (paper_id)
+        REFERENCES paper(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_pa_author
+        FOREIGN KEY (author_id)
+        REFERENCES author(id)
+        ON DELETE CASCADE
+);

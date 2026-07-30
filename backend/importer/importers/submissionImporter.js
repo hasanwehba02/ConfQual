@@ -18,9 +18,9 @@ async function importSubmissions(conference) {
         }
     });
 
+    const dtos = [];
     for (let i = 2; i <= submissionsSheet.rowCount; i++) {
         const row = submissionsSheet.getRow(i);
-
         const paper = mapPaper(row, conference.id, deletedColIdx);
 
         // Skip empty rows
@@ -28,13 +28,18 @@ async function importSubmissions(conference) {
             skipped++;
             continue;
         }
+        dtos.push(paper);
+    }
 
-        const savedPaper = await paperService.createPaper(paper);
-
-        if (savedPaper) {
-            imported++;
-        } else {
-            skipped++;
+    const chunkSize = 30;
+    for (let i = 0; i < dtos.length; i += chunkSize) {
+        const chunk = dtos.slice(i, i + chunkSize);
+        const results = await Promise.all(
+            chunk.map(paper => paperService.createPaper(paper))
+        );
+        for (const savedPaper of results) {
+            if (savedPaper) imported++;
+            else skipped++;
         }
     }
 

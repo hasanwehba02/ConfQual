@@ -10,6 +10,11 @@ async function importAuthors() {
 
     const authorsSheet = workbook.getWorksheet("Authors");
 
+    if (!authorsSheet) {
+        console.log("No 'Authors' sheet found. Skipping author import.");
+        return;
+    }
+
     let importedAuthors = 0;
     let importedRelationships = 0;
     let skipped = 0;

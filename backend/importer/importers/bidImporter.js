@@ -14,6 +14,7 @@ async function importBids() {
     let imported = 0;
     let skipped = 0;
 
+    const dtos = [];
     for (let i = 2; i <= bidsSheet.rowCount; i++) {
         const row = bidsSheet.getRow(i);
         const bidDto = mapBid(row);
@@ -22,17 +23,18 @@ async function importBids() {
             skipped++;
             continue;
         }
+        dtos.push(bidDto);
+    }
 
-        const savedBid = await bidService.createBid(
-            bidDto.externalSubmissionId,
-            bidDto.externalPersonId,
-            bidDto.bid
+    const chunkSize = 30;
+    for (let i = 0; i < dtos.length; i += chunkSize) {
+        const chunk = dtos.slice(i, i + chunkSize);
+        const results = await Promise.all(
+            chunk.map(dto => bidService.createBid(dto.externalSubmissionId, dto.externalPersonId, dto.bid))
         );
-
-        if (savedBid) {
-            imported++;
-        } else {
-            skipped++;
+        for (const savedBid of results) {
+            if (savedBid) imported++;
+            else skipped++;
         }
     }
 

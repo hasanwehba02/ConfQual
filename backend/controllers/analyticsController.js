@@ -122,6 +122,18 @@ async function getReviewerDetails(req, res) {
     }
 }
 
+async function updatePaperDecision(req, res) {
+    try {
+        const { id } = req.params;
+        const { decision } = req.body;
+        const updated = await analyticsService.updatePaperDecision(id, decision);
+        res.json(updated);
+    } catch (error) {
+        console.error("Error updating paper decision:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+}
+
 const runImporter = require("../importer/runImporter");
 const resetDatabase = require("../utils/resetDatabase");
 
@@ -134,8 +146,6 @@ async function processUpload(req, res) {
         console.log(`Processing uploaded file: ${req.file.path}`);
         
         const client = require("../config/database");
-        await client.query("BEGIN");
-        
         try {
             // 1. Reset Database
             await resetDatabase();
@@ -143,12 +153,10 @@ async function processUpload(req, res) {
             // 2. Run Importer with new file
             await runImporter(req.file.path);
             
-            await client.query("COMMIT");
             res.json({ message: "Conference processed successfully!" });
         } catch (importError) {
-            await client.query("ROLLBACK");
-            console.error("Error during import, rolled back:", importError);
-            res.status(500).json({ error: "Failed to process conference data. Database state rolled back." });
+            console.error("Error during import:", importError);
+            res.status(500).json({ error: "Failed to process conference data." });
         }
     } catch (error) {
         console.error("Error processing upload:", error);
@@ -169,6 +177,7 @@ module.exports = {
     getSystemAnalytics,
     getPaperDetails,
     getReviewerDetails,
+    updatePaperDecision,
     processUpload,
     getQualityProfile: async (req, res) => {
         try {
