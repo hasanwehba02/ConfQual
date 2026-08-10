@@ -1,4 +1,5 @@
 const client = require("../config/database");
+const bulkInsert = require("../utils/bulkInsert");
 
 async function createPaperAuthor(paperId, authorId, authorOrder, isCorresponding) {
     const query = `
@@ -30,6 +31,14 @@ async function createPaperAuthor(paperId, authorId, authorOrder, isCorresponding
     return result.rows[0];
 }
 
+
+async function bulkCreatePaperAuthors(paperAuthors) {
+    const rows = paperAuthors.map(pa => [pa.paperId, pa.authorId, pa.authorOrder, pa.corresponding]);
+    return await bulkInsert('paper_author', ['paper_id', 'author_id', 'author_order', 'corresponding'], rows, '(paper_id, author_id)');
+}
+
+
 module.exports = {
+    bulkCreatePaperAuthors,
     createPaperAuthor
 };

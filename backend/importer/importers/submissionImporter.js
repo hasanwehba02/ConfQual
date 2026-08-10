@@ -1,6 +1,6 @@
 const { readWorkbook } = require("../workbookReader");
 const mapPaper = require("../mappers/paperMapper");
-const paperService = require("../../services/paperService");
+const paperRepository = require("../../repositories/paperRepository");
 
 async function importSubmissions(conference) {
     const workbook = await readWorkbook();
@@ -34,9 +34,10 @@ async function importSubmissions(conference) {
     const chunkSize = 30;
     for (let i = 0; i < dtos.length; i += chunkSize) {
         const chunk = dtos.slice(i, i + chunkSize);
-        const results = await Promise.all(
-            chunk.map(paper => paperService.createPaper(paper))
-        );
+        const results = [];
+        for (const paper of chunk) {
+            results.push(await paperRepository.createPaper(paper));
+        }
         for (const savedPaper of results) {
             if (savedPaper) imported++;
             else skipped++;

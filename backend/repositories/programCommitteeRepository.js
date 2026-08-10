@@ -43,11 +43,25 @@ async function findByExternalPersonId(externalPersonId) {
         SELECT * FROM program_committee_member
         WHERE external_person_id = $1
     `;
-    const result = await client.query(query, [externalPersonId]);
-    return result.rows.length > 0 ? result.rows[0] : null;
+    const values = [externalPersonId];
+    const result = await client.query(query, values);
+    
+    if (result.rows.length === 0) return null;
+    return result.rows[0];
+}
+
+async function getIdMap() {
+    const query = `SELECT external_person_id, id FROM program_committee_member`;
+    const result = await client.query(query);
+    const map = {};
+    for (const row of result.rows) {
+        map[row.external_person_id] = row.id;
+    }
+    return map;
 }
 
 module.exports = {
     createProgramCommitteeMember,
-    findByExternalPersonId
+    findByExternalPersonId,
+    getIdMap
 };

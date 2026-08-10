@@ -53,7 +53,8 @@ async function getAlerts(req, res) {
 async function getPapers(req, res) {
     try {
         const data = await analyticsService.getPapers(req.query);
-        res.json(data);
+        const totalCount = data.length > 0 && data[0].full_count ? parseInt(data[0].full_count) : data.length;
+        res.json({ items: data, totalCount });
     } catch (error) {
         console.error("Error getting papers:", error);
         res.status(500).json({ error: "Internal server error" });
@@ -73,7 +74,8 @@ async function getLateSubmissions(req, res) {
 async function getReviewers(req, res) {
     try {
         const data = await analyticsService.getReviewers(req.query);
-        res.json(data);
+        const totalCount = data.length > 0 && data[0].full_count ? parseInt(data[0].full_count) : data.length;
+        res.json({ items: data, totalCount });
     } catch (error) {
         console.error("Error getting reviewers:", error);
         res.status(500).json({ error: "Internal server error" });
@@ -83,7 +85,8 @@ async function getReviewers(req, res) {
 async function getSubmissions(req, res) {
     try {
         const data = await analyticsService.getSubmissions(req.query);
-        res.json(data);
+        const totalCount = data.length > 0 && data[0].full_count ? parseInt(data[0].full_count) : data.length;
+        res.json({ items: data, totalCount });
     } catch (error) {
         console.error("Error getting submissions:", error);
         res.status(500).json({ error: "Internal server error" });
@@ -129,6 +132,9 @@ async function updatePaperDecision(req, res) {
         const updated = await analyticsService.updatePaperDecision(id, decision);
         res.json(updated);
     } catch (error) {
+        if (error.status === 403) {
+            return res.status(403).json({ error: error.message });
+        }
         console.error("Error updating paper decision:", error);
         res.status(500).json({ error: "Internal server error" });
     }
@@ -179,6 +185,15 @@ module.exports = {
     getReviewerDetails,
     updatePaperDecision,
     processUpload,
+    getDashboard: async (req, res) => {
+        try {
+            const data = await analyticsService.getDashboardData();
+            res.json(data);
+        } catch (error) {
+            console.error("Error fetching dashboard data:", error);
+            res.status(500).json({ error: "Internal Server Error" });
+        }
+    },
     getQualityProfile: async (req, res) => {
         try {
             const profile = await analyticsService.getAcademicQualityProfile();
