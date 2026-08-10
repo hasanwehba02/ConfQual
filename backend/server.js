@@ -29,8 +29,9 @@ async function runMigrations() {
             console.log('✅ Migrations applied successfully.');
         }
     } catch (err) {
-        // Non-fatal — the migration uses IF NOT EXISTS so repeated runs are safe
-        console.warn('⚠️  Migration warning (may already be applied):', err.message);
+        if (!err.message.includes('already exists')) {
+            console.warn('⚠️  Migration warning:', err.message);
+        }
     }
 }
 
