@@ -374,7 +374,7 @@ async function getAcademicQualityProfile(prefetched = null, conferenceId = null)
     const acceptedPapers = parseInt(acceptance.accepted_papers) || 0;
     const acceptanceRate = (acceptedPapers / totalPapers) * 100;
     
-    let selectivityRank = "Unknown";
+    let selectivityRank;
     if (acceptanceRate <= 25) selectivityRank = "CORE A/A* (Highly Selective)";
     else if (acceptanceRate <= 35) selectivityRank = "CORE B (Moderately Selective)";
     else selectivityRank = "Below CORE B (Low Selectivity)";
