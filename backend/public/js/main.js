@@ -1,4 +1,4 @@
-import { fetchDashboardData, fetchSettings, saveSettings, logError, importData, fetchPapers, fetchReviewers, fetchSubmissions } from './api.js';
+import { fetchDashboardData, fetchSettings, saveSettings, logError, importData, fetchPapers, fetchReviewers, fetchSubmissions, fetchConferences, fetchComparison, deleteConference, uploadConference } from './api.js';
 import { escapeHtml, exportToCsv } from './utils.js';
 import { getScoreBadgeClass, getScoreBadgeColor } from './renderers.js';
 
@@ -50,11 +50,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let debatesChartInstance = null;
     let decisionChartInstance = null;
     let scoreChartInstance = null;
+    let comparisonAcceptanceChart = null;
+    let comparisonScoreChart = null;
     
     let allPapers = [];
     let allReviewers = [];
     let activePaperFilter = null;
     let activeReviewerFilter = null;
+    let activeConferenceId = null; // null = most-recent
     
     // --- Global Filter Functions ---
     window.applyFilterAndNavigate = function(targetTabId, filterKey, idsJson, customTitle) {
@@ -442,6 +445,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 emptyState.classList.add('hidden');
                 dashboardContent.classList.remove('hidden');
                 triageSidebar.classList.remove('hidden');
+                await loadConferences();
                 await loadDashboardData();
             }
         } catch (e) {
@@ -465,6 +469,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 clearFilters('paper');
             } else if (targetId === 'tab-reviewers') {
                 clearFilters('reviewer');
+            } else if (targetId === 'tab-comparison') {
+                loadComparisonTab();
             }
         });
     });
@@ -635,6 +641,8 @@ document.addEventListener('DOMContentLoaded', () => {
             dashboardContent.classList.remove('hidden');
             triageSidebar.classList.remove('hidden');
             
+            // Refresh conference list and reload with newest conference
+            await loadConferences();
             await loadDashboardData();
 
         } catch (error) {
@@ -652,16 +660,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- Fetch specific datasets for sorting/filtering ---
+    // Conference-aware fetch wrappers
     window.fetchPapers = async function() {
         const sortVal = document.getElementById('paper-sort')?.value || 'score_spread_desc';
         const lastUnderscore = sortVal.lastIndexOf('_');
         const sortBy = sortVal.substring(0, lastUnderscore);
         const sortOrder = sortVal.substring(lastUnderscore + 1).toUpperCase();
-        
         const filterMode = document.getElementById('paper-filter')?.value || 'all';
-        
+        const cidParam = activeConferenceId ? `&conferenceId=${activeConferenceId}` : '';
         try {
-            const res = await fetch(`/api/analytics/papers?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}&limit=2000`);
+            const res = await fetch(`/api/analytics/papers?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}&limit=2000${cidParam}`);
             const data = await res.json();
             allPapers = data.items || data;
             renderPapersTable(allPapers);
@@ -675,11 +683,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const lastUnderscore = sortVal.lastIndexOf('_');
         const sortBy = sortVal.substring(0, lastUnderscore);
         const sortOrder = sortVal.substring(lastUnderscore + 1).toUpperCase();
-        
         const filterMode = document.getElementById('reviewer-filter')?.value || 'all';
-        
+        const cidParam = activeConferenceId ? `&conferenceId=${activeConferenceId}` : '';
         try {
-            const res = await fetch(`/api/analytics/reviewers?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}&limit=2000`);
+            const res = await fetch(`/api/analytics/reviewers?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}&limit=2000${cidParam}`);
             const data = await res.json();
             allReviewers = data.items || data;
             renderReviewersTable(allReviewers);
@@ -693,11 +700,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const lastUnderscore = sortVal.lastIndexOf('_');
         const sortBy = sortVal.substring(0, lastUnderscore);
         const sortOrder = sortVal.substring(lastUnderscore + 1).toUpperCase();
-        
         const filterMode = document.getElementById('submission-filter')?.value || 'all';
-        
+        const cidParam = activeConferenceId ? `&conferenceId=${activeConferenceId}` : '';
         try {
-            const res = await fetch(`/api/analytics/submissions?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}&limit=2000`);
+            const res = await fetch(`/api/analytics/submissions?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}&limit=2000${cidParam}`);
             const data = await res.json();
             const submissions = data.items || data;
             renderSubmissionsTable(submissions);
@@ -706,10 +712,156 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // --- Conference Selector ---
+    async function loadConferences() {
+        try {
+            const conferences = await fetchConferences();
+            const selector = document.getElementById('conference-selector');
+            const wrapper = document.getElementById('conference-selector-wrapper');
+            if (!selector || !wrapper) return;
+
+            selector.innerHTML = '';
+            if (conferences.length === 0) {
+                wrapper.style.display = 'none';
+                return;
+            }
+
+            // Show selector only when there are 2+ conferences
+            wrapper.style.display = conferences.length > 1 ? 'flex' : 'none';
+
+            conferences.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.id;
+                const label = [c.short_name || c.name, c.year].filter(Boolean).join(' \'');
+                opt.textContent = label;
+                selector.appendChild(opt);
+            });
+
+            // Set to current active or default to first (most recent)
+            if (activeConferenceId) {
+                selector.value = activeConferenceId;
+            } else {
+                activeConferenceId = conferences[0].id;
+                selector.value = conferences[0].id;
+            }
+        } catch (e) {
+            console.error('Failed to load conferences:', e);
+        }
+    }
+
+    window.handleConferenceChange = async function() {
+        const selector = document.getElementById('conference-selector');
+        if (!selector) return;
+        activeConferenceId = selector.value || null;
+        await loadDashboardData();
+    };
+
+    // --- Comparison Tab ---
+    async function loadComparisonTab() {
+        const tbody = document.getElementById('comparison-table-body');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="11" class="text-muted" style="text-align:center;padding:2rem"><div class="spinner" style="margin:auto"></div></td></tr>';
+
+        try {
+            const data = await fetchComparison();
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="11" class="text-muted" style="text-align:center;padding:2rem">No conference data loaded yet. Upload your first dataset to get started.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(c => {
+                const accRate = c.total_papers > 0 ? ((c.accepted_papers / c.total_papers) * 100).toFixed(1) : 'N/A';
+                const uploadedAt = c.uploaded_at ? new Date(c.uploaded_at).toLocaleDateString() : '-';
+                return `
+                    <tr>
+                        <td><strong>${escapeHtml(c.name || '')}</strong>${c.short_name ? ` <span class="text-muted">(${escapeHtml(c.short_name)})</span>` : ''}</td>
+                        <td>${c.year || '-'}</td>
+                        <td>${c.total_papers ?? '-'}</td>
+                        <td>${c.accepted_papers ?? '-'}</td>
+                        <td>${accRate !== 'N/A' ? accRate + '%' : 'N/A'}</td>
+                        <td>${c.total_reviewers ?? '-'}</td>
+                        <td>${c.total_reviews ?? '-'}</td>
+                        <td>${c.avg_review_score != null ? parseFloat(c.avg_review_score).toFixed(2) : '-'}</td>
+                        <td>${c.avg_word_count != null ? Math.round(c.avg_word_count) : '-'}</td>
+                        <td>${uploadedAt}</td>
+                        <td>
+                            <button class="btn btn-outline btn-sm" style="font-size:0.7rem;padding:2px 8px;" onclick="selectConference(${c.id})">View</button>
+                            <button class="btn btn-outline btn-sm" style="font-size:0.7rem;padding:2px 8px;color:var(--danger);" onclick="removeConference(${c.id})">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Render comparison charts
+            const sorted = [...data].sort((a, b) => (a.year || 0) - (b.year || 0));
+            const labels = sorted.map(c => c.short_name ? `${c.short_name} ${c.year || ''}`.trim() : (c.name || `ID:${c.id}`));
+            const accRates = sorted.map(c => c.total_papers > 0 ? ((c.accepted_papers / c.total_papers) * 100).toFixed(1) : null);
+            const avgScores = sorted.map(c => c.avg_review_score != null ? parseFloat(c.avg_review_score).toFixed(2) : null);
+
+            if (comparisonAcceptanceChart) comparisonAcceptanceChart.destroy();
+            if (comparisonScoreChart) comparisonScoreChart.destroy();
+
+            const accCtx = document.getElementById('comparisonAcceptanceChart');
+            if (accCtx) {
+                comparisonAcceptanceChart = new Chart(accCtx, {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [{ label: 'Acceptance Rate (%)', data: accRates, backgroundColor: 'rgba(99,102,241,0.7)', borderRadius: 4 }]
+                    },
+                    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 100 } } }
+                });
+            }
+            const scoreCtx = document.getElementById('comparisonScoreChart');
+            if (scoreCtx) {
+                comparisonScoreChart = new Chart(scoreCtx, {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [{ label: 'Avg Review Score', data: avgScores, borderColor: 'rgba(16,185,129,0.9)', backgroundColor: 'rgba(16,185,129,0.15)', tension: 0.3, fill: true, pointRadius: 5 }]
+                    },
+                    options: { responsive: true, plugins: { legend: { display: false } } }
+                });
+            }
+        } catch (e) {
+            tbody.innerHTML = `<tr><td colspan="11" class="text-danger" style="text-align:center;padding:2rem">Failed to load comparison data.</td></tr>`;
+            console.error(e);
+        }
+    }
+
+    window.selectConference = async function(id) {
+        activeConferenceId = id;
+        const selector = document.getElementById('conference-selector');
+        if (selector) selector.value = id;
+        // Switch to analytics view
+        tabBtns.forEach(b => b.classList.remove('active'));
+        tabContents.forEach(c => c.classList.add('hidden'));
+        const analyticsBtn = document.querySelector('[data-target="tab-analytics"]');
+        if (analyticsBtn) analyticsBtn.classList.add('active');
+        document.getElementById('tab-analytics')?.classList.remove('hidden');
+        await loadDashboardData();
+    };
+
+    window.removeConference = async function(id) {
+        if (!confirm('Delete this conference and all its data? This cannot be undone.')) return;
+        try {
+            await deleteConference(id);
+            await loadConferences();
+            if (String(activeConferenceId) === String(id)) {
+                activeConferenceId = null;
+            }
+            await loadDashboardData();
+            loadComparisonTab();
+        } catch (e) {
+            alert('Failed to delete conference.');
+        }
+    };
+
     // --- Dashboard Data Loading ---
     async function loadDashboardData() {
         try {
-            const res = await fetch('/api/analytics/dashboard');
+            const qs = activeConferenceId ? `?conferenceId=${activeConferenceId}` : '';
+            const res = await fetch(`/api/analytics/dashboard${qs}`);
             const data = await res.json();
 
             renderAlerts(data.alerts);

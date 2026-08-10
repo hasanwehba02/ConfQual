@@ -4,11 +4,11 @@ const assignmentRepository = require("../../repositories/assignmentRepository");
 const paperRepository = require("../../repositories/paperRepository");
 const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
 
-async function importAssignmentsForSheet(workbook, sheetName, isSuperseded = false) {
+async function importAssignmentsForSheet(workbook, sheetName, conference, isSuperseded = false) {
     const sheet = workbook.getWorksheet(sheetName);
     if (!sheet) return;
-    const paperMap = await paperRepository.getIdMap();
-    const pcmMap = await programCommitteeRepository.getIdMap();
+    const paperMap = await paperRepository.getIdMap(conference.id);
+    const pcmMap = await programCommitteeRepository.getIdMap(conference.id);
     let imported = 0;
     let skipped = 0;
     const dtos = [];
@@ -35,9 +35,9 @@ async function importAssignmentsForSheet(workbook, sheetName, isSuperseded = fal
     console.log();
 }
 
-async function importAssignments() {
+async function importAssignments(conference) {
     const workbook = await readWorkbook();
-    await importAssignmentsForSheet(workbook, "Submission assignment");
+    await importAssignmentsForSheet(workbook, "Submission assignment", conference);
     console.log("assignment imported successfully.\n");
 }
 

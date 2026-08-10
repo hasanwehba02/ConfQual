@@ -2,8 +2,8 @@ const analyticsRepository = require("../repositories/analyticsRepository");
 const analyticsMath = require("../utils/analyticsMath");
 const topicMatcher = require("../utils/topicMatcher");
 
-async function getConferenceHealth() {
-    return await analyticsRepository.getConferenceHealth();
+async function getConferenceHealth(conferenceId = null) {
+    return await analyticsRepository.getConferenceHealth(conferenceId);
 }
 
 async function getReviewerQuality(options = {}) {
@@ -12,8 +12,6 @@ async function getReviewerQuality(options = {}) {
 
 async function getPaperDebates(options = {}) {
     const papers = await analyticsRepository.getPaperDebates(options);
-    
-    // Attach isMismatch flag to all reviews
     for (const paper of papers) {
         if (paper.reviews && Array.isArray(paper.reviews)) {
             for (const review of paper.reviews) {
@@ -21,13 +19,11 @@ async function getPaperDebates(options = {}) {
             }
         }
     }
-    
     return papers;
 }
 
-async function getExpertiseMismatches() {
-    const allReviewsWithTopics = await analyticsRepository.getExpertiseMismatches();
-    
+async function getExpertiseMismatches(conferenceId = null) {
+    const allReviewsWithTopics = await analyticsRepository.getExpertiseMismatches(conferenceId);
     const mismatches = allReviewsWithTopics.filter(r => {
         return topicMatcher.checkMismatch(r.paper_topics, r.reviewer_topics);
     });
@@ -39,14 +35,15 @@ async function getExpertiseMismatches() {
 }
 
 // 1. Alerts (Action Center)
-async function getAlerts(prefetched = null) {
+async function getAlerts(prefetched = null, conferenceId = null) {
+    const cid = conferenceId;
     const alerts = [];
-    const papers = prefetched?.papers || await getPaperDebates();
-    const reviewers = prefetched?.reviewers || await getReviewerQuality();
-    const mismatches = prefetched?.mismatches || await getExpertiseMismatches();
-    const coiViolations = prefetched?.coiViolations || await analyticsRepository.getCOIViolations();
-    const missingMetareviews = prefetched?.missingMetareviews || await analyticsRepository.getMissingMetareviews();
-    const sentimentMismatches = prefetched?.sentimentMismatches || await analyticsRepository.getSentimentMismatches();
+    const papers = prefetched?.papers || await getPaperDebates({ conferenceId: cid });
+    const reviewers = prefetched?.reviewers || await getReviewerQuality({ conferenceId: cid });
+    const mismatches = prefetched?.mismatches || await getExpertiseMismatches(cid);
+    const coiViolations = prefetched?.coiViolations || await analyticsRepository.getCOIViolations(cid);
+    const missingMetareviews = prefetched?.missingMetareviews || await analyticsRepository.getMissingMetareviews(cid);
+    const sentimentMismatches = prefetched?.sentimentMismatches || await analyticsRepository.getSentimentMismatches(cid);
     
     // Alert: Sentiment Mismatches
     if (sentimentMismatches.length > 0) {
@@ -364,12 +361,13 @@ async function getReviewerDetails(id) {
 }
 
 // 6. Academic Quality Profile (CORE / GII-GRIN-SCIE)
-async function getAcademicQualityProfile(prefetched = null) {
-    const health = prefetched?.health || await analyticsRepository.getConferenceHealth();
-    const acceptance = await analyticsRepository.getAcceptanceRate();
-    const diversity = prefetched?.diversity || await analyticsRepository.getGeographicDiversity();
-    const competence = await analyticsRepository.getThematicCompetence();
-    const papers = prefetched?.papers || await getPaperDebates(); // To calculate review density
+async function getAcademicQualityProfile(prefetched = null, conferenceId = null) {
+    const cid = conferenceId;
+    const health = prefetched?.health || await analyticsRepository.getConferenceHealth(cid);
+    const acceptance = await analyticsRepository.getAcceptanceRate(cid);
+    const diversity = prefetched?.diversity || await analyticsRepository.getGeographicDiversity(cid);
+    const competence = await analyticsRepository.getThematicCompetence(cid);
+    const papers = prefetched?.papers || await getPaperDebates({ conferenceId: cid });
     
     // A. Peer-Review Rigor & Selectivity
     const totalPapers = parseInt(acceptance.total_papers) || 1;
@@ -455,33 +453,34 @@ async function updatePaperDecision(id, decision) {
     return await analyticsRepository.updatePaperDecision(id, decision);
 }
 
-async function getDashboardData() {
+async function getDashboardData(conferenceId = null) {
+    const cid = conferenceId;
     // 1. Fetch all base data ONCE
-    const health = await getConferenceHealth();
-    const papers = await getPaperDebates();
-    const reviewers = await getReviewerQuality();
-    const mismatches = await getExpertiseMismatches();
-    const coiViolations = await analyticsRepository.getCOIViolations();
-    const missingMetareviews = await analyticsRepository.getMissingMetareviews();
-    const topReviewers = await analyticsRepository.getTopReviewers();
-    const distributions = await analyticsRepository.getSystemDistributions();
-    const diversity = await analyticsRepository.getGeographicDiversity();
-    const submissions = await analyticsRepository.getSubmissions();
+    const health = await getConferenceHealth(cid);
+    const papers = await getPaperDebates({ conferenceId: cid });
+    const reviewers = await getReviewerQuality({ conferenceId: cid });
+    const mismatches = await getExpertiseMismatches(cid);
+    const coiViolations = await analyticsRepository.getCOIViolations(cid);
+    const missingMetareviews = await analyticsRepository.getMissingMetareviews(cid);
+    const topReviewers = await analyticsRepository.getTopReviewers(cid);
+    const distributions = await analyticsRepository.getSystemDistributions(cid);
+    const diversity = await analyticsRepository.getGeographicDiversity(cid);
+    const submissions = await analyticsRepository.getSubmissions({ conferenceId: cid });
+    const sentimentMismatches = await analyticsRepository.getSentimentMismatches(cid);
 
-    // Group it into a prefetched object
     const prefetched = {
         health, papers, reviewers, mismatches, coiViolations, 
         missingMetareviews, topReviewers, 
-        distributions, diversity, submissions
+        distributions, diversity, submissions, sentimentMismatches
     };
 
-    // 2. Generate composite data synchronously (or without new DB calls)
-    const alerts = await getAlerts(prefetched);
+    const alerts = await getAlerts(prefetched, cid);
     const systemAnalytics = await getSystemAnalytics(prefetched);
-    const qualityProfile = await getAcademicQualityProfile(prefetched);
+    const qualityProfile = await getAcademicQualityProfile(prefetched, cid);
 
-    // 3. Return everything needed for the initial page load
     return {
+        conferenceId: health?.conferenceId,
+        conferenceName: health?.conference_name,
         alerts,
         systemAnalytics,
         qualityProfile,

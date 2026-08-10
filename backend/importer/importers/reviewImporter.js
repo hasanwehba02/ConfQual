@@ -5,11 +5,11 @@ const paperRepository = require("../../repositories/paperRepository");
 const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
 const analyticsMath = require("../../utils/analyticsMath");
 
-async function importReviewsForSheet(workbook, sheetName, isSuperseded = false) {
+async function importReviewsForSheet(workbook, sheetName, conference, isSuperseded = false) {
     const sheet = workbook.getWorksheet(sheetName);
     if (!sheet) return;
-    const paperMap = await paperRepository.getIdMap();
-    const pcmMap = await programCommitteeRepository.getIdMap();
+    const paperMap = await paperRepository.getIdMap(conference.id);
+    const pcmMap = await programCommitteeRepository.getIdMap(conference.id);
     let imported = 0;
     let skipped = 0;
     const dtos = [];
@@ -39,10 +39,10 @@ async function importReviewsForSheet(workbook, sheetName, isSuperseded = false) 
     console.log();
 }
 
-async function importReviews() {
+async function importReviews(conference) {
     const workbook = await readWorkbook();
-    await importReviewsForSheet(workbook, "Reviews", false);
-    await importReviewsForSheet(workbook, "Superseded reviews", true);
+    await importReviewsForSheet(workbook, "Reviews", conference, false);
+    await importReviewsForSheet(workbook, "Superseded reviews", conference, true);
     console.log("review imported successfully.\n");
 }
 
