@@ -13,7 +13,7 @@ async function createProgramCommitteeMember(member) {
             role
         )
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-        ON CONFLICT (external_person_id)
+        ON CONFLICT (conference_id, external_person_id)
         DO NOTHING
         RETURNING *;
     `;
@@ -50,9 +50,9 @@ async function findByExternalPersonId(externalPersonId) {
     return result.rows[0];
 }
 
-async function getIdMap() {
-    const query = `SELECT external_person_id, id FROM program_committee_member`;
-    const result = await client.query(query);
+async function getIdMap(conferenceId) {
+    const query = `SELECT external_person_id, id FROM program_committee_member WHERE conference_id = $1`;
+    const result = await client.query(query, [conferenceId]);
     const map = {};
     for (const row of result.rows) {
         map[row.external_person_id] = row.id;

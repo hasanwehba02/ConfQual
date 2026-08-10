@@ -22,22 +22,20 @@ async function runImporter(filePath) {
     
     try {
         await client.withTransaction(async () => {
-            console.log("Wiping existing data...");
-            await client.query('TRUNCATE TABLE conference CASCADE;');
-
+            // conferenceImporter now handles overwrite logic internally
             const conference = await importConference();
 
             console.log("");
 
             await importProgramCommittee(conference);
             await importSubmissions(conference);
-            await importAuthors();
-            await importAssignments();
-            await importBids();
-            await importConflicts();
-            await importReviews();
-            await importComments();
-            await importMetaReviews();
+            await importAuthors(conference);
+            await importAssignments(conference);
+            await importBids(conference);
+            await importConflicts(conference);
+            await importReviews(conference);
+            await importComments(conference);
+            await importMetaReviews(conference);
             await importTopics(conference);
 
             console.log("\nImport Complete! All data committed to database.");

@@ -31,6 +31,11 @@ router.post("/reset", analyticsController.resetDb);
 
 router.post("/process-conference", upload.single('excelFile'), analyticsController.processUpload);
 
+// Multi-conference management
+router.get("/conferences", analyticsController.listConferences);
+router.get("/comparison", analyticsController.getComparison);
+router.delete("/conferences/:id", analyticsController.deleteConference);
+
 const logRateLimiter = new Map();
 router.post("/log", (req, res) => {
     const ip = req.ip || req.connection?.remoteAddress || 'unknown';

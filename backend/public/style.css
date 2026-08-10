@@ -141,6 +141,23 @@ th, .metric-value, .brand {
     font-weight: 700;
 }
 
+.header-center {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    justify-content: center;
+}
+
+.conference-selector-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+}
+
 /* Layout Grid */
 .layout-grid {
     display: grid;

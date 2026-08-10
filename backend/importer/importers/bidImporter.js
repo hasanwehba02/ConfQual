@@ -4,11 +4,11 @@ const bidRepository = require("../../repositories/bidRepository");
 const paperRepository = require("../../repositories/paperRepository");
 const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
 
-async function importBidsForSheet(workbook, sheetName, isSuperseded = false) {
+async function importBidsForSheet(workbook, sheetName, conference, isSuperseded = false) {
     const sheet = workbook.getWorksheet(sheetName);
     if (!sheet) return;
-    const paperMap = await paperRepository.getIdMap();
-    const pcmMap = await programCommitteeRepository.getIdMap();
+    const paperMap = await paperRepository.getIdMap(conference.id);
+    const pcmMap = await programCommitteeRepository.getIdMap(conference.id);
     let imported = 0;
     let skipped = 0;
     const dtos = [];
@@ -35,9 +35,9 @@ async function importBidsForSheet(workbook, sheetName, isSuperseded = false) {
     console.log();
 }
 
-async function importBids() {
+async function importBids(conference) {
     const workbook = await readWorkbook();
-    await importBidsForSheet(workbook, "Bids");
+    await importBidsForSheet(workbook, "Bids", conference);
     console.log("bid imported successfully.\n");
 }
 

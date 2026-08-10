@@ -2,7 +2,7 @@ const analyticsService = require("../services/analyticsService");
 
 async function getConferenceHealth(req, res) {
     try {
-        const data = await analyticsService.getConferenceHealth();
+        const data = await analyticsService.getConferenceHealth(req.query.conferenceId);
         res.json(data);
     } catch (error) {
         console.error("Error getting conference health:", error);
@@ -32,7 +32,7 @@ async function getPaperDebates(req, res) {
 
 async function getExpertiseMismatches(req, res) {
     try {
-        const data = await analyticsService.getExpertiseMismatches();
+        const data = await analyticsService.getExpertiseMismatches(req.query.conferenceId);
         res.json(data);
     } catch (error) {
         console.error("Error getting expertise mismatches:", error);
@@ -42,7 +42,7 @@ async function getExpertiseMismatches(req, res) {
 
 async function getAlerts(req, res) {
     try {
-        const data = await analyticsService.getAlerts();
+        const data = await analyticsService.getAlerts(null, req.query.conferenceId);
         res.json(data);
     } catch (error) {
         console.error("Error getting alerts:", error);
@@ -151,14 +151,9 @@ async function processUpload(req, res) {
         
         console.log(`Processing uploaded file: ${req.file.path}`);
         
-        const client = require("../config/database");
         try {
-            // 1. Reset Database
-            await resetDatabase();
-            
-            // 2. Run Importer with new file
+            // Run Importer — conference-aware, no full DB reset
             await runImporter(req.file.path);
-            
             res.json({ message: "Conference processed successfully!" });
         } catch (importError) {
             console.error("Error during import:", importError);
@@ -169,6 +164,8 @@ async function processUpload(req, res) {
         res.status(500).json({ error: "Failed to process conference data" });
     }
 }
+
+const conferenceRepository = require("../repositories/conferenceRepository");
 
 module.exports = {
     getConferenceHealth,
@@ -187,7 +184,7 @@ module.exports = {
     processUpload,
     getDashboard: async (req, res) => {
         try {
-            const data = await analyticsService.getDashboardData();
+            const data = await analyticsService.getDashboardData(req.query.conferenceId);
             res.json(data);
         } catch (error) {
             console.error("Error fetching dashboard data:", error);
@@ -196,7 +193,7 @@ module.exports = {
     },
     getQualityProfile: async (req, res) => {
         try {
-            const profile = await analyticsService.getAcademicQualityProfile();
+            const profile = await analyticsService.getAcademicQualityProfile(null, req.query.conferenceId);
             res.json(profile);
         } catch (error) {
             console.error(error);
@@ -210,6 +207,34 @@ module.exports = {
         } catch (error) {
             console.error("Error resetting database:", error);
             res.status(500).json({ error: "Failed to reset database" });
+        }
+    },
+    // Conference management
+    listConferences: async (req, res) => {
+        try {
+            const data = await conferenceRepository.listConferences();
+            res.json(data);
+        } catch (error) {
+            console.error("Error listing conferences:", error);
+            res.status(500).json({ error: "Internal server error" });
+        }
+    },
+    getComparison: async (req, res) => {
+        try {
+            const data = await conferenceRepository.getComparisonMetrics();
+            res.json(data);
+        } catch (error) {
+            console.error("Error getting comparison metrics:", error);
+            res.status(500).json({ error: "Internal server error" });
+        }
+    },
+    deleteConference: async (req, res) => {
+        try {
+            await conferenceRepository.deleteConference(req.params.id);
+            res.json({ message: "Conference deleted successfully" });
+        } catch (error) {
+            console.error("Error deleting conference:", error);
+            res.status(500).json({ error: "Internal server error" });
         }
     }
 };

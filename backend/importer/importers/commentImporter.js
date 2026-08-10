@@ -4,11 +4,11 @@ const commentRepository = require("../../repositories/commentRepository");
 const paperRepository = require("../../repositories/paperRepository");
 const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
 
-async function importCommentsForSheet(workbook, sheetName, isSuperseded = false) {
+async function importCommentsForSheet(workbook, sheetName, conference, isSuperseded = false) {
     const sheet = workbook.getWorksheet(sheetName);
     if (!sheet) return;
-    const paperMap = await paperRepository.getIdMap();
-    const pcmMap = await programCommitteeRepository.getIdMap();
+    const paperMap = await paperRepository.getIdMap(conference.id);
+    const pcmMap = await programCommitteeRepository.getIdMap(conference.id);
     let imported = 0;
     let skipped = 0;
     const dtos = [];
@@ -35,9 +35,9 @@ async function importCommentsForSheet(workbook, sheetName, isSuperseded = false)
     console.log();
 }
 
-async function importComments() {
+async function importComments(conference) {
     const workbook = await readWorkbook();
-    await importCommentsForSheet(workbook, "Comments");
+    await importCommentsForSheet(workbook, "Comments", conference);
     console.log("comment imported successfully.\n");
 }
 

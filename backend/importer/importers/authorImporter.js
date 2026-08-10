@@ -5,7 +5,7 @@ const authorRepository = require("../../repositories/authorRepository");
 const paperRepository = require("../../repositories/paperRepository");
 const paperAuthorRepository = require("../../repositories/paperAuthorRepository");
 
-async function importAuthors() {
+async function importAuthors(conference) {
     const workbook = await readWorkbook();
     const authorsSheet = workbook.getWorksheet("Authors");
 
@@ -53,8 +53,8 @@ async function importAuthors() {
     }
     
     // Step 2: Fetch id maps
-    const paperMap = await paperRepository.getIdMap();
-    const authorMap = await authorRepository.getIdMap();
+    const paperMap = await paperRepository.getIdMap(conference.id);
+    const authorMap = await authorRepository.getIdMap(conference.id);
     
     // Step 3: Map relations and bulk insert paper_authors
     const relations = [];

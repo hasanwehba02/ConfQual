@@ -4,11 +4,11 @@ const metaReviewRepository = require("../../repositories/metaReviewRepository");
 const paperRepository = require("../../repositories/paperRepository");
 const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
 
-async function importMetaReviewsForSheet(workbook, sheetName, isSuperseded = false) {
+async function importMetaReviewsForSheet(workbook, sheetName, conference, isSuperseded = false) {
     const sheet = workbook.getWorksheet(sheetName);
     if (!sheet) return;
-    const paperMap = await paperRepository.getIdMap();
-    const pcmMap = await programCommitteeRepository.getIdMap();
+    const paperMap = await paperRepository.getIdMap(conference.id);
+    const pcmMap = await programCommitteeRepository.getIdMap(conference.id);
     let imported = 0;
     let skipped = 0;
     const dtos = [];
@@ -35,9 +35,9 @@ async function importMetaReviewsForSheet(workbook, sheetName, isSuperseded = fal
     console.log();
 }
 
-async function importMetaReviews() {
+async function importMetaReviews(conference) {
     const workbook = await readWorkbook();
-    await importMetaReviewsForSheet(workbook, "Meta reviews");
+    await importMetaReviewsForSheet(workbook, "Meta reviews", conference);
     console.log("metaReview imported successfully.\n");
 }
 
