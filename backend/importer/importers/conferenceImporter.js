@@ -50,7 +50,10 @@ async function importConference(meta = {}) {
             [shortName, year]
         );
         if (existing.rows.length > 0) {
-            await client.query(`DELETE FROM conference WHERE id = $1`, [existing.rows[0].id]);
+            const idToDelete = existing.rows[0].id;
+            await client.query(`DELETE FROM paper WHERE conference_id = $1`, [idToDelete]);
+            await client.query(`DELETE FROM program_committee_member WHERE conference_id = $1`, [idToDelete]);
+            await client.query(`DELETE FROM conference WHERE id = $1`, [idToDelete]);
             console.log(`Replaced existing conference: ${shortName} ${year}`);
         }
     }
