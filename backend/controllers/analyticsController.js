@@ -242,5 +242,14 @@ module.exports = {
             console.error("Error deleting conference:", error);
             res.status(500).json({ error: "Internal server error" });
         }
+    },
+    updateConference: async (req, res) => {
+        try {
+            const data = await conferenceRepository.updateConference(req.params.id, req.body);
+            res.json(data);
+        } catch (error) {
+            console.error("Error updating conference:", error);
+            res.status(500).json({ error: "Internal server error" });
+        }
     }
 };

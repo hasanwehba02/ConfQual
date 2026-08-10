@@ -1,4 +1,4 @@
-import { fetchDashboardData, fetchSettings, saveSettings, logError, importData, fetchPapers, fetchReviewers, fetchSubmissions, fetchConferences, fetchComparison, deleteConference, uploadConference } from './api.js';
+import { fetchDashboardData, fetchSettings, saveSettings, logError, importData, fetchPapers, fetchReviewers, fetchSubmissions, fetchConferences, fetchComparison, deleteConference, updateConference, uploadConference } from './api.js';
 import { escapeHtml, exportToCsv } from './utils.js';
 import { getScoreBadgeClass, getScoreBadgeColor } from './renderers.js';
 
@@ -805,7 +805,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <td>${uploadedAt}</td>
                         <td>
                             <button class="btn btn-outline btn-sm" style="font-size:0.7rem;padding:2px 8px;" onclick="selectConference(${c.id})">View</button>
-                            <button class="btn btn-outline btn-sm" style="font-size:0.7rem;padding:2px 8px;color:var(--danger);" onclick="removeConference(${c.id})">Delete</button>
+                            <button class="btn btn-outline btn-sm" style="font-size:0.7rem;padding:2px 8px;color:var(--text-muted);" onclick="openEditConferenceDrawer(${c.id}, '${escapeHtml(c.name || '').replace(/'/g, "\\'")}', '${escapeHtml(c.short_name || '').replace(/'/g, "\\'")}', '${c.year || ''}')">Edit</button>
                         </td>
                     </tr>
                 `;
@@ -861,20 +861,64 @@ document.addEventListener('DOMContentLoaded', () => {
         await loadDashboardData();
     };
 
-    window.removeConference = async function(id) {
+    // --- Edit Conference Drawer ---
+    const editConferenceDrawer = document.getElementById('edit-conference-drawer');
+    const closeEditDrawerBtn = document.getElementById('close-edit-drawer');
+    const editConferenceForm = document.getElementById('edit-conference-form');
+    const deleteConferenceBtn = document.getElementById('delete-conference-btn');
+
+    window.openEditConferenceDrawer = function(id, name, shortName, year) {
+        document.getElementById('edit-conf-id').value = id;
+        document.getElementById('edit-conf-name').value = name;
+        document.getElementById('edit-conf-short-name').value = shortName;
+        document.getElementById('edit-conf-year').value = year;
+        editConferenceDrawer.classList.remove('closed');
+        editConferenceDrawer.classList.add('open');
+    };
+
+    window.closeEditConferenceDrawer = function() {
+        editConferenceDrawer.classList.remove('open');
+        editConferenceDrawer.classList.add('closed');
+    };
+
+    closeEditDrawerBtn?.addEventListener('click', closeEditConferenceDrawer);
+
+    editConferenceForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = document.getElementById('edit-conf-id').value;
+        const name = document.getElementById('edit-conf-name').value.trim();
+        const shortName = document.getElementById('edit-conf-short-name').value.trim();
+        const year = document.getElementById('edit-conf-year').value.trim();
+
+        try {
+            await updateConference(id, { name, shortName, year });
+            closeEditConferenceDrawer();
+            await loadConferences();
+            await loadDashboardData();
+            loadComparisonTab();
+        } catch (error) {
+            console.error('Error updating conference:', error);
+            alert('Failed to update conference.');
+        }
+    });
+
+    deleteConferenceBtn?.addEventListener('click', async () => {
+        const id = document.getElementById('edit-conf-id').value;
         if (!confirm('Delete this conference and all its data? This cannot be undone.')) return;
         try {
             await deleteConference(id);
+            closeEditConferenceDrawer();
             await loadConferences();
             if (String(activeConferenceId) === String(id)) {
                 activeConferenceId = null;
             }
             await loadDashboardData();
             loadComparisonTab();
-        } catch (e) {
+        } catch (error) {
+            console.error('Error deleting conference:', error);
             alert('Failed to delete conference.');
         }
-    };
+    });
 
     // --- Dashboard Data Loading ---
     async function loadDashboardData() {

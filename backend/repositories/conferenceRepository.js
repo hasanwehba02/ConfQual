@@ -50,4 +50,17 @@ async function deleteConference(id) {
     });
 }
 
-module.exports = { listConferences, getComparisonMetrics, deleteConference };
+async function updateConference(id, { name, shortName, year }) {
+    const result = await client.query(
+        `UPDATE conference
+         SET name = COALESCE($1, name),
+             short_name = COALESCE($2, short_name),
+             year = COALESCE($3, year)
+         WHERE id = $4
+         RETURNING *`,
+        [name, shortName, year, id]
+    );
+    return result.rows[0];
+}
+
+module.exports = { listConferences, getComparisonMetrics, deleteConference, updateConference };
