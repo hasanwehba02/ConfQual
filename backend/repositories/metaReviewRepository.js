@@ -1,4 +1,5 @@
 const client = require("../config/database");
+const bulkInsert = require("../utils/bulkInsert");
 
 async function createMetaReview(metaReviewData) {
     const query = `
@@ -34,6 +35,14 @@ async function createMetaReview(metaReviewData) {
     return result.rows[0];
 }
 
+
+async function bulkCreateMetaReviews(metaReviews) {
+    const rows = metaReviews.map(m => [m.paperId, m.programCommitteeMemberId, m.reviewText, m.reviewDate, m.reviewTime]);
+    return await bulkInsert('meta_review', ['paper_id', 'program_committee_member_id', 'review_text', 'review_date', 'review_time'], rows, null);
+}
+
+
 module.exports = {
+    bulkCreateMetaReviews,
     createMetaReview
 };

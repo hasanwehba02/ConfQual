@@ -1,4 +1,5 @@
 const client = require("../config/database");
+const bulkInsert = require("../utils/bulkInsert");
 
 async function createBid(bidData) {
     const query = `
@@ -28,6 +29,14 @@ async function createBid(bidData) {
     return result.rows[0];
 }
 
+
+async function bulkCreateBids(bids) {
+    const rows = bids.map(b => [b.paperId, b.programCommitteeMemberId, b.bid]);
+    return await bulkInsert('bid', ['paper_id', 'program_committee_member_id', 'bid'], rows, '(paper_id, program_committee_member_id)');
+}
+
+
 module.exports = {
+    bulkCreateBids,
     createBid
 };

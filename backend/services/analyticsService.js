@@ -1,5 +1,6 @@
 const analyticsRepository = require("../repositories/analyticsRepository");
 const analyticsMath = require("../utils/analyticsMath");
+const topicMatcher = require("../utils/topicMatcher");
 
 async function getConferenceHealth() {
     return await analyticsRepository.getConferenceHealth();
@@ -10,41 +11,25 @@ async function getReviewerQuality(options = {}) {
 }
 
 async function getPaperDebates(options = {}) {
-    return await analyticsRepository.getPaperDebates(options);
+    const papers = await analyticsRepository.getPaperDebates(options);
+    
+    // Attach isMismatch flag to all reviews
+    for (const paper of papers) {
+        if (paper.reviews && Array.isArray(paper.reviews)) {
+            for (const review of paper.reviews) {
+                review.isMismatch = topicMatcher.checkMismatch(paper.topics, review.reviewer_topics);
+            }
+        }
+    }
+    
+    return papers;
 }
 
 async function getExpertiseMismatches() {
     const allReviewsWithTopics = await analyticsRepository.getExpertiseMismatches();
     
-    // Fuzzy matching logic: Stop words to ignore when comparing topics
-    const stopWords = new Set(['and', 'the', 'for', 'with', 'from', 'based', 'system', 'systems', 'science', 'engineering']);
-    
-    const extractWords = (str) => {
-        if (!str) return [];
-        return str.toLowerCase()
-                  .replace(/[^a-z0-9]/g, ' ')
-                  .split(/\s+/)
-                  .filter(w => w.length > 2 && !stopWords.has(w));
-    };
-
     const mismatches = allReviewsWithTopics.filter(r => {
-        // First check if they have an exact topic match
-        if (r.paper_topics && r.reviewer_topics) {
-            const pTopics = r.paper_topics.split(', ').map(t => t.trim().toLowerCase());
-            const rTopics = r.reviewer_topics.split(', ').map(t => t.trim().toLowerCase());
-            if (pTopics.some(pt => rTopics.includes(pt))) {
-                return false; // Not a mismatch, they share an exact topic
-            }
-        }
-        
-        // If no exact match, check for fuzzy word overlap
-        const paperWords = extractWords(r.paper_topics);
-        const reviewerWords = extractWords(r.reviewer_topics);
-        
-        const hasOverlap = paperWords.some(pw => reviewerWords.includes(pw));
-        
-        // If there is ANY overlapping significant word, we accept it as related (not a mismatch)
-        return !hasOverlap;
+        return topicMatcher.checkMismatch(r.paper_topics, r.reviewer_topics);
     });
     
     return {
@@ -54,14 +39,14 @@ async function getExpertiseMismatches() {
 }
 
 // 1. Alerts (Action Center)
-async function getAlerts() {
+async function getAlerts(prefetched = null) {
     const alerts = [];
-    const papers = await getPaperDebates();
-    const reviewers = await getReviewerQuality();
-    const mismatches = await getExpertiseMismatches();
-    const coiViolations = await analyticsRepository.getCOIViolations();
-    const missingMetareviews = await analyticsRepository.getMissingMetareviews();
-    const sentimentMismatches = await analyticsRepository.getSentimentMismatches();
+    const papers = prefetched?.papers || await getPaperDebates();
+    const reviewers = prefetched?.reviewers || await getReviewerQuality();
+    const mismatches = prefetched?.mismatches || await getExpertiseMismatches();
+    const coiViolations = prefetched?.coiViolations || await analyticsRepository.getCOIViolations();
+    const missingMetareviews = prefetched?.missingMetareviews || await analyticsRepository.getMissingMetareviews();
+    const sentimentMismatches = prefetched?.sentimentMismatches || await analyticsRepository.getSentimentMismatches();
     
     // Alert: Sentiment Mismatches
     if (sentimentMismatches.length > 0) {
@@ -102,7 +87,7 @@ async function getAlerts() {
     }
 
     // Alert: Missing Reviews (Less than 3)
-    const alertMissingReviews = papers.filter(p => p.total_reviews < 3 && (!p.decision || !p.decision.toLowerCase().includes('desk reject')));
+    const alertMissingReviews = papers.filter(p => p.total_reviews < 3 && p.decision_category !== 'desk reject');
     if (alertMissingReviews.length > 0) {
         alerts.push({
             type: 'warning',
@@ -212,12 +197,12 @@ async function getSubmissions(options = {}) {
 }
 
 // 4. System Analytics
-async function getQualityScorecard(health) {
-    const papers = await getPaperDebates();
-    const reviewers = await getReviewerQuality();
-    const mismatches = await getExpertiseMismatches();
-    const coiViolations = await analyticsRepository.getCOIViolations();
-    const missingMetareviews = await analyticsRepository.getMissingMetareviews();
+async function getQualityScorecard(health, prefetched = null) {
+    const papers = prefetched?.papers || await getPaperDebates();
+    const reviewers = prefetched?.reviewers || await getReviewerQuality();
+    const mismatches = prefetched?.mismatches || await getExpertiseMismatches();
+    const coiViolations = prefetched?.coiViolations || await analyticsRepository.getCOIViolations();
+    const missingMetareviews = prefetched?.missingMetareviews || await analyticsRepository.getMissingMetareviews();
 
     const totalPapers = parseInt(health.total_papers) || 1;
     const totalReviewers = parseInt(health.total_reviewers) || 1;
@@ -232,7 +217,7 @@ async function getQualityScorecard(health) {
     };
 
     // Coverage: Percentage of valid papers with < 3 reviews
-    const validPapers = papers.filter(p => !p.decision || !p.decision.toLowerCase().includes('desk reject'));
+    const validPapers = papers.filter(p => p.decision_category !== 'desk reject');
     const totalValidPapers = validPapers.length > 0 ? validPapers.length : 1;
     const missingReviews = validPapers.filter(p => p.total_reviews < 3);
     if (missingReviews.length > 0) {
@@ -341,25 +326,27 @@ async function getQualityScorecard(health) {
     return scorecard;
 }
 
-async function getSystemAnalytics() {
-    const health = await getConferenceHealth();
-    const mismatchesData = await getExpertiseMismatches();
-    const debates = await getPaperDebates();
-    const reviewers = await getReviewerQuality();
-    const coiViolations = await analyticsRepository.getCOIViolations();
-    const scorecard = await getQualityScorecard(health);
-    const distributions = await analyticsRepository.getSystemDistributions();
+async function getSystemAnalytics(prefetched = null) {
+    const health = prefetched?.health || await getConferenceHealth();
+    
+    // Pass prefetched data into the scorecard generator
+    const scorecard = await getQualityScorecard(health, prefetched);
+    
+    // Top Reviewers
+    const topReviewers = prefetched?.topReviewers || await analyticsRepository.getTopReviewers();
+    
+    // System Distributions
+    const distributions = prefetched?.distributions || await analyticsRepository.getSystemDistributions();
     
     const topPapers = await analyticsRepository.getTopPapers();
-    const topReviewers = await analyticsRepository.getTopReviewers();
     const sessionClusters = await analyticsRepository.getSessionClusters();
     
     return {
         health,
-        mismatches: mismatchesData,
-        debates,
-        reviewers,
-        coiViolations,
+        mismatches: prefetched?.mismatches || await getExpertiseMismatches(),
+        debates: prefetched?.papers || await getPaperDebates(),
+        reviewers: prefetched?.reviewers || await getReviewerQuality(),
+        coiViolations: prefetched?.coiViolations || await analyticsRepository.getCOIViolations(),
         scorecard,
         distributions,
         topPapers,
@@ -377,12 +364,12 @@ async function getReviewerDetails(id) {
 }
 
 // 6. Academic Quality Profile (CORE / GII-GRIN-SCIE)
-async function getAcademicQualityProfile() {
-    const health = await analyticsRepository.getConferenceHealth();
+async function getAcademicQualityProfile(prefetched = null) {
+    const health = prefetched?.health || await analyticsRepository.getConferenceHealth();
     const acceptance = await analyticsRepository.getAcceptanceRate();
-    const diversity = await analyticsRepository.getGeographicDiversity();
+    const diversity = prefetched?.diversity || await analyticsRepository.getGeographicDiversity();
     const competence = await analyticsRepository.getThematicCompetence();
-    const papers = await getPaperDebates(); // To calculate review density
+    const papers = prefetched?.papers || await getPaperDebates(); // To calculate review density
     
     // A. Peer-Review Rigor & Selectivity
     const totalPapers = parseInt(acceptance.total_papers) || 1;
@@ -395,7 +382,6 @@ async function getAcademicQualityProfile() {
     else selectivityRank = "Below CORE B (Low Selectivity)";
 
     // Review Density
-    const averageReviews = parseFloat(health.average_score) || 0; // Wait, health has total_reviews, total_papers
     const totalReviews = parseInt(health.total_reviews) || 0;
     const avgReviewsPerPaper = (totalReviews / totalPapers).toFixed(2);
     
@@ -460,7 +446,49 @@ async function getAcademicQualityProfile() {
 }
 
 async function updatePaperDecision(id, decision) {
+    const settings = await analyticsRepository.getAnonymizationSettings();
+    if (!settings.decision_editing_enabled) {
+        const error = new Error("Decision editing is disabled");
+        error.status = 403;
+        throw error;
+    }
     return await analyticsRepository.updatePaperDecision(id, decision);
+}
+
+async function getDashboardData() {
+    // 1. Fetch all base data ONCE
+    const health = await getConferenceHealth();
+    const papers = await getPaperDebates();
+    const reviewers = await getReviewerQuality();
+    const mismatches = await getExpertiseMismatches();
+    const coiViolations = await analyticsRepository.getCOIViolations();
+    const missingMetareviews = await analyticsRepository.getMissingMetareviews();
+    const topReviewers = await analyticsRepository.getTopReviewers();
+    const distributions = await analyticsRepository.getSystemDistributions();
+    const diversity = await analyticsRepository.getGeographicDiversity();
+    const submissions = await analyticsRepository.getSubmissions();
+
+    // Group it into a prefetched object
+    const prefetched = {
+        health, papers, reviewers, mismatches, coiViolations, 
+        missingMetareviews, topReviewers, 
+        distributions, diversity, submissions
+    };
+
+    // 2. Generate composite data synchronously (or without new DB calls)
+    const alerts = await getAlerts(prefetched);
+    const systemAnalytics = await getSystemAnalytics(prefetched);
+    const qualityProfile = await getAcademicQualityProfile(prefetched);
+
+    // 3. Return everything needed for the initial page load
+    return {
+        alerts,
+        systemAnalytics,
+        qualityProfile,
+        papers: { items: papers, totalCount: papers.length },
+        reviewers: { items: reviewers, totalCount: reviewers.length },
+        submissions: { items: submissions, totalCount: submissions.length }
+    };
 }
 
 module.exports = {
@@ -471,12 +499,13 @@ module.exports = {
     getAlerts,
     getPapers,
     getReviewers,
+    getSubmissions,
     getSystemAnalytics,
     getQualityScorecard,
     getPaperDetails,
     getReviewerDetails,
     getAcademicQualityProfile,
     getLateSubmissions,
-    getSubmissions,
-    updatePaperDecision
+    updatePaperDecision,
+    getDashboardData
 };
