@@ -1,46 +1,45 @@
 const { readWorkbook } = require("../workbookReader");
 const mapConflict = require("../mappers/conflictMapper");
-const conflictService = require("../../services/conflictService");
+const conflictRepository = require("../../repositories/conflictRepository");
+const paperRepository = require("../../repositories/paperRepository");
+const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
 
-async function importConflicts() {
-    const workbook = await readWorkbook();
-    const conflictsSheet = workbook.getWorksheet("Conflicts of interests");
-
-    if (!conflictsSheet) {
-        console.log("Conflicts of interests sheet not found. Skipping.");
-        return;
-    }
-
+async function importConflictsForSheet(workbook, sheetName, conference, isSuperseded = false) {
+    const sheet = workbook.getWorksheet(sheetName);
+    if (!sheet) return;
+    const paperMap = await paperRepository.getIdMap(conference.id);
+    const pcmMap = await programCommitteeRepository.getIdMap(conference.id);
     let imported = 0;
     let skipped = 0;
-
     const dtos = [];
-    for (let i = 2; i <= conflictsSheet.rowCount; i++) {
-        const row = conflictsSheet.getRow(i);
-        const conflictDto = mapConflict(row);
-
-        if (!conflictDto.externalSubmissionId || !conflictDto.externalPersonId) {
+    for (let i = 2; i <= sheet.rowCount; i++) {
+        const row = sheet.getRow(i);
+        const dto = mapConflict(row);
+        if (!dto.externalSubmissionId || !dto.externalPersonId) {
             skipped++;
             continue;
         }
-        dtos.push(conflictDto);
+        dto.paperId = paperMap[dto.externalSubmissionId];
+        dto.programCommitteeMemberId = pcmMap[dto.externalPersonId];
+        if (!dto.paperId || !dto.programCommitteeMemberId) {
+            skipped++;
+            continue;
+        }
+        dtos.push(dto);
     }
-
-    const chunkSize = 30;
+    const chunkSize = 200;
     for (let i = 0; i < dtos.length; i += chunkSize) {
         const chunk = dtos.slice(i, i + chunkSize);
-        const results = await Promise.all(
-            chunk.map(dto => conflictService.createConflict(dto.externalSubmissionId, dto.externalPersonId))
-        );
-        for (const savedConflict of results) {
-            if (savedConflict) imported++;
-            else skipped++;
-        }
+        const results = await conflictRepository.batchCreateConflicts(chunk);
+        imported += results.length;
     }
+    console.log();
+}
 
-    console.log(`Imported conflicts: ${imported}`);
-    console.log(`Skipped rows: ${skipped}`);
-    console.log("Conflicts imported successfully.\n");
+async function importConflicts(conference) {
+    const workbook = await readWorkbook();
+    await importConflictsForSheet(workbook, "Conflicts", conference);
+    console.log("conflict imported successfully.\n");
 }
 
 module.exports = importConflicts;

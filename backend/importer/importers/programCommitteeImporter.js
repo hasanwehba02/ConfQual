@@ -1,6 +1,6 @@
 const { readWorkbook } = require("../workbookReader");
 const mapProgramCommitteeMember = require("../mappers/programCommitteeMapper");
-const programCommitteeService = require("../../services/programCommitteeService");
+const programCommitteeService = require("../../repositories/programCommitteeRepository");
 
 async function importProgramCommittee(conference) {
     const workbook = await readWorkbook();
@@ -33,9 +33,10 @@ async function importProgramCommittee(conference) {
     const chunkSize = 30;
     for (let i = 0; i < dtos.length; i += chunkSize) {
         const chunk = dtos.slice(i, i + chunkSize);
-        const results = await Promise.all(
-            chunk.map(member => programCommitteeService.createProgramCommitteeMember(member))
-        );
+        const results = [];
+        for (const member of chunk) {
+            results.push(await programCommitteeService.createProgramCommitteeMember(member));
+        }
         for (const savedMember of results) {
             if (savedMember) imported++;
             else skipped++;

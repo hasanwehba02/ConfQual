@@ -1,3 +1,6 @@
+import { fetchDashboardData, fetchSettings, saveSettings, logError, importData, fetchPapers, fetchReviewers, fetchSubmissions, fetchConferences, fetchComparison, deleteConference, updateConference, uploadConference } from './api.js';
+import { escapeHtml, exportToCsv } from './utils.js';
+import { getScoreBadgeClass, getScoreBadgeColor } from './renderers.js';
 
 window.onerror = function(message, source, lineno, colno, error) {
     fetch('/api/analytics/log', {
@@ -14,25 +17,7 @@ window.addEventListener('unhandledrejection', function(event) {
     });
 });
 
-const originalConsoleError = console.error;
-console.error = function(...args) {
-    fetch('/api/analytics/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'console.error', args })
-    });
-    originalConsoleError.apply(console, args);
-};
 
-const originalConsoleLog = console.log;
-console.log = function(...args) {
-    fetch('/api/analytics/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'console.log', args })
-    });
-    originalConsoleLog.apply(console, args);
-};
 
 document.addEventListener('DOMContentLoaded', () => {
     const uploadBtn = document.getElementById('upload-btn');
@@ -65,11 +50,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let debatesChartInstance = null;
     let decisionChartInstance = null;
     let scoreChartInstance = null;
+    let comparisonAcceptanceChart = null;
+    let comparisonScoreChart = null;
     
     let allPapers = [];
     let allReviewers = [];
     let activePaperFilter = null;
     let activeReviewerFilter = null;
+    let activeConferenceId = null; // null = most-recent
     
     // --- Global Filter Functions ---
     window.applyFilterAndNavigate = function(targetTabId, filterKey, idsJson, customTitle) {
@@ -253,11 +241,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let html = `
                 <h3 style="font-family: 'Inter', sans-serif; display: flex; align-items: center; justify-content: space-between;">
-                    <span>${paper.title}</span>
+                    <span>${escapeHtml(paper.title)}</span>
                     ${mismatchBadgeHtml}
                 </h3>
                 <p style="font-family: 'Roboto Mono', monospace; font-size: 0.85rem; margin-bottom: 1.5rem; color: var(--text-muted);">
-                    <strong>PAPER TOPICS:</strong> ${paper.topics || 'None'}
+                    <strong>PAPER TOPICS:</strong> ${escapeHtml(paper.topics) || 'None'}
                 </p>
                 
                 <h3>REVIEWS (${paper.reviews ? paper.reviews.length : 0})</h3>
@@ -310,13 +298,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     html += `
                         <div class="detail-item" style="${r.isMismatch ? 'border-left: 3px solid #e63946;' : ''}">
                             <div class="detail-item-header">
-                                <span>${r.first_name || ''} ${r.last_name || r.id} ${mismatchBadge}</span>
+                                <span>${escapeHtml(r.first_name) || ''} ${escapeHtml(r.last_name) || r.id} ${mismatchBadge}</span>
                                 <span>SCORE: ${r.total_score}</span>
                             </div>
                             <div class="detail-text" style="font-family: 'Roboto Mono', monospace; font-size: 0.75rem; margin-bottom: 0.5rem;">
-                                <strong>REVIEWER EXPERTISE:</strong> ${r.topics || 'None'}
+                                <strong>REVIEWER EXPERTISE:</strong> ${escapeHtml(r.topics) || 'None'}
                             </div>
-                            <div class="detail-text">${r.review_text || 'No review text'}</div>
+                            <div class="detail-text">${escapeHtml(r.review_text) || 'No review text'}</div>
                         </div>
                     `;
                 });
@@ -330,8 +318,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 paper.comments.forEach(c => {
                     html += `
                         <div class="detail-item">
-                            <div class="detail-item-header">${c.first_name} ${c.last_name}</div>
-                            <div class="detail-text">${c.comment_text}</div>
+                            <div class="detail-item-header">${escapeHtml(c.first_name)} ${escapeHtml(c.last_name)}</div>
+                            <div class="detail-text">${escapeHtml(c.comment_text)}</div>
                         </div>
                     `;
                 });
@@ -362,8 +350,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const rev = await res.json();
             
             let html = `
-                <p style="font-family: 'Roboto Mono', monospace; font-size: 0.85rem; margin-bottom: 0.5rem;"><strong>ROLE:</strong> ${rev.role}</p>
-                <p style="font-family: 'Roboto Mono', monospace; font-size: 0.85rem; margin-bottom: 1.5rem;"><strong>EMAIL:</strong> ${rev.email || 'N/A'}</p>
+                <p style="font-family: 'Roboto Mono', monospace; font-size: 0.85rem; margin-bottom: 0.5rem;"><strong>ROLE:</strong> ${escapeHtml(rev.role)}</p>
+                <p style="font-family: 'Roboto Mono', monospace; font-size: 0.85rem; margin-bottom: 1.5rem;"><strong>EMAIL:</strong> ${escapeHtml(rev.email) || 'N/A'}</p>
                 
                 <h3>PAPER ASSIGNMENTS (${rev.assignments ? rev.assignments.length : 0})</h3>
                 <div class="detail-list">
@@ -377,7 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (validComments.length > 0) {
                             commentsHtml = `<div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px dashed var(--border-light);">`;
                             validComments.forEach(c => {
-                                commentsHtml += `<div class="detail-text" style="font-size: 0.8rem; font-style: italic; color: var(--text-muted); margin-bottom: 0.25rem;">💬 "${c}"</div>`;
+                                commentsHtml += `<div class="detail-text" style="font-size: 0.8rem; font-style: italic; color: var(--text-muted); margin-bottom: 0.25rem;">💬 "${escapeHtml(c)}"</div>`;
                             });
                             commentsHtml += `</div>`;
                         } else if (a.comments.includes(null)) {
@@ -393,7 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <span>#${a.external_submission_id}</span>
                                 <span>GIVEN: ${a.given_score ?? 'PENDING'} | PAPER AVG: ${a.peer_average ? parseFloat(a.peer_average).toFixed(2) : '-'}</span>
                             </div>
-                            <div class="detail-text" style="margin-bottom: 0.5rem;">${a.title}</div>
+                            <div class="detail-text" style="margin-bottom: 0.5rem;">${escapeHtml(a.title)}</div>
                             <div class="detail-text" style="font-family: 'Roboto Mono', monospace; font-size: 0.75rem;">
                                 <strong>BID STATUS:</strong> ${a.bid_status ?? 'NO BID'}
                             </div>
@@ -429,7 +417,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <span>#${b.external_submission_id}</span>
                                 <span style="color: ${bidColor}; font-weight: bold; text-transform: uppercase;">${b.bid}</span>
                             </div>
-                            <div class="detail-text" style="font-size: 0.8rem;">${b.title}</div>
+                            <div class="detail-text" style="font-size: 0.8rem;">${escapeHtml(b.title)}</div>
                         </div>
                     `;
                 });
@@ -457,6 +445,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 emptyState.classList.add('hidden');
                 dashboardContent.classList.remove('hidden');
                 triageSidebar.classList.remove('hidden');
+                await loadConferences();
                 await loadDashboardData();
             }
         } catch (e) {
@@ -480,6 +469,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 clearFilters('paper');
             } else if (targetId === 'tab-reviewers') {
                 clearFilters('reviewer');
+            } else if (targetId === 'tab-comparison') {
+                loadComparisonTab();
             }
         });
     });
@@ -605,10 +596,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.dataTransfer.files.length) {
             fileInput.files = e.dataTransfer.files;
             updateDropZoneText();
-            // Auto trigger submit if not already loading
-            if (loadingState.classList.contains('hidden')) {
-                uploadForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-            }
+            // Open the upload drawer so the user can name the conference
+            setTimeout(() => {
+                console.log("Opening upload drawer from drop event...");
+                uploadDrawer.classList.remove('closed');
+                uploadDrawer.classList.add('open');
+            }, 50);
         }
     });
 
@@ -627,8 +620,20 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (fileInput.files.length === 0) return;
 
+        const confName = document.getElementById('conf-name')?.value.trim();
+        const confShortName = document.getElementById('conf-short-name')?.value.trim();
+        const confYear = document.getElementById('conf-year')?.value.trim();
+
+        if (!confName) {
+            document.getElementById('conf-name')?.focus();
+            return;
+        }
+
         const formData = new FormData();
         formData.append('excelFile', fileInput.files[0]);
+        if (confName) formData.append('conferenceName', confName);
+        if (confShortName) formData.append('conferenceShortName', confShortName);
+        if (confYear) formData.append('conferenceYear', confYear);
 
         submitBtn.classList.add('hidden');
         dropZone.classList.add('hidden');
@@ -650,6 +655,8 @@ document.addEventListener('DOMContentLoaded', () => {
             dashboardContent.classList.remove('hidden');
             triageSidebar.classList.remove('hidden');
             
+            // Refresh conference list and reload with newest conference
+            await loadConferences();
             await loadDashboardData();
 
         } catch (error) {
@@ -658,26 +665,34 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             submitBtn.classList.remove('hidden');
             dropZone.classList.remove('hidden');
-            loadingState.classList.remove('hidden');
+            loadingState.classList.add('hidden');
             const globalLoadingOverlay = document.getElementById('global-loading-overlay');
             if (globalLoadingOverlay) globalLoadingOverlay.classList.add('hidden');
             uploadForm.reset();
             dropZone.querySelector('p').textContent = 'DRAG & DROP .XLSX HERE';
+            // Clear conference metadata fields
+            const confNameEl = document.getElementById('conf-name');
+            const confShortEl = document.getElementById('conf-short-name');
+            const confYearEl = document.getElementById('conf-year');
+            if (confNameEl) confNameEl.value = '';
+            if (confShortEl) confShortEl.value = '';
+            if (confYearEl) confYearEl.value = '';
         }
     });
 
     // --- Fetch specific datasets for sorting/filtering ---
+    // Conference-aware fetch wrappers
     window.fetchPapers = async function() {
         const sortVal = document.getElementById('paper-sort')?.value || 'score_spread_desc';
         const lastUnderscore = sortVal.lastIndexOf('_');
         const sortBy = sortVal.substring(0, lastUnderscore);
         const sortOrder = sortVal.substring(lastUnderscore + 1).toUpperCase();
-        
         const filterMode = document.getElementById('paper-filter')?.value || 'all';
-        
+        const cidParam = activeConferenceId ? `&conferenceId=${activeConferenceId}` : '';
         try {
-            const res = await fetch(`/api/analytics/papers?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}`);
-            allPapers = await res.json();
+            const res = await fetch(`/api/analytics/papers?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}&limit=2000${cidParam}`);
+            const data = await res.json();
+            allPapers = data.items || data;
             renderPapersTable(allPapers);
         } catch (e) {
             console.error(e);
@@ -689,12 +704,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const lastUnderscore = sortVal.lastIndexOf('_');
         const sortBy = sortVal.substring(0, lastUnderscore);
         const sortOrder = sortVal.substring(lastUnderscore + 1).toUpperCase();
-        
         const filterMode = document.getElementById('reviewer-filter')?.value || 'all';
-        
+        const cidParam = activeConferenceId ? `&conferenceId=${activeConferenceId}` : '';
         try {
-            const res = await fetch(`/api/analytics/reviewers?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}`);
-            allReviewers = await res.json();
+            const res = await fetch(`/api/analytics/reviewers?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}&limit=2000${cidParam}`);
+            const data = await res.json();
+            allReviewers = data.items || data;
             renderReviewersTable(allReviewers);
         } catch (e) {
             console.error(e);
@@ -706,47 +721,241 @@ document.addEventListener('DOMContentLoaded', () => {
         const lastUnderscore = sortVal.lastIndexOf('_');
         const sortBy = sortVal.substring(0, lastUnderscore);
         const sortOrder = sortVal.substring(lastUnderscore + 1).toUpperCase();
-        
         const filterMode = document.getElementById('submission-filter')?.value || 'all';
-        
+        const cidParam = activeConferenceId ? `&conferenceId=${activeConferenceId}` : '';
         try {
-            const res = await fetch(`/api/analytics/submissions?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}`);
-            const submissions = await res.json();
+            const res = await fetch(`/api/analytics/submissions?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}&limit=2000${cidParam}`);
+            const data = await res.json();
+            const submissions = data.items || data;
             renderSubmissionsTable(submissions);
         } catch (e) {
             console.error(e);
         }
     };
 
+    // --- Conference Selector ---
+    async function loadConferences() {
+        try {
+            const conferences = await fetchConferences();
+            const nameSpan = document.getElementById('conference-active-name');
+            const wrapper = document.getElementById('conference-selector-wrapper');
+            if (!nameSpan || !wrapper) return;
+
+            if (conferences.length === 0) {
+                wrapper.style.display = 'none';
+                activeConferenceId = null;
+                return;
+            }
+
+            // Set to current active or default to first (most recent)
+            if (!activeConferenceId || !conferences.find(c => c.id == activeConferenceId)) {
+                activeConferenceId = conferences[0].id;
+            }
+
+            const activeConf = conferences.find(c => c.id == activeConferenceId);
+            if (activeConf) {
+                const label = [activeConf.short_name || activeConf.name, activeConf.year].filter(Boolean).join(' \'');
+                nameSpan.textContent = label;
+                wrapper.style.display = 'flex';
+            }
+        } catch (e) {
+            console.error('Failed to load conferences:', e);
+        }
+    }
+
+    // --- Comparison Tab ---
+    async function loadComparisonTab() {
+        const tbody = document.getElementById('comparison-table-body');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="11" class="text-muted" style="text-align:center;padding:2rem"><div class="spinner" style="margin:auto"></div></td></tr>';
+
+        try {
+            const data = await fetchComparison();
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="11" class="text-muted" style="text-align:center;padding:2rem">No conference data loaded yet. Upload your first dataset to get started.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(c => {
+                const accRate = c.total_papers > 0 ? ((c.accepted_papers / c.total_papers) * 100).toFixed(1) : 'N/A';
+                const uploadedAt = c.uploaded_at ? new Date(c.uploaded_at).toLocaleDateString() : '-';
+                return `
+                    <tr>
+                        <td><strong>${escapeHtml(c.name || '')}</strong>${c.short_name ? ` <span class="text-muted">(${escapeHtml(c.short_name)})</span>` : ''}</td>
+                        <td>${c.year || '-'}</td>
+                        <td>${c.total_papers ?? '-'}</td>
+                        <td>${c.accepted_papers ?? '-'}</td>
+                        <td>${accRate !== 'N/A' ? accRate + '%' : 'N/A'}</td>
+                        <td>${c.total_reviewers ?? '-'}</td>
+                        <td>${c.total_reviews ?? '-'}</td>
+                        <td>${c.avg_review_score != null ? parseFloat(c.avg_review_score).toFixed(2) : '-'}</td>
+                        <td>${c.avg_word_count != null ? Math.round(c.avg_word_count) : '-'}</td>
+                        <td>${uploadedAt}</td>
+                        <td>
+                            <button class="btn btn-outline btn-sm" style="font-size:0.7rem;padding:2px 8px;" onclick="selectConference(${c.id})">View</button>
+                            <button class="btn btn-outline btn-sm" style="font-size:0.7rem;padding:2px 8px;color:var(--text-muted);" onclick="openEditConferenceDrawer(${c.id}, '${escapeHtml(c.name || '').replace(/'/g, "\\'")}', '${escapeHtml(c.short_name || '').replace(/'/g, "\\'")}', '${c.year || ''}')">Edit</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Render comparison charts
+            const sorted = [...data].sort((a, b) => (a.year || 0) - (b.year || 0));
+            const labels = sorted.map(c => c.short_name ? `${c.short_name} ${c.year || ''}`.trim() : (c.name || `ID:${c.id}`));
+            const accRates = sorted.map(c => c.total_papers > 0 ? ((c.accepted_papers / c.total_papers) * 100).toFixed(1) : null);
+            const avgScores = sorted.map(c => c.avg_review_score != null ? parseFloat(c.avg_review_score).toFixed(2) : null);
+
+            if (comparisonAcceptanceChart) comparisonAcceptanceChart.destroy();
+            if (comparisonScoreChart) comparisonScoreChart.destroy();
+
+            const accCtx = document.getElementById('comparisonAcceptanceChart');
+            if (accCtx) {
+                comparisonAcceptanceChart = new Chart(accCtx, {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [{ label: 'Acceptance Rate (%)', data: accRates, backgroundColor: 'rgba(99,102,241,0.7)', borderRadius: 4 }]
+                    },
+                    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 100 } } }
+                });
+            }
+            const scoreCtx = document.getElementById('comparisonScoreChart');
+            if (scoreCtx) {
+                comparisonScoreChart = new Chart(scoreCtx, {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [{ label: 'Avg Review Score', data: avgScores, borderColor: 'rgba(16,185,129,0.9)', backgroundColor: 'rgba(16,185,129,0.15)', tension: 0.3, fill: true, pointRadius: 5 }]
+                    },
+                    options: { responsive: true, plugins: { legend: { display: false } } }
+                });
+            }
+        } catch (e) {
+            tbody.innerHTML = `<tr><td colspan="11" class="text-danger" style="text-align:center;padding:2rem">Failed to load comparison data.</td></tr>`;
+            console.error(e);
+        }
+    }
+
+    window.selectConference = async function(id) {
+        activeConferenceId = id;
+        await loadConferences(); // Refresh the top bar label
+        // Switch to analytics view
+        tabBtns.forEach(b => b.classList.remove('active'));
+        tabContents.forEach(c => c.classList.add('hidden'));
+        const analyticsBtn = document.querySelector('[data-target="tab-analytics"]');
+        if (analyticsBtn) analyticsBtn.classList.add('active');
+        document.getElementById('tab-analytics')?.classList.remove('hidden');
+        await loadDashboardData();
+    };
+
+    // --- Edit Conference Drawer ---
+    const editConferenceDrawer = document.getElementById('edit-conference-drawer');
+    const closeEditDrawerBtn = document.getElementById('close-edit-drawer');
+    const editConferenceForm = document.getElementById('edit-conference-form');
+    const deleteConferenceBtn = document.getElementById('delete-conference-btn');
+
+    window.openEditConferenceDrawer = function(id, name, shortName, year) {
+        document.getElementById('edit-conf-id').value = id;
+        document.getElementById('edit-conf-name').value = name;
+        document.getElementById('edit-conf-short-name').value = shortName;
+        document.getElementById('edit-conf-year').value = year;
+        editConferenceDrawer.classList.remove('closed');
+        editConferenceDrawer.classList.add('open');
+    };
+
+    window.closeEditConferenceDrawer = function() {
+        editConferenceDrawer.classList.remove('open');
+        editConferenceDrawer.classList.add('closed');
+    };
+
+    closeEditDrawerBtn?.addEventListener('click', closeEditConferenceDrawer);
+
+    editConferenceForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = document.getElementById('edit-conf-id').value;
+        const name = document.getElementById('edit-conf-name').value.trim();
+        const shortName = document.getElementById('edit-conf-short-name').value.trim();
+        const year = document.getElementById('edit-conf-year').value.trim();
+
+        try {
+            await updateConference(id, { name, shortName, year });
+            closeEditConferenceDrawer();
+            await loadConferences();
+            await loadDashboardData();
+            loadComparisonTab();
+        } catch (error) {
+            console.error('Error updating conference:', error);
+            alert('Failed to update conference.');
+        }
+    });
+
+    deleteConferenceBtn?.addEventListener('click', async () => {
+        const id = document.getElementById('edit-conf-id').value;
+        if (!confirm('Delete this conference and all its data? This cannot be undone.')) return;
+        try {
+            await deleteConference(id);
+            closeEditConferenceDrawer();
+            await loadConferences();
+            if (String(activeConferenceId) === String(id)) {
+                activeConferenceId = null;
+            }
+            await loadDashboardData();
+            loadComparisonTab();
+        } catch (error) {
+            console.error('Error deleting conference:', error);
+            alert('Failed to delete conference.');
+        }
+    });
+
     // --- Dashboard Data Loading ---
     async function loadDashboardData() {
         try {
-            const [alertsRes, papersRes, reviewersRes, analyticsRes, qualityRes, submissionsRes] = await Promise.all([
-                fetch('/api/analytics/alerts'),
-                fetch('/api/analytics/papers'),
-                fetch('/api/analytics/reviewers'),
-                fetch('/api/analytics/system-analytics'),
-                fetch('/api/analytics/quality-profile'),
-                fetch('/api/analytics/submissions')
-            ]);
+            document.getElementById('loading-indicator')?.classList.remove('hidden');
+            document.getElementById('dashboard-content').classList.add('hidden');
+            
+            // Clear any active filters so they don't carry over between conferences
+            activePaperFilter = null;
+            activeReviewerFilter = null;
+            const pb = document.getElementById('paper-filter-banner');
+            if (pb) pb.classList.add('hidden');
+            const pt = document.querySelector('#tab-papers h2');
+            if (pt) pt.textContent = 'Paper Explorer';
+            const rb = document.getElementById('reviewer-filter-banner');
+            if (rb) rb.classList.add('hidden');
+            const rt = document.querySelector('#tab-reviewers h2');
+            if (rt) rt.textContent = 'Reviewer Explorer';
 
-            const alerts = await alertsRes.json();
-            allPapers = await papersRes.json();
-            allReviewers = await reviewersRes.json();
-            const analytics = await analyticsRes.json();
-            const qualityProfile = await qualityRes.json();
-            const submissions = await submissionsRes.json();
+            // Visually clear alerts so the user knows it's updating
+            const alertsList = document.getElementById('alerts-list');
+            if (alertsList) {
+                alertsList.innerHTML = '<div class="text-muted" style="padding: 1rem; text-align: center;"><i class="ph ph-spinner ph-spin"></i> Loading...</div>';
+            }
 
-            renderAlerts(alerts);
+            const qs = activeConferenceId ? `?conferenceId=${activeConferenceId}` : '';
+            const res = await fetch(`/api/analytics/dashboard${qs}`);
+            const data = await res.json();
+
+            renderAlerts(data.alerts);
+            
+            allPapers = data.papers.items || data.papers;
             renderPapersTable(allPapers);
+            
+            allReviewers = data.reviewers.items || data.reviewers;
             renderReviewersTable(allReviewers);
-            renderAnalytics(analytics);
-            renderQualityProfile(qualityProfile);
+            
+            renderAnalytics(data.systemAnalytics);
+            renderQualityProfile(data.qualityProfile);
+            
+            const submissions = data.submissions.items || data.submissions;
             renderSubmissionsTable(submissions);
-            renderAwardsTab(analytics);
+            
+            renderAwardsTab(data.systemAnalytics);
 
         } catch (error) {
             console.error("Error loading dashboard data:", error);
+        } finally {
+            document.getElementById('loading-indicator')?.classList.add('hidden');
+            document.getElementById('dashboard-content')?.classList.remove('hidden');
         }
     }
 
@@ -801,11 +1010,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const safeTitle = alert.title ? alert.title.replace(/'/g, "\\'") : '';
             card.innerHTML = `
                 <div class="alert-content">
-                    <h3 style="font-family: 'Roboto Mono', monospace;">${alert.title}</h3>
-                    <p>${alert.message}</p>
+                    <h3 style="font-family: 'Roboto Mono', monospace;">${escapeHtml(alert.title)}</h3>
+                    <p>${escapeHtml(alert.message)}</p>
                 </div>
-                <button class="btn btn-outline btn-sm w-full" onclick="applyFilterAndNavigate('${alert.target}', '${alert.filterKey}', '${idsJson}', '${safeTitle}')">${alert.action}</button>
+                <button class="btn btn-outline btn-sm w-full">${escapeHtml(alert.action)}</button>
             `;
+            const btn = card.querySelector('button');
+            btn.addEventListener('click', () => {
+                applyFilterAndNavigate(alert.target, alert.filterKey, alert.affectedIds ? JSON.stringify(alert.affectedIds) : "[]", alert.title);
+            });
             container.appendChild(card);
         });
     }
@@ -852,26 +1065,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const sprWidth = maxSpread > 0 ? (sprVal / maxSpread) * 100 : 0;
             const sparkClass = sprVal > 2.0 ? 'danger' : (sprVal > 1.0 ? 'warning' : '');
 
-            const currentDec = p.decision ? p.decision.toLowerCase() : '';
+            const currentDec = p.decision_category || 'no decision';
 
             const tr = document.createElement('tr');
-            tr.onclick = () => openPaperModal(p.external_submission_id);
             tr.innerHTML = `
                 <td style="font-family: 'Roboto Mono', monospace; display: flex; align-items: center;">
-                    ${p.external_submission_id} 
+                    ${escapeHtml(p.external_submission_id)} 
                     ${p.total_reviews < 3 ? '<span title="At Risk: Less than 3 reviews" style="cursor:help; margin-left: 6px;">⚠️</span>' : ''}
                 </td>
-                <td>${p.title}</td>
+                <td>${escapeHtml(p.title)}</td>
                 <td>
-                    <select class="form-select" style="padding: 2px 5px; border-radius: 4px; font-size: 0.75rem; border: 1px solid #ccc;" onclick="event.stopPropagation()" onchange="updatePaperDecision(${p.id}, this.value)" ${selectDisabled}>
-                        <option value="Accept" ${currentDec.includes('accept') && !currentDec.includes('reject') ? 'selected' : ''}>Accept</option>
+                    <select class="form-select" style="padding: 2px 5px; border-radius: 4px; font-size: 0.75rem; border: 1px solid #ccc;" ${selectDisabled}>
+                        <option value="Accept" ${currentDec === 'accept' ? 'selected' : ''}>Accept</option>
                         <option value="Reject" ${currentDec === 'reject' ? 'selected' : ''}>Reject</option>
-                        <option value="Desk Reject" ${currentDec.includes('desk reject') ? 'selected' : ''}>Desk Reject</option>
-                        <option value="No Decision" ${currentDec === 'no decision' || !p.decision ? 'selected' : ''}>No Decision</option>
+                        <option value="Desk Reject" ${currentDec === 'desk reject' ? 'selected' : ''}>Desk Reject</option>
+                        <option value="No Decision" ${currentDec === 'no decision' || currentDec === 'withdrawn' ? 'selected' : ''}>No Decision/Withdrawn</option>
                     </select>
                 </td>
-                <td style="font-family: 'Roboto Mono', monospace;">${p.total_reviews}</td>
-                <td style="font-family: 'Roboto Mono', monospace;">${p.average_score || '-'}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(p.total_reviews)}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(p.average_score) || '-'}</td>
                 <td>
                     <div class="sparkline-container">
                         <span style="font-family: 'Roboto Mono', monospace; width: 40px;">${parseFloat(p.score_spread || 0).toFixed(2)}</span>
@@ -880,8 +1092,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                     </div>
                 </td>
-                <td style="font-family: 'Roboto Mono', monospace;">${p.total_comments || '0'}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(p.total_comments) || '0'}</td>
             `;
+            const select = tr.querySelector('select');
+            select.addEventListener('click', (event) => event.stopPropagation());
+            select.addEventListener('change', function() { updatePaperDecision(p.id, this.value); });
+            tr.addEventListener('click', () => openPaperModal(p.external_submission_id));
             tbody.appendChild(tr);
         });
     }
@@ -929,14 +1145,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const warningHtml = parseInt(r.total_reviews_completed) === 0 ? '<span title="At Risk: 0 reviews completed" style="cursor:help;">⚠️</span>' : '';
 
             const tr = document.createElement('tr');
-            tr.onclick = () => openReviewerModal(r.id, `${r.first_name} ${r.last_name}`);
+            tr.addEventListener('click', () => openReviewerModal(r.id, `${r.first_name} ${r.last_name}`));
             tr.innerHTML = `
-                <td style="font-family: 'Roboto Mono', monospace;">${r.reviewer_id || '-'} ${warningHtml}</td>
-                <td style="font-weight: bold;">${r.first_name} ${r.last_name}</td>
-                <td><span class="badge bg-neutral">${r.role}</span></td>
-                <td style="font-family: 'Roboto Mono', monospace;">${r.total_reviews_completed}</td>
-                <td style="font-family: 'Roboto Mono', monospace;">${r.avg_word_count || '0'}</td>
-                <td style="font-family: 'Roboto Mono', monospace;">${r.avg_score_given || '-'}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.reviewer_id) || '-'} ${warningHtml}</td>
+                <td style="font-weight: bold;">${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</td>
+                <td><span class="badge bg-neutral">${escapeHtml(r.role)}</span></td>
+                <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.total_reviews_completed)}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.avg_word_count) || '0'}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.avg_score_given) || '-'}</td>
                 <td style="font-family: 'Roboto Mono', monospace;">${bmHtml}</td>
                 <td>
                     <div class="sparkline-container">
@@ -946,7 +1162,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                     </div>
                 </td>
-                <td style="font-family: 'Roboto Mono', monospace;">${r.total_comments || '0'}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.total_comments) || '0'}</td>
             `;
             tbody.appendChild(tr);
         });
@@ -967,10 +1183,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const timeStr = sub.review_time ? sub.review_time : '-';
             
             tr.innerHTML = `
-                <td style="font-family: 'Roboto Mono', monospace;">#${sub.id}</td>
-                <td style="font-weight: bold;">${sub.first_name} ${sub.last_name}</td>
-                <td style="font-family: 'Roboto Mono', monospace;">#${sub.external_submission_id}</td>
-                <td style="font-family: 'Roboto Mono', monospace;">${sub.total_score}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">#${escapeHtml(sub.id)}</td>
+                <td style="font-weight: bold;">${escapeHtml(sub.first_name)} ${escapeHtml(sub.last_name)}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">#${escapeHtml(sub.external_submission_id)}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(sub.total_score)}</td>
                 <td style="font-family: 'Roboto Mono', monospace;">${dateStr}</td>
                 <td style="font-family: 'Roboto Mono', monospace;">${timeStr}</td>
             `;
@@ -1002,33 +1218,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 else if (data.score >= 80) cssClass = 'good';
                 else if (data.score >= 60) cssClass = 'warning';
 
-                let listHtml = '';
-                if (data.deductions.length > 0) {
-                    listHtml = '<ul style="list-style-type: none; padding-left: 0;">';
-                    data.deductions.forEach(d => {
-                        if (typeof d === 'string') {
-                            listHtml += `<li>${d}</li>`;
-                        } else {
-                            const idsJson = JSON.stringify(d.affectedIds).replace(/"/g, '&quot;');
-                            const safeTitle = d.customTitle ? d.customTitle.replace(/'/g, "\\'") : '';
-                            listHtml += `<li style="margin-bottom: 0.5rem;"><a href="#" class="deduction-link" style="color: inherit; text-decoration: underline;" onclick="applyFilterAndNavigate('${d.target}', '${d.filterKey}', '${idsJson}', '${safeTitle}'); return false;">${d.text}</a></li>`;
-                        }
-                    });
-                    listHtml += '</ul>';
-                }
-
-                const cardHtml = `
-                    <div class="scorecard-card ${cssClass}">
-                        <div class="scorecard-header">
-                            <span class="scorecard-title">${dim.label}</span>
-                            <span class="scorecard-score ${cssClass}">${data.score}</span>
-                        </div>
-                        <div class="scorecard-deductions">
-                            ${listHtml}
-                        </div>
+                const card = document.createElement('div');
+                card.className = `scorecard-card ${cssClass}`;
+                card.innerHTML = `
+                    <div class="scorecard-header">
+                        <span class="scorecard-title">${escapeHtml(dim.label)}</span>
+                        <span class="scorecard-score ${cssClass}">${escapeHtml(data.score)}</span>
+                    </div>
+                    <div class="scorecard-deductions">
+                        <ul style="list-style-type: none; padding-left: 0;"></ul>
                     </div>
                 `;
-                scorecardContainer.innerHTML += cardHtml;
+                const ul = card.querySelector('ul');
+                if (data.deductions.length > 0) {
+                    data.deductions.forEach(d => {
+                        const li = document.createElement('li');
+                        if (typeof d === 'string') {
+                            li.textContent = d;
+                        } else {
+                            li.style.marginBottom = '0.5rem';
+                            const a = document.createElement('a');
+                            a.href = '#';
+                            a.className = 'deduction-link';
+                            a.style.color = 'inherit';
+                            a.style.textDecoration = 'underline';
+                            a.textContent = d.text;
+                            a.addEventListener('click', (e) => {
+                                e.preventDefault();
+                                const idsJson = d.affectedIds ? JSON.stringify(d.affectedIds) : "[]";
+                                applyFilterAndNavigate(d.target, d.filterKey, idsJson, d.customTitle || '');
+                            });
+                            li.appendChild(a);
+                        }
+                        ul.appendChild(li);
+                    });
+                }
+                scorecardContainer.appendChild(card);
             });
         }
 
@@ -1114,12 +1339,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (analytics.distributions && analytics.distributions.decisions) {
                 analytics.distributions.decisions.forEach(d => {
-                    const dec = d.decision ? d.decision.toLowerCase() : '';
+                    const dec = d.decision ? d.decision.toLowerCase() : 'no decision';
                     const count = parseInt(d.count, 10) || 0;
-                    if (dec.includes('desk reject') || dec.includes('desk-reject') || dec.includes('desk_reject')) { deskRejectCount += count; }
-                    else if (dec === 'no decision' || dec === '') { noDecisionCount += count; }
-                    else if (dec.includes('accept')) { acceptCount += count; }
-                    else if (dec.includes('reject')) { rejectCount += count; }
+                    if (dec === 'desk reject') { deskRejectCount += count; }
+                    else if (dec === 'accept') { acceptCount += count; }
+                    else if (dec === 'reject') { rejectCount += count; }
                     else { noDecisionCount += count; }
                 });
             }
@@ -1128,7 +1352,7 @@ document.addEventListener('DOMContentLoaded', () => {
             decisionChartInstance = new Chart(ctxDecision.getContext('2d'), {
                 type: 'doughnut',
                 data: {
-                    labels: ['Accept', 'Reject', 'Desk Reject', 'No Decision'],
+                    labels: ['Accept', 'Reject', 'Desk Reject', 'No Decision/Withdrawn'],
                     datasets: [{
                         data: [acceptCount, rejectCount, deskRejectCount, noDecisionCount],
                         backgroundColor: ['#2ecc71', '#e74c3c', '#c0392b', '#95a5a6'],

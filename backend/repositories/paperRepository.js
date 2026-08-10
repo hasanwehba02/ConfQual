@@ -9,13 +9,15 @@ async function createPaper(paper) {
             submitted_at,
             last_updated_at,
             decision,
+            decision_category,
             notified,
             reviews_sent,
             is_deleted
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-        ON CONFLICT (external_submission_id)
-        DO NOTHING
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        ON CONFLICT (conference_id, external_submission_id)
+        DO UPDATE SET 
+            decision_category = EXCLUDED.decision_category
         RETURNING *;
     `;
 
@@ -26,6 +28,7 @@ async function createPaper(paper) {
         paper.submittedAt,
         paper.lastUpdatedAt,
         paper.decision,
+        paper.decisionCategory,
         paper.notified,
         paper.reviewsSent,
         paper.isDeleted || false
@@ -40,34 +43,29 @@ async function createPaper(paper) {
     return result.rows[0];
 }
 
-module.exports = {
-    createPaper
-};
 async function findByExternalSubmissionId(externalSubmissionId) {
-
-    const result = await client.query(
-
-        `
-
+    const query = `
         SELECT *
-
         FROM paper
-
-        WHERE external_submission_id = $1;
-
-        `,
-
-        [externalSubmissionId]
-
-    );
-
-    return result.rows[0];
-
+        WHERE external_submission_id = $1
+    `;
+    const values = [externalSubmissionId];
+    const result = await client.query(query, values);
+    return result.rows.length ? result.rows[0] : null;
 }
+
+async function getIdMap(conferenceId) {
+    const query = `SELECT external_submission_id, id FROM paper WHERE conference_id = $1`;
+    const result = await client.query(query, [conferenceId]);
+    const map = {};
+    for (const row of result.rows) {
+        map[row.external_submission_id] = row.id;
+    }
+    return map;
+}
+
 module.exports = {
-
     createPaper,
-
-    findByExternalSubmissionId
-
+    findByExternalSubmissionId,
+    getIdMap
 };

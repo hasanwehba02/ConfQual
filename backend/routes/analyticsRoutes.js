@@ -14,6 +14,7 @@ router.get("/paper-debates", analyticsController.getPaperDebates);
 router.get("/expertise-match", analyticsController.getExpertiseMismatches);
 
 // New Investigative Endpoints
+router.get("/dashboard", analyticsController.getDashboard);
 router.get("/alerts", analyticsController.getAlerts);
 router.get("/papers", analyticsController.getPapers);
 router.get("/reviewers", analyticsController.getReviewers);
@@ -30,5 +31,28 @@ router.post("/reset", analyticsController.resetDb);
 
 router.post("/process-conference", upload.single('excelFile'), analyticsController.processUpload);
 
-router.post("/log", (req, res) => { console.log("FRONTEND LOG:", req.body); res.sendStatus(200); });
+// Multi-conference management
+router.get("/conferences", analyticsController.listConferences);
+router.get("/comparison", analyticsController.getComparison);
+router.put("/conferences/:id", analyticsController.updateConference);
+router.delete("/conferences/:id", analyticsController.deleteConference);
+
+const logRateLimiter = new Map();
+router.post("/log", (req, res) => {
+    const ip = req.ip || req.connection?.remoteAddress || 'unknown';
+    const now = Date.now();
+    const entry = logRateLimiter.get(ip) || { count: 0, last: now };
+    if (now - entry.last > 60000) {
+        entry.count = 1;
+        entry.last = now;
+    } else {
+        entry.count++;
+        if (entry.count > 20) {
+            return res.status(429).json({ error: "Too many requests" });
+        }
+    }
+    logRateLimiter.set(ip, entry);
+    console.log("FRONTEND LOG:", req.body);
+    res.sendStatus(200); 
+});
 module.exports = router;
