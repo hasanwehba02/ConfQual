@@ -735,45 +735,31 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadConferences() {
         try {
             const conferences = await fetchConferences();
-            const selector = document.getElementById('conference-selector');
+            const nameSpan = document.getElementById('conference-active-name');
             const wrapper = document.getElementById('conference-selector-wrapper');
-            if (!selector || !wrapper) return;
+            if (!nameSpan || !wrapper) return;
 
-            selector.innerHTML = '';
             if (conferences.length === 0) {
                 wrapper.style.display = 'none';
+                activeConferenceId = null;
                 return;
             }
 
-            // Show selector only when there are 2+ conferences
-            wrapper.style.display = conferences.length > 1 ? 'flex' : 'none';
-
-            conferences.forEach(c => {
-                const opt = document.createElement('option');
-                opt.value = c.id;
-                const label = [c.short_name || c.name, c.year].filter(Boolean).join(' \'');
-                opt.textContent = label;
-                selector.appendChild(opt);
-            });
-
             // Set to current active or default to first (most recent)
-            if (activeConferenceId) {
-                selector.value = activeConferenceId;
-            } else {
+            if (!activeConferenceId || !conferences.find(c => c.id == activeConferenceId)) {
                 activeConferenceId = conferences[0].id;
-                selector.value = conferences[0].id;
+            }
+
+            const activeConf = conferences.find(c => c.id == activeConferenceId);
+            if (activeConf) {
+                const label = [activeConf.short_name || activeConf.name, activeConf.year].filter(Boolean).join(' \'');
+                nameSpan.textContent = label;
+                wrapper.style.display = 'flex';
             }
         } catch (e) {
             console.error('Failed to load conferences:', e);
         }
     }
-
-    window.handleConferenceChange = async function() {
-        const selector = document.getElementById('conference-selector');
-        if (!selector) return;
-        activeConferenceId = selector.value || null;
-        await loadDashboardData();
-    };
 
     // --- Comparison Tab ---
     async function loadComparisonTab() {
@@ -850,8 +836,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.selectConference = async function(id) {
         activeConferenceId = id;
-        const selector = document.getElementById('conference-selector');
-        if (selector) selector.value = id;
+        await loadConferences(); // Refresh the top bar label
         // Switch to analytics view
         tabBtns.forEach(b => b.classList.remove('active'));
         tabContents.forEach(c => c.classList.add('hidden'));
