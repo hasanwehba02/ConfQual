@@ -13,7 +13,7 @@ const client = require("../config/database");
 
 const { setFilePath } = require("./workbookReader");
 
-async function runImporter(filePath) {
+async function runImporter(filePath, meta = {}) {
     if (filePath) {
         setFilePath(filePath);
     }
@@ -21,34 +21,25 @@ async function runImporter(filePath) {
     console.log("Starting ConfQual import...\n");
     
     try {
-        console.log("Wiping existing data...");
-        await client.query('TRUNCATE TABLE conference CASCADE;');
+        await client.withTransaction(async () => {
+            // conferenceImporter now handles overwrite logic internally
+            const conference = await importConference(meta);
 
-        const conference = await importConference();
+            console.log("");
 
-        console.log("");
+            await importProgramCommittee(conference);
+            await importSubmissions(conference);
+            await importAuthors(conference);
+            await importAssignments(conference);
+            await importBids(conference);
+            await importConflicts(conference);
+            await importReviews(conference);
+            await importComments(conference);
+            await importMetaReviews(conference);
+            await importTopics(conference);
 
-    await importProgramCommittee(conference);
-
-    await importSubmissions(conference);
-
-    await importAuthors();
-
-    await importAssignments();
-
-    await importBids();
-
-    await importConflicts();
-
-    await importReviews();
-
-    await importComments();
-
-        await importMetaReviews();
-
-        await importTopics(conference);
-
-        console.log("\nImport Complete! All data committed to database.");
+            console.log("\nImport Complete! All data committed to database.");
+        });
     } catch (error) {
         console.error("\nImport Failed!", error);
         throw error;

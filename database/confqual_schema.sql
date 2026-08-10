@@ -18,7 +18,7 @@ CREATE TABLE program_committee_member (
 
     conference_id INT NOT NULL,
 
-    external_person_id INT UNIQUE,
+    external_person_id INT,
 
     first_name TEXT NOT NULL,
 
@@ -35,7 +35,10 @@ CREATE TABLE program_committee_member (
     CONSTRAINT fk_pcm_conference
         FOREIGN KEY (conference_id)
         REFERENCES conference(id)
-        ON DELETE CASCADE
+        ON DELETE CASCADE,
+
+    CONSTRAINT uq_pcm_conference_person
+        UNIQUE (conference_id, external_person_id)
 );
 
 
@@ -44,7 +47,7 @@ CREATE TABLE paper (
 
     conference_id INT NOT NULL,
 
-    external_submission_id INT UNIQUE,
+    external_submission_id INT,
 
     title TEXT NOT NULL,
 
@@ -53,6 +56,8 @@ CREATE TABLE paper (
     last_updated_at TIMESTAMP,
 
     decision TEXT,
+
+    decision_category TEXT,
 
     notified BOOLEAN,
 
@@ -63,7 +68,10 @@ CREATE TABLE paper (
     CONSTRAINT fk_paper_conference
         FOREIGN KEY (conference_id)
         REFERENCES conference(id)
-        ON DELETE CASCADE
+        ON DELETE CASCADE,
+
+    CONSTRAINT uq_paper_conference_submission
+        UNIQUE (conference_id, external_submission_id)
 );
 
 
@@ -282,12 +290,13 @@ CREATE TABLE settings (
 
 CREATE TABLE author (
     id SERIAL PRIMARY KEY,
-    external_person_id INT UNIQUE,
+    external_person_id INT,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
     email TEXT,
     country TEXT,
-    affiliation TEXT
+    affiliation TEXT,
+    web_page TEXT
 );
 
 CREATE TABLE paper_author (

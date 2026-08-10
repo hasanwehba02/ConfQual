@@ -1,46 +1,44 @@
 const { readWorkbook } = require("../workbookReader");
 const mapBid = require("../mappers/bidMapper");
-const bidService = require("../../services/bidService");
+const bidRepository = require("../../repositories/bidRepository");
+const paperRepository = require("../../repositories/paperRepository");
+const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
 
-async function importBids() {
-    const workbook = await readWorkbook();
-    const bidsSheet = workbook.getWorksheet("Paper bidding");
-
-    if (!bidsSheet) {
-        console.log("Paper bidding sheet not found. Skipping.");
-        return;
-    }
-
+async function importBidsForSheet(workbook, sheetName, conference, isSuperseded = false) {
+    const sheet = workbook.getWorksheet(sheetName);
+    if (!sheet) return;
+    const paperMap = await paperRepository.getIdMap(conference.id);
+    const pcmMap = await programCommitteeRepository.getIdMap(conference.id);
     let imported = 0;
     let skipped = 0;
-
     const dtos = [];
-    for (let i = 2; i <= bidsSheet.rowCount; i++) {
-        const row = bidsSheet.getRow(i);
-        const bidDto = mapBid(row);
-
-        if (!bidDto.externalSubmissionId || !bidDto.externalPersonId) {
+    for (let i = 2; i <= sheet.rowCount; i++) {
+        const row = sheet.getRow(i);
+        const dto = mapBid(row);
+        if (!dto.externalSubmissionId || !dto.externalPersonId) {
             skipped++;
             continue;
         }
-        dtos.push(bidDto);
+        dto.paperId = paperMap[dto.externalSubmissionId];
+        dto.programCommitteeMemberId = pcmMap[dto.externalPersonId];
+        if (!dto.paperId || !dto.programCommitteeMemberId) {
+            skipped++;
+            continue;
+        }
+        dtos.push(dto);
     }
-
-    const chunkSize = 30;
+    const chunkSize = 200;
     for (let i = 0; i < dtos.length; i += chunkSize) {
         const chunk = dtos.slice(i, i + chunkSize);
-        const results = await Promise.all(
-            chunk.map(dto => bidService.createBid(dto.externalSubmissionId, dto.externalPersonId, dto.bid))
-        );
-        for (const savedBid of results) {
-            if (savedBid) imported++;
-            else skipped++;
-        }
+        imported += await bidRepository.bulkCreateBids(chunk);
     }
+    console.log();
+}
 
-    console.log(`Imported bids: ${imported}`);
-    console.log(`Skipped rows: ${skipped}`);
-    console.log("Bids imported successfully.\n");
+async function importBids(conference) {
+    const workbook = await readWorkbook();
+    await importBidsForSheet(workbook, "Bids", conference);
+    console.log("bid imported successfully.\n");
 }
 
 module.exports = importBids;

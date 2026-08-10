@@ -1,59 +1,49 @@
 const { readWorkbook } = require("../workbookReader");
 const mapReview = require("../mappers/reviewMapper");
-const reviewService = require("../../services/reviewService");
+const reviewRepository = require("../../repositories/reviewRepository");
+const paperRepository = require("../../repositories/paperRepository");
+const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
 const analyticsMath = require("../../utils/analyticsMath");
 
-async function importReviewsForSheet(workbook, sheetName, isSuperseded = false) {
+async function importReviewsForSheet(workbook, sheetName, conference, isSuperseded = false) {
     const sheet = workbook.getWorksheet(sheetName);
-
-    if (!sheet) {
-        console.log(`Sheet '${sheetName}' not found. Skipping.`);
-        return;
-    }
-
+    if (!sheet) return;
+    const paperMap = await paperRepository.getIdMap(conference.id);
+    const pcmMap = await programCommitteeRepository.getIdMap(conference.id);
     let imported = 0;
     let skipped = 0;
-
     const dtos = [];
     for (let i = 2; i <= sheet.rowCount; i++) {
         const row = sheet.getRow(i);
-        const reviewDto = mapReview(row);
-
-        if (!reviewDto.externalSubmissionId || !reviewDto.externalPersonId) {
+        const dto = mapReview(row);
+        if (!dto.externalSubmissionId || !dto.externalPersonId) {
             skipped++;
             continue;
         }
-
-        reviewDto.isSuperseded = isSuperseded;
-        
-        // Calculate sentiment score using the utility
-        reviewDto.sentimentScore = analyticsMath.analyzeReviewSentiment(reviewDto.reviewText);
-        dtos.push(reviewDto);
+        dto.paperId = paperMap[dto.externalSubmissionId];
+        dto.programCommitteeMemberId = pcmMap[dto.externalPersonId];
+        if (!dto.paperId || !dto.programCommitteeMemberId) {
+            skipped++;
+            continue;
+        }
+        dto.isSuperseded = isSuperseded;
+        dto.sentimentScore = analyticsMath.analyzeReviewSentiment(dto.reviewText);
+        dtos.push(dto);
     }
-
-    const chunkSize = 30;
+    const chunkSize = 200;
     for (let i = 0; i < dtos.length; i += chunkSize) {
         const chunk = dtos.slice(i, i + chunkSize);
-        const results = await Promise.all(
-            chunk.map(dto => reviewService.createReview(dto))
-        );
-        for (const savedReview of results) {
-            if (savedReview) imported++;
-            else skipped++;
-        }
+        const results = await reviewRepository.batchCreateReviews(chunk);
+        imported += results.length;
     }
-
-    console.log(`Imported ${sheetName}: ${imported}`);
-    console.log(`Skipped rows: ${skipped}`);
+    console.log();
 }
 
-async function importReviews() {
+async function importReviews(conference) {
     const workbook = await readWorkbook();
-    
-    await importReviewsForSheet(workbook, "Reviews", false);
-    await importReviewsForSheet(workbook, "Superseded reviews", true);
-
-    console.log("Reviews imported successfully.\n");
+    await importReviewsForSheet(workbook, "Reviews", conference, false);
+    await importReviewsForSheet(workbook, "Superseded reviews", conference, true);
+    console.log("review imported successfully.\n");
 }
 
 module.exports = importReviews;
