@@ -3,9 +3,14 @@ require("dotenv").config();
 const { Pool } = require("pg");
 const { AsyncLocalStorage } = require("async_hooks");
 
-const dbConfig = process.env.DATABASE_URL
+let connStr = process.env.DATABASE_URL;
+if (connStr && !connStr.includes('uselibpqcompat')) {
+    connStr += (connStr.includes('?') ? '&' : '?') + 'uselibpqcompat=true';
+}
+
+const dbConfig = connStr
     ? { 
-        connectionString: process.env.DATABASE_URL,
+        connectionString: connStr,
         ssl: { rejectUnauthorized: false },
         max: 20
       }

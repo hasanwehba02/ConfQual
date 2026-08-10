@@ -910,7 +910,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Dashboard Data Loading ---
     async function loadDashboardData() {
         try {
-            document.getElementById('loading-indicator').classList.remove('hidden');
+            document.getElementById('loading-indicator')?.classList.remove('hidden');
             document.getElementById('dashboard-content').classList.add('hidden');
             
             // Clear any active filters so they don't carry over between conferences
@@ -953,6 +953,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error("Error loading dashboard data:", error);
+        } finally {
+            document.getElementById('loading-indicator')?.classList.add('hidden');
+            document.getElementById('dashboard-content')?.classList.remove('hidden');
         }
     }
 
