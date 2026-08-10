@@ -913,6 +913,18 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('loading-indicator').classList.remove('hidden');
             document.getElementById('dashboard-content').classList.add('hidden');
             
+            // Clear any active filters so they don't carry over between conferences
+            activePaperFilter = null;
+            activeReviewerFilter = null;
+            const pb = document.getElementById('paper-filter-banner');
+            if (pb) pb.classList.add('hidden');
+            const pt = document.querySelector('#tab-papers h2');
+            if (pt) pt.textContent = 'Paper Explorer';
+            const rb = document.getElementById('reviewer-filter-banner');
+            if (rb) rb.classList.add('hidden');
+            const rt = document.querySelector('#tab-reviewers h2');
+            if (rt) rt.textContent = 'Reviewer Explorer';
+
             // Visually clear alerts so the user knows it's updating
             const alertsList = document.getElementById('alerts-list');
             if (alertsList) {
