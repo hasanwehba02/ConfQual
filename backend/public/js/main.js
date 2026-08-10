@@ -618,8 +618,20 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (fileInput.files.length === 0) return;
 
+        const confName = document.getElementById('conf-name')?.value.trim();
+        const confShortName = document.getElementById('conf-short-name')?.value.trim();
+        const confYear = document.getElementById('conf-year')?.value.trim();
+
+        if (!confName) {
+            document.getElementById('conf-name')?.focus();
+            return;
+        }
+
         const formData = new FormData();
         formData.append('excelFile', fileInput.files[0]);
+        if (confName) formData.append('conferenceName', confName);
+        if (confShortName) formData.append('conferenceShortName', confShortName);
+        if (confYear) formData.append('conferenceYear', confYear);
 
         submitBtn.classList.add('hidden');
         dropZone.classList.add('hidden');
@@ -656,6 +668,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (globalLoadingOverlay) globalLoadingOverlay.classList.add('hidden');
             uploadForm.reset();
             dropZone.querySelector('p').textContent = 'DRAG & DROP .XLSX HERE';
+            // Clear conference metadata fields
+            const confNameEl = document.getElementById('conf-name');
+            const confShortEl = document.getElementById('conf-short-name');
+            const confYearEl = document.getElementById('conf-year');
+            if (confNameEl) confNameEl.value = '';
+            if (confShortEl) confShortEl.value = '';
+            if (confYearEl) confYearEl.value = '';
         }
     });
 

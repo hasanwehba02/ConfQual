@@ -13,7 +13,7 @@ const client = require("../config/database");
 
 const { setFilePath } = require("./workbookReader");
 
-async function runImporter(filePath) {
+async function runImporter(filePath, meta = {}) {
     if (filePath) {
         setFilePath(filePath);
     }
@@ -23,7 +23,7 @@ async function runImporter(filePath) {
     try {
         await client.withTransaction(async () => {
             // conferenceImporter now handles overwrite logic internally
-            const conference = await importConference();
+            const conference = await importConference(meta);
 
             console.log("");
 

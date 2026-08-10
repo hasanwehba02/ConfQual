@@ -480,6 +480,24 @@
                     <input type="file" id="excelFile" accept=".xlsx" required hidden>
                     <button type="button" class="btn btn-outline mt-4" onclick="document.getElementById('excelFile').click()">BROWSE</button>
                 </div>
+
+                <div style="margin-top: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                    <div>
+                        <label style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); display:block; margin-bottom:4px;">Conference Name <span style="color:var(--danger)">*</span></label>
+                        <input type="text" id="conf-name" class="form-select" style="width:100%;padding:7px 10px;" placeholder="e.g. CAiSE 2025" required>
+                    </div>
+                    <div style="display:flex; gap: 0.75rem;">
+                        <div style="flex:1">
+                            <label style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); display:block; margin-bottom:4px;">Short Name</label>
+                            <input type="text" id="conf-short-name" class="form-select" style="width:100%;padding:7px 10px;" placeholder="e.g. CAiSE">
+                        </div>
+                        <div style="width:90px;">
+                            <label style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); display:block; margin-bottom:4px;">Year</label>
+                            <input type="number" id="conf-year" class="form-select" style="width:100%;padding:7px 10px;" placeholder="2025" min="2000" max="2099">
+                        </div>
+                    </div>
+                </div>
+
                 <div class="form-actions mt-4">
                     <button type="submit" class="btn btn-primary w-full" id="submit-upload">PROCESS</button>
                 </div>
