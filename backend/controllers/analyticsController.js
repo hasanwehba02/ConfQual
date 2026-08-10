@@ -151,9 +151,15 @@ async function processUpload(req, res) {
         
         console.log(`Processing uploaded file: ${req.file.path}`);
         
+        // User-supplied conference metadata (overrides auto-detection)
+        const meta = {
+            name: req.body.conferenceName || null,
+            shortName: req.body.conferenceShortName || null,
+            year: req.body.conferenceYear ? parseInt(req.body.conferenceYear) : null
+        };
+
         try {
-            // Run Importer — conference-aware, no full DB reset
-            await runImporter(req.file.path);
+            await runImporter(req.file.path, meta);
             res.json({ message: "Conference processed successfully!" });
         } catch (importError) {
             console.error("Error during import:", importError);
