@@ -596,10 +596,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.dataTransfer.files.length) {
             fileInput.files = e.dataTransfer.files;
             updateDropZoneText();
-            // Auto trigger submit if not already loading
-            if (loadingState.classList.contains('hidden')) {
-                uploadForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-            }
+            // Open the upload drawer so the user can name the conference
+            uploadDrawer.classList.add('open');
+            uploadDrawer.classList.remove('closed');
         }
     });
 
