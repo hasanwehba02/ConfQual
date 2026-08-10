@@ -78,6 +78,16 @@ export async function deleteConference(id) {
     return res.json();
 }
 
+export async function updateConference(id, data) {
+    const res = await fetch(`/api/analytics/conferences/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error('Failed to update conference');
+    return res.json();
+}
+
 export async function uploadConference(formData) {
     const res = await fetch('/api/analytics/process-conference', {
         method: 'POST',

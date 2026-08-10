@@ -34,6 +34,7 @@ router.post("/process-conference", upload.single('excelFile'), analyticsControll
 // Multi-conference management
 router.get("/conferences", analyticsController.listConferences);
 router.get("/comparison", analyticsController.getComparison);
+router.put("/conferences/:id", analyticsController.updateConference);
 router.delete("/conferences/:id", analyticsController.deleteConference);
 
 const logRateLimiter = new Map();

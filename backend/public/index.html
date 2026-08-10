@@ -509,6 +509,40 @@
         </div>
     </aside>
 
+    <!-- Context Drawer: Edit Conference -->
+    <aside id="edit-conference-drawer" class="context-drawer closed">
+        <div class="drawer-header">
+            <h2>Edit Conference</h2>
+            <button id="close-edit-drawer" class="btn-icon"><i class="ph ph-x"></i></button>
+        </div>
+        <div class="drawer-body">
+            <form id="edit-conference-form">
+                <input type="hidden" id="edit-conf-id">
+                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    <div>
+                        <label style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); display:block; margin-bottom:4px;">Conference Name <span style="color:var(--danger)">*</span></label>
+                        <input type="text" id="edit-conf-name" class="form-select" style="width:100%;padding:7px 10px;" required>
+                    </div>
+                    <div style="display:flex; gap: 0.75rem;">
+                        <div style="flex:1">
+                            <label style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); display:block; margin-bottom:4px;">Short Name</label>
+                            <input type="text" id="edit-conf-short-name" class="form-select" style="width:100%;padding:7px 10px;">
+                        </div>
+                        <div style="width:90px;">
+                            <label style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); display:block; margin-bottom:4px;">Year</label>
+                            <input type="number" id="edit-conf-year" class="form-select" style="width:100%;padding:7px 10px;" min="2000" max="2099">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-actions mt-4" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <button type="submit" class="btn btn-primary w-full" id="submit-edit">SAVE CHANGES</button>
+                    <button type="button" class="btn btn-outline w-full" id="delete-conference-btn" style="color: var(--danger); border-color: var(--danger);">DELETE CONFERENCE</button>
+                </div>
+            </form>
+        </div>
+    </aside>
+
     <!-- Context Drawer: Detail -->
     <aside id="detail-drawer" class="context-drawer closed">
         <div class="drawer-header">
