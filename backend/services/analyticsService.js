@@ -98,7 +98,7 @@ async function getAlerts(prefetched = null, conferenceId = null) {
     }
     
     // Alert: High Variance, Low Discussion
-    const concerningDebates = papers.filter(p => parseFloat(p.score_variance) > 1.0 && parseInt(p.total_comments) === 0);
+    const concerningDebates = papers.filter(p => parseFloat(p.score_spread) > 1.0 && parseInt(p.total_comments) === 0);
     if (concerningDebates.length > 0) {
         alerts.push({
             type: 'danger',
