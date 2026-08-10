@@ -597,8 +597,11 @@ document.addEventListener('DOMContentLoaded', () => {
             fileInput.files = e.dataTransfer.files;
             updateDropZoneText();
             // Open the upload drawer so the user can name the conference
-            uploadDrawer.classList.add('open');
-            uploadDrawer.classList.remove('closed');
+            setTimeout(() => {
+                console.log("Opening upload drawer from drop event...");
+                uploadDrawer.classList.remove('closed');
+                uploadDrawer.classList.add('open');
+            }, 50);
         }
     });
 
