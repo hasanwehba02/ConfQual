@@ -1,54 +1,44 @@
 const { readWorkbook } = require("../workbookReader");
 const mapMetaReview = require("../mappers/metaReviewMapper");
-const metaReviewService = require("../../services/metaReviewService");
+const metaReviewRepository = require("../../repositories/metaReviewRepository");
+const paperRepository = require("../../repositories/paperRepository");
+const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
 
-async function importMetaReviews() {
-    const workbook = await readWorkbook();
-    const metaReviewsSheet = workbook.getWorksheet("Metareviews");
-
-    if (!metaReviewsSheet) {
-        console.log("Metareviews sheet not found. Skipping.");
-        return;
-    }
-
+async function importMetaReviewsForSheet(workbook, sheetName, isSuperseded = false) {
+    const sheet = workbook.getWorksheet(sheetName);
+    if (!sheet) return;
+    const paperMap = await paperRepository.getIdMap();
+    const pcmMap = await programCommitteeRepository.getIdMap();
     let imported = 0;
     let skipped = 0;
-
-    const headerRow = metaReviewsSheet.getRow(1);
-    const headerMap = {};
-    headerRow.eachCell((cell, colNumber) => {
-        if (cell.value) {
-            headerMap[cell.value.toString().toLowerCase()] = colNumber;
-        }
-    });
-
     const dtos = [];
-    for (let i = 2; i <= metaReviewsSheet.rowCount; i++) {
-        const row = metaReviewsSheet.getRow(i);
-        const metaReviewDto = mapMetaReview(row, headerMap);
-
-        if (!metaReviewDto.externalSubmissionId || !metaReviewDto.externalPersonId) {
+    for (let i = 2; i <= sheet.rowCount; i++) {
+        const row = sheet.getRow(i);
+        const dto = mapMetaReview(row);
+        if (!dto.externalSubmissionId || !dto.externalPersonId) {
             skipped++;
             continue;
         }
-        dtos.push(metaReviewDto);
+        dto.paperId = paperMap[dto.externalSubmissionId];
+        dto.programCommitteeMemberId = pcmMap[dto.externalPersonId];
+        if (!dto.paperId || !dto.programCommitteeMemberId) {
+            skipped++;
+            continue;
+        }
+        dtos.push(dto);
     }
-
-    const chunkSize = 30;
+    const chunkSize = 200;
     for (let i = 0; i < dtos.length; i += chunkSize) {
         const chunk = dtos.slice(i, i + chunkSize);
-        const results = await Promise.all(
-            chunk.map(dto => metaReviewService.createMetaReview(dto))
-        );
-        for (const savedMetaReview of results) {
-            if (savedMetaReview) imported++;
-            else skipped++;
-        }
+        imported += await metaReviewRepository.bulkCreateMetaReviews(chunk);
     }
+    console.log();
+}
 
-    console.log(`Imported metareviews: ${imported}`);
-    console.log(`Skipped rows: ${skipped}`);
-    console.log("Metareviews imported successfully.\n");
+async function importMetaReviews() {
+    const workbook = await readWorkbook();
+    await importMetaReviewsForSheet(workbook, "Meta reviews");
+    console.log("metaReview imported successfully.\n");
 }
 
 module.exports = importMetaReviews;

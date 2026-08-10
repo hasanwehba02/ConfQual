@@ -54,6 +54,8 @@ CREATE TABLE paper (
 
     decision TEXT,
 
+    decision_category TEXT,
+
     notified BOOLEAN,
 
     reviews_sent BOOLEAN,

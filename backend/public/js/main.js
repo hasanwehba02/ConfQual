@@ -1,3 +1,6 @@
+import { fetchDashboardData, fetchSettings, saveSettings, logError, importData, fetchPapers, fetchReviewers, fetchSubmissions } from './api.js';
+import { escapeHtml, exportToCsv } from './utils.js';
+import { getScoreBadgeClass, getScoreBadgeColor } from './renderers.js';
 
 window.onerror = function(message, source, lineno, colno, error) {
     fetch('/api/analytics/log', {
@@ -14,25 +17,7 @@ window.addEventListener('unhandledrejection', function(event) {
     });
 });
 
-const originalConsoleError = console.error;
-console.error = function(...args) {
-    fetch('/api/analytics/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'console.error', args })
-    });
-    originalConsoleError.apply(console, args);
-};
 
-const originalConsoleLog = console.log;
-console.log = function(...args) {
-    fetch('/api/analytics/log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'console.log', args })
-    });
-    originalConsoleLog.apply(console, args);
-};
 
 document.addEventListener('DOMContentLoaded', () => {
     const uploadBtn = document.getElementById('upload-btn');
@@ -253,11 +238,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let html = `
                 <h3 style="font-family: 'Inter', sans-serif; display: flex; align-items: center; justify-content: space-between;">
-                    <span>${paper.title}</span>
+                    <span>${escapeHtml(paper.title)}</span>
                     ${mismatchBadgeHtml}
                 </h3>
                 <p style="font-family: 'Roboto Mono', monospace; font-size: 0.85rem; margin-bottom: 1.5rem; color: var(--text-muted);">
-                    <strong>PAPER TOPICS:</strong> ${paper.topics || 'None'}
+                    <strong>PAPER TOPICS:</strong> ${escapeHtml(paper.topics) || 'None'}
                 </p>
                 
                 <h3>REVIEWS (${paper.reviews ? paper.reviews.length : 0})</h3>
@@ -310,13 +295,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     html += `
                         <div class="detail-item" style="${r.isMismatch ? 'border-left: 3px solid #e63946;' : ''}">
                             <div class="detail-item-header">
-                                <span>${r.first_name || ''} ${r.last_name || r.id} ${mismatchBadge}</span>
+                                <span>${escapeHtml(r.first_name) || ''} ${escapeHtml(r.last_name) || r.id} ${mismatchBadge}</span>
                                 <span>SCORE: ${r.total_score}</span>
                             </div>
                             <div class="detail-text" style="font-family: 'Roboto Mono', monospace; font-size: 0.75rem; margin-bottom: 0.5rem;">
-                                <strong>REVIEWER EXPERTISE:</strong> ${r.topics || 'None'}
+                                <strong>REVIEWER EXPERTISE:</strong> ${escapeHtml(r.topics) || 'None'}
                             </div>
-                            <div class="detail-text">${r.review_text || 'No review text'}</div>
+                            <div class="detail-text">${escapeHtml(r.review_text) || 'No review text'}</div>
                         </div>
                     `;
                 });
@@ -330,8 +315,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 paper.comments.forEach(c => {
                     html += `
                         <div class="detail-item">
-                            <div class="detail-item-header">${c.first_name} ${c.last_name}</div>
-                            <div class="detail-text">${c.comment_text}</div>
+                            <div class="detail-item-header">${escapeHtml(c.first_name)} ${escapeHtml(c.last_name)}</div>
+                            <div class="detail-text">${escapeHtml(c.comment_text)}</div>
                         </div>
                     `;
                 });
@@ -362,8 +347,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const rev = await res.json();
             
             let html = `
-                <p style="font-family: 'Roboto Mono', monospace; font-size: 0.85rem; margin-bottom: 0.5rem;"><strong>ROLE:</strong> ${rev.role}</p>
-                <p style="font-family: 'Roboto Mono', monospace; font-size: 0.85rem; margin-bottom: 1.5rem;"><strong>EMAIL:</strong> ${rev.email || 'N/A'}</p>
+                <p style="font-family: 'Roboto Mono', monospace; font-size: 0.85rem; margin-bottom: 0.5rem;"><strong>ROLE:</strong> ${escapeHtml(rev.role)}</p>
+                <p style="font-family: 'Roboto Mono', monospace; font-size: 0.85rem; margin-bottom: 1.5rem;"><strong>EMAIL:</strong> ${escapeHtml(rev.email) || 'N/A'}</p>
                 
                 <h3>PAPER ASSIGNMENTS (${rev.assignments ? rev.assignments.length : 0})</h3>
                 <div class="detail-list">
@@ -377,7 +362,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (validComments.length > 0) {
                             commentsHtml = `<div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px dashed var(--border-light);">`;
                             validComments.forEach(c => {
-                                commentsHtml += `<div class="detail-text" style="font-size: 0.8rem; font-style: italic; color: var(--text-muted); margin-bottom: 0.25rem;">💬 "${c}"</div>`;
+                                commentsHtml += `<div class="detail-text" style="font-size: 0.8rem; font-style: italic; color: var(--text-muted); margin-bottom: 0.25rem;">💬 "${escapeHtml(c)}"</div>`;
                             });
                             commentsHtml += `</div>`;
                         } else if (a.comments.includes(null)) {
@@ -393,7 +378,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <span>#${a.external_submission_id}</span>
                                 <span>GIVEN: ${a.given_score ?? 'PENDING'} | PAPER AVG: ${a.peer_average ? parseFloat(a.peer_average).toFixed(2) : '-'}</span>
                             </div>
-                            <div class="detail-text" style="margin-bottom: 0.5rem;">${a.title}</div>
+                            <div class="detail-text" style="margin-bottom: 0.5rem;">${escapeHtml(a.title)}</div>
                             <div class="detail-text" style="font-family: 'Roboto Mono', monospace; font-size: 0.75rem;">
                                 <strong>BID STATUS:</strong> ${a.bid_status ?? 'NO BID'}
                             </div>
@@ -429,7 +414,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <span>#${b.external_submission_id}</span>
                                 <span style="color: ${bidColor}; font-weight: bold; text-transform: uppercase;">${b.bid}</span>
                             </div>
-                            <div class="detail-text" style="font-size: 0.8rem;">${b.title}</div>
+                            <div class="detail-text" style="font-size: 0.8rem;">${escapeHtml(b.title)}</div>
                         </div>
                     `;
                 });
@@ -658,7 +643,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             submitBtn.classList.remove('hidden');
             dropZone.classList.remove('hidden');
-            loadingState.classList.remove('hidden');
+            loadingState.classList.add('hidden');
             const globalLoadingOverlay = document.getElementById('global-loading-overlay');
             if (globalLoadingOverlay) globalLoadingOverlay.classList.add('hidden');
             uploadForm.reset();
@@ -676,8 +661,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const filterMode = document.getElementById('paper-filter')?.value || 'all';
         
         try {
-            const res = await fetch(`/api/analytics/papers?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}`);
-            allPapers = await res.json();
+            const res = await fetch(`/api/analytics/papers?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}&limit=2000`);
+            const data = await res.json();
+            allPapers = data.items || data;
             renderPapersTable(allPapers);
         } catch (e) {
             console.error(e);
@@ -693,8 +679,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const filterMode = document.getElementById('reviewer-filter')?.value || 'all';
         
         try {
-            const res = await fetch(`/api/analytics/reviewers?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}`);
-            allReviewers = await res.json();
+            const res = await fetch(`/api/analytics/reviewers?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}&limit=2000`);
+            const data = await res.json();
+            allReviewers = data.items || data;
             renderReviewersTable(allReviewers);
         } catch (e) {
             console.error(e);
@@ -710,8 +697,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const filterMode = document.getElementById('submission-filter')?.value || 'all';
         
         try {
-            const res = await fetch(`/api/analytics/submissions?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}`);
-            const submissions = await res.json();
+            const res = await fetch(`/api/analytics/submissions?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}&limit=2000`);
+            const data = await res.json();
+            const submissions = data.items || data;
             renderSubmissionsTable(submissions);
         } catch (e) {
             console.error(e);
@@ -721,29 +709,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Dashboard Data Loading ---
     async function loadDashboardData() {
         try {
-            const [alertsRes, papersRes, reviewersRes, analyticsRes, qualityRes, submissionsRes] = await Promise.all([
-                fetch('/api/analytics/alerts'),
-                fetch('/api/analytics/papers'),
-                fetch('/api/analytics/reviewers'),
-                fetch('/api/analytics/system-analytics'),
-                fetch('/api/analytics/quality-profile'),
-                fetch('/api/analytics/submissions')
-            ]);
+            const res = await fetch('/api/analytics/dashboard');
+            const data = await res.json();
 
-            const alerts = await alertsRes.json();
-            allPapers = await papersRes.json();
-            allReviewers = await reviewersRes.json();
-            const analytics = await analyticsRes.json();
-            const qualityProfile = await qualityRes.json();
-            const submissions = await submissionsRes.json();
-
-            renderAlerts(alerts);
+            renderAlerts(data.alerts);
+            
+            allPapers = data.papers.items || data.papers;
             renderPapersTable(allPapers);
+            
+            allReviewers = data.reviewers.items || data.reviewers;
             renderReviewersTable(allReviewers);
-            renderAnalytics(analytics);
-            renderQualityProfile(qualityProfile);
+            
+            renderAnalytics(data.systemAnalytics);
+            renderQualityProfile(data.qualityProfile);
+            
+            const submissions = data.submissions.items || data.submissions;
             renderSubmissionsTable(submissions);
-            renderAwardsTab(analytics);
+            
+            renderAwardsTab(data.systemAnalytics);
 
         } catch (error) {
             console.error("Error loading dashboard data:", error);
@@ -801,11 +784,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const safeTitle = alert.title ? alert.title.replace(/'/g, "\\'") : '';
             card.innerHTML = `
                 <div class="alert-content">
-                    <h3 style="font-family: 'Roboto Mono', monospace;">${alert.title}</h3>
-                    <p>${alert.message}</p>
+                    <h3 style="font-family: 'Roboto Mono', monospace;">${escapeHtml(alert.title)}</h3>
+                    <p>${escapeHtml(alert.message)}</p>
                 </div>
-                <button class="btn btn-outline btn-sm w-full" onclick="applyFilterAndNavigate('${alert.target}', '${alert.filterKey}', '${idsJson}', '${safeTitle}')">${alert.action}</button>
+                <button class="btn btn-outline btn-sm w-full">${escapeHtml(alert.action)}</button>
             `;
+            const btn = card.querySelector('button');
+            btn.addEventListener('click', () => {
+                applyFilterAndNavigate(alert.target, alert.filterKey, alert.affectedIds ? JSON.stringify(alert.affectedIds) : "[]", alert.title);
+            });
             container.appendChild(card);
         });
     }
@@ -852,26 +839,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const sprWidth = maxSpread > 0 ? (sprVal / maxSpread) * 100 : 0;
             const sparkClass = sprVal > 2.0 ? 'danger' : (sprVal > 1.0 ? 'warning' : '');
 
-            const currentDec = p.decision ? p.decision.toLowerCase() : '';
+            const currentDec = p.decision_category || 'no decision';
 
             const tr = document.createElement('tr');
-            tr.onclick = () => openPaperModal(p.external_submission_id);
             tr.innerHTML = `
                 <td style="font-family: 'Roboto Mono', monospace; display: flex; align-items: center;">
-                    ${p.external_submission_id} 
+                    ${escapeHtml(p.external_submission_id)} 
                     ${p.total_reviews < 3 ? '<span title="At Risk: Less than 3 reviews" style="cursor:help; margin-left: 6px;">⚠️</span>' : ''}
                 </td>
-                <td>${p.title}</td>
+                <td>${escapeHtml(p.title)}</td>
                 <td>
-                    <select class="form-select" style="padding: 2px 5px; border-radius: 4px; font-size: 0.75rem; border: 1px solid #ccc;" onclick="event.stopPropagation()" onchange="updatePaperDecision(${p.id}, this.value)" ${selectDisabled}>
-                        <option value="Accept" ${currentDec.includes('accept') && !currentDec.includes('reject') ? 'selected' : ''}>Accept</option>
+                    <select class="form-select" style="padding: 2px 5px; border-radius: 4px; font-size: 0.75rem; border: 1px solid #ccc;" ${selectDisabled}>
+                        <option value="Accept" ${currentDec === 'accept' ? 'selected' : ''}>Accept</option>
                         <option value="Reject" ${currentDec === 'reject' ? 'selected' : ''}>Reject</option>
-                        <option value="Desk Reject" ${currentDec.includes('desk reject') ? 'selected' : ''}>Desk Reject</option>
-                        <option value="No Decision" ${currentDec === 'no decision' || !p.decision ? 'selected' : ''}>No Decision</option>
+                        <option value="Desk Reject" ${currentDec === 'desk reject' ? 'selected' : ''}>Desk Reject</option>
+                        <option value="No Decision" ${currentDec === 'no decision' || currentDec === 'withdrawn' ? 'selected' : ''}>No Decision/Withdrawn</option>
                     </select>
                 </td>
-                <td style="font-family: 'Roboto Mono', monospace;">${p.total_reviews}</td>
-                <td style="font-family: 'Roboto Mono', monospace;">${p.average_score || '-'}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(p.total_reviews)}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(p.average_score) || '-'}</td>
                 <td>
                     <div class="sparkline-container">
                         <span style="font-family: 'Roboto Mono', monospace; width: 40px;">${parseFloat(p.score_spread || 0).toFixed(2)}</span>
@@ -880,8 +866,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                     </div>
                 </td>
-                <td style="font-family: 'Roboto Mono', monospace;">${p.total_comments || '0'}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(p.total_comments) || '0'}</td>
             `;
+            const select = tr.querySelector('select');
+            select.addEventListener('click', (event) => event.stopPropagation());
+            select.addEventListener('change', function() { updatePaperDecision(p.id, this.value); });
+            tr.addEventListener('click', () => openPaperModal(p.external_submission_id));
             tbody.appendChild(tr);
         });
     }
@@ -929,14 +919,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const warningHtml = parseInt(r.total_reviews_completed) === 0 ? '<span title="At Risk: 0 reviews completed" style="cursor:help;">⚠️</span>' : '';
 
             const tr = document.createElement('tr');
-            tr.onclick = () => openReviewerModal(r.id, `${r.first_name} ${r.last_name}`);
+            tr.addEventListener('click', () => openReviewerModal(r.id, `${r.first_name} ${r.last_name}`));
             tr.innerHTML = `
-                <td style="font-family: 'Roboto Mono', monospace;">${r.reviewer_id || '-'} ${warningHtml}</td>
-                <td style="font-weight: bold;">${r.first_name} ${r.last_name}</td>
-                <td><span class="badge bg-neutral">${r.role}</span></td>
-                <td style="font-family: 'Roboto Mono', monospace;">${r.total_reviews_completed}</td>
-                <td style="font-family: 'Roboto Mono', monospace;">${r.avg_word_count || '0'}</td>
-                <td style="font-family: 'Roboto Mono', monospace;">${r.avg_score_given || '-'}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.reviewer_id) || '-'} ${warningHtml}</td>
+                <td style="font-weight: bold;">${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</td>
+                <td><span class="badge bg-neutral">${escapeHtml(r.role)}</span></td>
+                <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.total_reviews_completed)}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.avg_word_count) || '0'}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.avg_score_given) || '-'}</td>
                 <td style="font-family: 'Roboto Mono', monospace;">${bmHtml}</td>
                 <td>
                     <div class="sparkline-container">
@@ -946,7 +936,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                     </div>
                 </td>
-                <td style="font-family: 'Roboto Mono', monospace;">${r.total_comments || '0'}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.total_comments) || '0'}</td>
             `;
             tbody.appendChild(tr);
         });
@@ -967,10 +957,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const timeStr = sub.review_time ? sub.review_time : '-';
             
             tr.innerHTML = `
-                <td style="font-family: 'Roboto Mono', monospace;">#${sub.id}</td>
-                <td style="font-weight: bold;">${sub.first_name} ${sub.last_name}</td>
-                <td style="font-family: 'Roboto Mono', monospace;">#${sub.external_submission_id}</td>
-                <td style="font-family: 'Roboto Mono', monospace;">${sub.total_score}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">#${escapeHtml(sub.id)}</td>
+                <td style="font-weight: bold;">${escapeHtml(sub.first_name)} ${escapeHtml(sub.last_name)}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">#${escapeHtml(sub.external_submission_id)}</td>
+                <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(sub.total_score)}</td>
                 <td style="font-family: 'Roboto Mono', monospace;">${dateStr}</td>
                 <td style="font-family: 'Roboto Mono', monospace;">${timeStr}</td>
             `;
@@ -1002,33 +992,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 else if (data.score >= 80) cssClass = 'good';
                 else if (data.score >= 60) cssClass = 'warning';
 
-                let listHtml = '';
-                if (data.deductions.length > 0) {
-                    listHtml = '<ul style="list-style-type: none; padding-left: 0;">';
-                    data.deductions.forEach(d => {
-                        if (typeof d === 'string') {
-                            listHtml += `<li>${d}</li>`;
-                        } else {
-                            const idsJson = JSON.stringify(d.affectedIds).replace(/"/g, '&quot;');
-                            const safeTitle = d.customTitle ? d.customTitle.replace(/'/g, "\\'") : '';
-                            listHtml += `<li style="margin-bottom: 0.5rem;"><a href="#" class="deduction-link" style="color: inherit; text-decoration: underline;" onclick="applyFilterAndNavigate('${d.target}', '${d.filterKey}', '${idsJson}', '${safeTitle}'); return false;">${d.text}</a></li>`;
-                        }
-                    });
-                    listHtml += '</ul>';
-                }
-
-                const cardHtml = `
-                    <div class="scorecard-card ${cssClass}">
-                        <div class="scorecard-header">
-                            <span class="scorecard-title">${dim.label}</span>
-                            <span class="scorecard-score ${cssClass}">${data.score}</span>
-                        </div>
-                        <div class="scorecard-deductions">
-                            ${listHtml}
-                        </div>
+                const card = document.createElement('div');
+                card.className = `scorecard-card ${cssClass}`;
+                card.innerHTML = `
+                    <div class="scorecard-header">
+                        <span class="scorecard-title">${escapeHtml(dim.label)}</span>
+                        <span class="scorecard-score ${cssClass}">${escapeHtml(data.score)}</span>
+                    </div>
+                    <div class="scorecard-deductions">
+                        <ul style="list-style-type: none; padding-left: 0;"></ul>
                     </div>
                 `;
-                scorecardContainer.innerHTML += cardHtml;
+                const ul = card.querySelector('ul');
+                if (data.deductions.length > 0) {
+                    data.deductions.forEach(d => {
+                        const li = document.createElement('li');
+                        if (typeof d === 'string') {
+                            li.textContent = d;
+                        } else {
+                            li.style.marginBottom = '0.5rem';
+                            const a = document.createElement('a');
+                            a.href = '#';
+                            a.className = 'deduction-link';
+                            a.style.color = 'inherit';
+                            a.style.textDecoration = 'underline';
+                            a.textContent = d.text;
+                            a.addEventListener('click', (e) => {
+                                e.preventDefault();
+                                const idsJson = d.affectedIds ? JSON.stringify(d.affectedIds) : "[]";
+                                applyFilterAndNavigate(d.target, d.filterKey, idsJson, d.customTitle || '');
+                            });
+                            li.appendChild(a);
+                        }
+                        ul.appendChild(li);
+                    });
+                }
+                scorecardContainer.appendChild(card);
             });
         }
 
@@ -1114,12 +1113,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (analytics.distributions && analytics.distributions.decisions) {
                 analytics.distributions.decisions.forEach(d => {
-                    const dec = d.decision ? d.decision.toLowerCase() : '';
+                    const dec = d.decision ? d.decision.toLowerCase() : 'no decision';
                     const count = parseInt(d.count, 10) || 0;
-                    if (dec.includes('desk reject') || dec.includes('desk-reject') || dec.includes('desk_reject')) { deskRejectCount += count; }
-                    else if (dec === 'no decision' || dec === '') { noDecisionCount += count; }
-                    else if (dec.includes('accept')) { acceptCount += count; }
-                    else if (dec.includes('reject')) { rejectCount += count; }
+                    if (dec === 'desk reject') { deskRejectCount += count; }
+                    else if (dec === 'accept') { acceptCount += count; }
+                    else if (dec === 'reject') { rejectCount += count; }
                     else { noDecisionCount += count; }
                 });
             }
@@ -1128,7 +1126,7 @@ document.addEventListener('DOMContentLoaded', () => {
             decisionChartInstance = new Chart(ctxDecision.getContext('2d'), {
                 type: 'doughnut',
                 data: {
-                    labels: ['Accept', 'Reject', 'Desk Reject', 'No Decision'],
+                    labels: ['Accept', 'Reject', 'Desk Reject', 'No Decision/Withdrawn'],
                     datasets: [{
                         data: [acceptCount, rejectCount, deskRejectCount, noDecisionCount],
                         backgroundColor: ['#2ecc71', '#e74c3c', '#c0392b', '#95a5a6'],

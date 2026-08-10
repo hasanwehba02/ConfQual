@@ -1,4 +1,5 @@
 const client = require("../config/database");
+const bulkInsert = require("../utils/bulkInsert");
 
 async function createAuthor(author) {
     const query = `
@@ -47,7 +48,25 @@ async function findByExternalPersonId(externalPersonId) {
     return result.rows[0];
 }
 
+
+async function getIdMap() {
+    const query = `SELECT external_person_id, id FROM author`;
+    const result = await client.query(query);
+    const map = {};
+    for (const row of result.rows) {
+        map[row.external_person_id] = row.id;
+    }
+    return map;
+}
+async function bulkCreateAuthors(authors) {
+    const rows = authors.map(a => [a.externalPersonId, a.firstName, a.lastName, a.email, a.country, a.organization, a.webPage]);
+    return await bulkInsert('author', ['external_person_id', 'first_name', 'last_name', 'email', 'country', 'organization', 'web_page'], rows, '(external_person_id)');
+}
+
+
 module.exports = {
+    getIdMap,
+    bulkCreateAuthors,
     createAuthor,
     findByExternalPersonId
 };

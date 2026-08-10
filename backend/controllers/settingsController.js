@@ -15,11 +15,23 @@ async function getSettings(req, res) {
 
 async function updateSettings(req, res) {
     const { is_anonymized, anonymization_prefix, decision_editing_enabled } = req.body;
+    
+    if (anonymization_prefix && !/^[A-Za-z0-9_-]{0,50}$/.test(anonymization_prefix)) {
+        return res.status(400).json({ error: "Invalid anonymization prefix" });
+    }
+
     try {
-        const result = await pool.query('UPDATE settings SET is_anonymized = $1, anonymization_prefix = $2, decision_editing_enabled = $3 RETURNING id', [is_anonymized, anonymization_prefix, decision_editing_enabled || false]);
-        if (result.rowCount === 0) {
-            await pool.query('INSERT INTO settings (is_anonymized, anonymization_prefix, decision_editing_enabled) VALUES ($1, $2, $3)', [is_anonymized, anonymization_prefix, decision_editing_enabled || false]);
-        }
+        const query = `
+            INSERT INTO settings (id, is_anonymized, anonymization_prefix, decision_editing_enabled)
+            VALUES (1, $1, $2, $3)
+            ON CONFLICT (id) 
+            DO UPDATE SET 
+                is_anonymized = EXCLUDED.is_anonymized, 
+                anonymization_prefix = EXCLUDED.anonymization_prefix, 
+                decision_editing_enabled = EXCLUDED.decision_editing_enabled
+            RETURNING id;
+        `;
+        await pool.query(query, [is_anonymized, anonymization_prefix, decision_editing_enabled || false]);
         res.json({ success: true });
     } catch (error) {
         console.error("Error updating settings:", error);
