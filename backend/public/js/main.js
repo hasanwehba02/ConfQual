@@ -908,6 +908,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Dashboard Data Loading ---
     async function loadDashboardData() {
         try {
+            document.getElementById('loading-indicator').classList.remove('hidden');
+            document.getElementById('dashboard-content').classList.add('hidden');
+            
+            // Visually clear alerts so the user knows it's updating
+            const alertsList = document.getElementById('alerts-list');
+            if (alertsList) {
+                alertsList.innerHTML = '<div class="text-muted" style="padding: 1rem; text-align: center;"><i class="ph ph-spinner ph-spin"></i> Loading...</div>';
+            }
+
             const qs = activeConferenceId ? `?conferenceId=${activeConferenceId}` : '';
             const res = await fetch(`/api/analytics/dashboard${qs}`);
             const data = await res.json();
