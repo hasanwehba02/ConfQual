@@ -11,39 +11,45 @@ const importMetaReviews = require("./importers/metaReviewImporter");
 const importTopics = require("./importers/topicImporter");
 const client = require("../config/database");
 
-const { setFilePath } = require("./workbookReader");
+const { setFilePath, runWithFileContext } = require("./workbookReader");
 
 async function runImporter(filePath, meta = {}) {
+    const executeImport = async () => {
+        if (filePath) {
+            setFilePath(filePath);
+        }
+        
+        console.log("Starting ConfQual import...\n");
+        
+        try {
+            await client.withTransaction(async () => {
+                const conference = await importConference(meta);
+
+                console.log("");
+
+                await importProgramCommittee(conference);
+                await importSubmissions(conference);
+                await importAuthors(conference);
+                await importAssignments(conference);
+                await importBids(conference);
+                await importConflicts(conference);
+                await importReviews(conference);
+                await importComments(conference);
+                await importMetaReviews(conference);
+                await importTopics(conference);
+
+                console.log("\nImport Complete! All data committed to database.");
+            });
+        } catch (error) {
+            console.error("\nImport Failed!", error);
+            throw error;
+        }
+    };
+
     if (filePath) {
-        setFilePath(filePath);
+        return runWithFileContext(filePath, executeImport);
     }
-    
-    console.log("Starting ConfQual import...\n");
-    
-    try {
-        await client.withTransaction(async () => {
-            // conferenceImporter now handles overwrite logic internally
-            const conference = await importConference(meta);
-
-            console.log("");
-
-            await importProgramCommittee(conference);
-            await importSubmissions(conference);
-            await importAuthors(conference);
-            await importAssignments(conference);
-            await importBids(conference);
-            await importConflicts(conference);
-            await importReviews(conference);
-            await importComments(conference);
-            await importMetaReviews(conference);
-            await importTopics(conference);
-
-            console.log("\nImport Complete! All data committed to database.");
-        });
-    } catch (error) {
-        console.error("\nImport Failed!", error);
-        throw error;
-    }
+    return executeImport();
 }
 
 module.exports = runImporter;
