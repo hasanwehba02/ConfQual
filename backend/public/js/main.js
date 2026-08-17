@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingsForm = document.getElementById('settings-form');
     const isAnonymizedCheckbox = document.getElementById('isAnonymized');
     const decisionEditingEnabledCheckbox = document.getElementById('decisionEditingEnabled');
-    const anonymizationPrefixInput = document.getElementById('anonymizationPrefix');
+
     const uploadForm = document.getElementById('upload-form');
     const fileInput = document.getElementById('excelFile');
     const dropZone = document.getElementById('drop-zone');
@@ -385,6 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <div class="detail-text" style="font-family: 'Roboto Mono', monospace; font-size: 0.75rem;">
                                 <strong>BID STATUS:</strong> ${a.bid_status ?? 'NO BID'}
                             </div>
+                            ${a.review_text ? `<div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border-light); font-size: 0.85rem;"><strong>Review:</strong><br/>${escapeHtml(a.review_text).replace(/\\n/g, '<br/>')}</div>` : ''}
                             ${commentsHtml}
                         </div>
                     `;
@@ -494,7 +495,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const settings = await response.json();
                     isAnonymizedCheckbox.checked = settings.is_anonymized;
                     decisionEditingEnabledCheckbox.checked = settings.decision_editing_enabled;
-                    anonymizationPrefixInput.value = settings.anonymization_prefix || 'CAiSE_26_Tech';
+
                 }
             } catch (e) {
                 console.error("Error fetching settings:", e);
@@ -524,7 +525,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         is_anonymized: isAnonymizedCheckbox.checked,
-                        anonymization_prefix: anonymizationPrefixInput.value,
+
                         decision_editing_enabled: decisionEditingEnabledCheckbox.checked
                     })
                 });
@@ -1071,7 +1072,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tr.innerHTML = `
                 <td style="font-family: 'Roboto Mono', monospace; display: flex; align-items: center;">
                     ${escapeHtml(p.external_submission_id)} 
-                    ${p.total_reviews < 3 ? '<span title="At Risk: Less than 3 reviews" style="cursor:help; margin-left: 6px;">⚠️</span>' : ''}
+                    ${p.total_reviews < 3 ? '<span style="color: red; margin-left: 6px; font-size: 0.9em;">⚠️ Less than 3 reviews</span>' : ''}
                 </td>
                 <td>${escapeHtml(p.title)}</td>
                 <td>
@@ -1142,7 +1143,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const bm = parseFloat(r.bidding_match_percentage);
             const bmHtml = bm < 50 ? `<strong class="text-danger">${bm}%</strong>` : `${bm}%`;
             
-            const warningHtml = parseInt(r.total_reviews_completed) === 0 ? '<span title="At Risk: 0 reviews completed" style="cursor:help;">⚠️</span>' : '';
+            const warningHtml = parseInt(r.total_reviews_completed) === 0 ? '<span style="color: red; margin-left: 6px; font-size: 0.9em;">⚠️ 0 reviews completed</span>' : '';
 
             const tr = document.createElement('tr');
             tr.addEventListener('click', () => openReviewerModal(r.id, `${r.first_name} ${r.last_name}`));

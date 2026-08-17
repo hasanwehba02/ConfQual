@@ -10,27 +10,62 @@ async function resolveConferenceId(conferenceId) {
     return result.rows[0]?.id || null;
 }
 
-async function getAnonymizationSettings() {
+async function getAnonymizationSettings(conferenceId = null) {
     try {
-        const res = await client.query('SELECT is_anonymized, anonymization_prefix, decision_editing_enabled FROM settings LIMIT 1');
-        return res.rows[0] || { is_anonymized: false, anonymization_prefix: '', decision_editing_enabled: false };
+        const res = await client.query('SELECT is_anonymized, decision_editing_enabled FROM settings LIMIT 1');
+        const settings = res.rows[0] || { is_anonymized: false, decision_editing_enabled: false };
+        settings.anonymization_prefix = '';
+        
+        if (settings.is_anonymized) {
+            const cId = await resolveConferenceId(conferenceId);
+            if (cId) {
+                const confRes = await client.query('SELECT short_name, name, year FROM conference WHERE id = $1', [cId]);
+                if (confRes.rows.length > 0) {
+                    const c = confRes.rows[0];
+                    const name = c.short_name || c.name;
+                    settings.anonymization_prefix = name ? `${name}_${c.year || ''}`.replace(/_+$/, '').replace(/\s+/g, '_') : '';
+                }
+            }
+        }
+        return settings;
     } catch (e) {
         return { is_anonymized: false, anonymization_prefix: '', decision_editing_enabled: false };
     }
 }
 
 function maskNames(rows, settings, idKey = 'id') {
-    if (!settings.is_anonymized) return rows;
+    const isAnonymized = settings.is_anonymized;
     const prefix = settings.anonymization_prefix ? `${settings.anonymization_prefix}_` : '';
+    
     return rows.map(row => {
         const id = row[idKey];
+        const personId = row.reviewer_id || row.external_person_id || id;
         const masked = { ...row };
-        if (masked.first_name !== undefined) masked.first_name = `${prefix}Reviewer_${id}`;
-        if (masked.reviewer_first_name !== undefined) masked.reviewer_first_name = `${prefix}Reviewer_${id}`;
-        if (masked.last_name !== undefined) masked.last_name = '';
-        if (masked.reviewer_last_name !== undefined) masked.reviewer_last_name = '';
-        if (masked.email !== undefined) masked.email = `${prefix}reviewer_${id}@example.com`;
-        if (masked.reviewer_name !== undefined) masked.reviewer_name = `${prefix}Reviewer_${id} `;
+
+        if (masked.role === 'Sub-reviewer') {
+            if (masked.first_name !== undefined) masked.first_name = `subnom${personId}`;
+            if (masked.last_name !== undefined) masked.last_name = `cognom${personId}`;
+            if (isAnonymized && masked.email !== undefined) masked.email = `subreviewer_${personId}@example.com`;
+        } else if (isAnonymized) {
+            if (masked.first_name !== undefined) masked.first_name = `${prefix}Reviewer_${id}`;
+            if (masked.last_name !== undefined) masked.last_name = '';
+            if (masked.email !== undefined) masked.email = `${prefix}reviewer_${id}@example.com`;
+        }
+
+        if (isAnonymized) {
+            if (masked.reviewer_first_name !== undefined) masked.reviewer_first_name = `${prefix}Reviewer_${id}`;
+            if (masked.reviewer_last_name !== undefined) masked.reviewer_last_name = '';
+            if (masked.reviewer_name !== undefined) masked.reviewer_name = `${prefix}Reviewer_${id} `;
+        }
+        
+        // Handle sub-reviewer in review object
+        if (masked.sub_reviewer_first_name) {
+            const subId = masked.sub_reviewer_person_id || personId;
+            masked.sub_reviewer_first_name = `subnom${subId}`;
+            masked.sub_reviewer_last_name = `cognom${subId}`;
+            if (isAnonymized) masked.sub_reviewer_email = `subreviewer_${subId}@example.com`;
+        }
+        
         return masked;
     });
 }
@@ -69,7 +104,7 @@ async function getConferenceHealth(conferenceId = null) {
 
 async function getReviewerQuality(options = {}) {
     const cid = await resolveConferenceId(options.conferenceId);
-    const settings = await getAnonymizationSettings();
+    const settings = await getAnonymizationSettings(cid);
 
     const query = `
         WITH PaperStats AS (
@@ -81,7 +116,7 @@ async function getReviewerQuality(options = {}) {
         ),
         ReviewerCalibration AS (
             SELECT 
-                r.program_committee_member_id,
+                pcm.id as program_committee_member_id,
                 ROUND(AVG(
                     CASE 
                         WHEN ps.review_count <= 1 THEN r.total_score
@@ -95,9 +130,10 @@ async function getReviewerQuality(options = {}) {
                     END
                 ), 2) as calibration_index
             FROM review r
+            JOIN program_committee_member pcm ON (pcm.id = r.program_committee_member_id OR pcm.external_person_id = r.sub_reviewer_person_id)
             JOIN PaperStats ps ON r.paper_id = ps.paper_id
             WHERE r.is_superseded = false
-            GROUP BY r.program_committee_member_id
+            GROUP BY pcm.id
             HAVING COUNT(r.id) > 1
         ),
         ReviewerBidding AS (
@@ -134,7 +170,7 @@ async function getReviewerQuality(options = {}) {
             rb.bidding_match_percentage,
             rcal.calibration_index
         FROM program_committee_member pcm
-        LEFT JOIN review r ON pcm.id = r.program_committee_member_id AND r.is_superseded = false
+        LEFT JOIN review r ON (pcm.id = r.program_committee_member_id OR pcm.external_person_id = r.sub_reviewer_person_id) AND r.is_superseded = false
         LEFT JOIN ReviewerComments rc ON pcm.id = rc.program_committee_member_id
         LEFT JOIN ReviewerBidding rb ON pcm.id = rb.program_committee_member_id
         LEFT JOIN ReviewerCalibration rcal ON pcm.id = rcal.program_committee_member_id
@@ -152,7 +188,7 @@ async function getReviewerQuality(options = {}) {
 
 async function getSubmissions(options = {}) {
     const cid = await resolveConferenceId(options.conferenceId);
-    const settings = await getAnonymizationSettings();
+    const settings = await getAnonymizationSettings(cid);
 
     const query = `
         SELECT 
@@ -218,7 +254,7 @@ async function getPaperDebates(options = {}) {
 
 async function getExpertiseMismatches(conferenceId = null) {
     const cid = await resolveConferenceId(conferenceId);
-    const settings = await getAnonymizationSettings();
+    const settings = await getAnonymizationSettings(cid);
 
     const query = `
         SELECT 
@@ -248,7 +284,7 @@ async function getExpertiseMismatches(conferenceId = null) {
 
 async function getCOIViolations(conferenceId = null) {
     const cid = await resolveConferenceId(conferenceId);
-    const settings = await getAnonymizationSettings();
+    const settings = await getAnonymizationSettings(cid);
 
     const query = `
         SELECT 
@@ -332,7 +368,7 @@ async function getReviewerDetails(reviewerId) {
     const settings = await getAnonymizationSettings();
 
     const query = `
-        SELECT pcm.id, pcm.first_name, pcm.last_name, pcm.role, pcm.email
+        SELECT pcm.id, pcm.external_person_id, pcm.first_name, pcm.last_name, pcm.role, pcm.email
         FROM program_committee_member pcm
         WHERE pcm.id = $1
     `;
@@ -344,6 +380,7 @@ async function getReviewerDetails(reviewerId) {
     const assignmentsQuery = `
         SELECT p.external_submission_id, p.title, 
                r.total_score as given_score, 
+               r.review_text,
                b.bid as bid_status,
                (
                    SELECT json_agg(c.comment_text)
@@ -356,17 +393,17 @@ async function getReviewerDetails(reviewerId) {
                    WHERE r2.paper_id = p.id AND r2.is_superseded = false
                ) as peer_average
         FROM (
-            SELECT paper_id, program_committee_member_id FROM assignment WHERE program_committee_member_id = $1
+            SELECT paper_id FROM assignment WHERE program_committee_member_id = $1
             UNION
-            SELECT paper_id, program_committee_member_id FROM review WHERE program_committee_member_id = $1 AND is_superseded = false
+            SELECT paper_id FROM review WHERE (program_committee_member_id = $1 OR sub_reviewer_person_id = $2) AND is_superseded = false
             UNION
-            SELECT paper_id, program_committee_member_id FROM comment WHERE program_committee_member_id = $1
+            SELECT paper_id FROM comment WHERE program_committee_member_id = $1
         ) combined
         JOIN paper p ON combined.paper_id = p.id AND p.is_deleted = false
-        LEFT JOIN review r ON combined.paper_id = r.paper_id AND combined.program_committee_member_id = r.program_committee_member_id AND r.is_superseded = false
-        LEFT JOIN bid b ON combined.paper_id = b.paper_id AND combined.program_committee_member_id = b.program_committee_member_id
+        LEFT JOIN review r ON combined.paper_id = r.paper_id AND (r.program_committee_member_id = $1 OR r.sub_reviewer_person_id = $2) AND r.is_superseded = false
+        LEFT JOIN bid b ON combined.paper_id = b.paper_id AND b.program_committee_member_id = $1
     `;
-    const assignmentsRes = await client.query(assignmentsQuery, [reviewer.id]);
+    const assignmentsRes = await client.query(assignmentsQuery, [reviewer.id, reviewer.external_person_id]);
     reviewer.assignments = assignmentsRes.rows;
 
     const bidsQuery = `
@@ -528,7 +565,7 @@ async function getTopPapers(conferenceId = null) {
 async function getTopReviewers(conferenceId = null) {
     const cid = await resolveConferenceId(conferenceId);
     // Best reviewers: most reviews, high word count, absolute calibration index <= 1.5
-    const settings = await getAnonymizationSettings();
+    const settings = await getAnonymizationSettings(cid);
     
     const query = `
         WITH PaperStats AS (
@@ -545,14 +582,15 @@ async function getTopReviewers(conferenceId = null) {
         ),
         ReviewerStats AS (
             SELECT 
-                r.program_committee_member_id as reviewer_id,
+                pcm.id as reviewer_id,
                 COUNT(r.id) as reviews_done,
                 AVG(array_length(regexp_split_to_array(r.review_text, '\\s+'), 1)) as avg_word_count,
                 AVG(r.total_score - a.avg_score) as calibration_index
             FROM review r
+            JOIN program_committee_member pcm ON (pcm.id = r.program_committee_member_id OR pcm.external_person_id = r.sub_reviewer_person_id)
             JOIN AvgScores a ON r.paper_id = a.paper_id
             WHERE r.is_superseded = false
-            GROUP BY r.program_committee_member_id
+            GROUP BY pcm.id
         )
         SELECT 
             pcm.id,
@@ -573,7 +611,7 @@ async function getTopReviewers(conferenceId = null) {
 
 async function getSentimentMismatches(conferenceId = null) {
     const cid = await resolveConferenceId(conferenceId);
-    const settings = await getAnonymizationSettings();
+    const settings = await getAnonymizationSettings(cid);
     const query = `
         SELECT 
             r.id,
