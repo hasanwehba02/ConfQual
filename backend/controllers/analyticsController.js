@@ -53,8 +53,7 @@ async function getAlerts(req, res) {
 async function getPapers(req, res) {
     try {
         const data = await analyticsService.getPapers(req.query);
-        const totalCount = data.length > 0 && data[0].full_count ? parseInt(data[0].full_count) : data.length;
-        res.json({ items: data, totalCount });
+        res.json(data);
     } catch (error) {
         console.error("Error getting papers:", error);
         res.status(500).json({ error: "Internal server error" });
@@ -63,7 +62,7 @@ async function getPapers(req, res) {
 
 async function getLateSubmissions(req, res) {
     try {
-        const data = await analyticsService.getLateSubmissions();
+        const data = await analyticsService.getLateSubmissions(req.query.conferenceId);
         res.json(data);
     } catch (error) {
         console.error("Error getting late submissions:", error);
@@ -74,8 +73,7 @@ async function getLateSubmissions(req, res) {
 async function getReviewers(req, res) {
     try {
         const data = await analyticsService.getReviewers(req.query);
-        const totalCount = data.length > 0 && data[0].full_count ? parseInt(data[0].full_count) : data.length;
-        res.json({ items: data, totalCount });
+        res.json(data);
     } catch (error) {
         console.error("Error getting reviewers:", error);
         res.status(500).json({ error: "Internal server error" });
@@ -85,8 +83,7 @@ async function getReviewers(req, res) {
 async function getSubmissions(req, res) {
     try {
         const data = await analyticsService.getSubmissions(req.query);
-        const totalCount = data.length > 0 && data[0].full_count ? parseInt(data[0].full_count) : data.length;
-        res.json({ items: data, totalCount });
+        res.json(data);
     } catch (error) {
         console.error("Error getting submissions:", error);
         res.status(500).json({ error: "Internal server error" });

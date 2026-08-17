@@ -133,11 +133,11 @@ async function getReviewerQuality(options = {}) {
     if (limitVal === 'ALL') {
         limitClause = 'LIMIT ALL';
     } else {
-        limitClause = `LIMIT ${paramIdx}`;
+        limitClause = `LIMIT $${paramIdx}`;
         values.push(limitVal);
         paramIdx++;
     }
-    const offsetClause = `OFFSET ${paramIdx}`;
+    const offsetClause = `OFFSET $${paramIdx}`;
     values.push(offsetVal);
 
     const query = `
@@ -240,11 +240,11 @@ async function getSubmissions(options = {}) {
     if (limitVal === 'ALL') {
         limitClause = 'LIMIT ALL';
     } else {
-        limitClause = `LIMIT ${paramIdx}`;
+        limitClause = `LIMIT $${paramIdx}`;
         values.push(limitVal);
         paramIdx++;
     }
-    const offsetClause = `OFFSET ${paramIdx}`;
+    const offsetClause = `OFFSET $${paramIdx}`;
     values.push(offsetVal);
 
     const query = `
@@ -321,11 +321,11 @@ async function getPaperDebates(options = {}) {
     if (limitVal === 'ALL') {
         limitClause = 'LIMIT ALL';
     } else {
-        limitClause = `LIMIT ${paramIdx}`;
+        limitClause = `LIMIT $${paramIdx}`;
         values.push(limitVal);
         paramIdx++;
     }
-    const offsetClause = `OFFSET ${paramIdx}`;
+    const offsetClause = `OFFSET $${paramIdx}`;
     values.push(offsetVal);
 
     const query = `
