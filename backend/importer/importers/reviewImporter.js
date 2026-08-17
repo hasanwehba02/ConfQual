@@ -26,6 +26,25 @@ async function importReviewsForSheet(workbook, sheetName, conference, isSupersed
             skipped++;
             continue;
         }
+        
+        // Add sub-reviewer to program committee if they don't exist
+        if (dto.subReviewerPersonId && !pcmMap[dto.subReviewerPersonId]) {
+            const member = {
+                conferenceId: conference.id,
+                externalPersonId: dto.subReviewerPersonId,
+                firstName: dto.subReviewerFirstName || '',
+                lastName: dto.subReviewerLastName || '',
+                email: dto.subReviewerEmail || '',
+                affiliation: '',
+                country: '',
+                role: 'Sub-reviewer'
+            };
+            const savedMember = await programCommitteeRepository.createProgramCommitteeMember(member);
+            if (savedMember) {
+                pcmMap[dto.subReviewerPersonId] = savedMember.id;
+            }
+        }
+
         dto.isSuperseded = isSuperseded;
         dto.sentimentScore = analyticsMath.analyzeReviewSentiment(dto.reviewText);
         dtos.push(dto);
