@@ -175,7 +175,7 @@ async function getLateSubmissions() {
             p.submitted_at,
             c.submission_deadline
         FROM paper p
-        CROSS JOIN conference c
+        JOIN conference c ON p.conference_id = c.id
         WHERE p.submitted_at > c.submission_deadline
         AND p.is_deleted = false
     `;
@@ -352,8 +352,8 @@ async function getSystemAnalytics(prefetched = null) {
     };
 }
 
-async function getPaperDetails(id) {
-    return await analyticsRepository.getPaperDetails(id);
+async function getPaperDetails(id, conferenceId = null) {
+    return await analyticsRepository.getPaperDetails(id, conferenceId);
 }
 
 async function getReviewerDetails(id) {
