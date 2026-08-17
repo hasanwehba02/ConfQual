@@ -7,6 +7,11 @@ async function importProgramCommittee(conference) {
 
     const sheet = workbook.getWorksheet("Program committee");
 
+    if (!sheet) {
+        console.log("No 'Program committee' sheet found. Skipping program committee import.");
+        return;
+    }
+
     let roleIndex = 8; // Default
     const headerRow = sheet.getRow(1);
     headerRow.eachCell((cell, colNumber) => {
