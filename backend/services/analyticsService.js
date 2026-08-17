@@ -161,13 +161,23 @@ async function getPapers(options = {}) {
     if (options.zeroActivity === 'true') {
         papers = papers.filter(p => parseInt(p.total_reviews) === 0 && parseInt(p.total_comments) === 0);
     }
-    return papers;
+    const totalCount = papers.length > 0 ? parseInt(papers[0].full_count) || papers.length : papers.length;
+    return { items: papers, totalCount };
 }
 
 // Late Submissions (After deadline)
-async function getLateSubmissions() {
+async function getLateSubmissions(conferenceId = null) {
     const client = require("../config/database");
     
+    let cid;
+    if (conferenceId) {
+        cid = conferenceId;
+    } else {
+        const r = await client.query('SELECT id FROM conference ORDER BY uploaded_at DESC LIMIT 1');
+        cid = r.rows[0]?.id;
+    }
+    if (!cid) return [];
+
     const query = `
         SELECT 
             p.external_submission_id,
@@ -178,23 +188,31 @@ async function getLateSubmissions() {
         JOIN conference c ON p.conference_id = c.id
         WHERE p.submitted_at > c.submission_deadline
         AND p.is_deleted = false
+        AND p.conference_id = $1
     `;
-    const result = await client.query(query);
+    const result = await client.query(query, [cid]);
     return result.rows;
 }
 
 // 3. Reviewer Explorer
 async function getReviewers(options) {
-    return await getReviewerQuality(options);
+    const reviewers = await getReviewerQuality(options);
+    const totalCount = reviewers.length > 0 ? parseInt(reviewers[0].full_count) || reviewers.length : reviewers.length;
+    return { items: reviewers, totalCount };
 }
 
 // 5. Submissions Timeline
 async function getSubmissions(options = {}) {
-    return await analyticsRepository.getSubmissions(options);
+    const submissions = await analyticsRepository.getSubmissions(options);
+    const totalCount = submissions.length > 0 ? parseInt(submissions[0].full_count) || submissions.length : submissions.length;
+    return { items: submissions, totalCount };
 }
 
 // 4. System Analytics
 async function getQualityScorecard(health, prefetched = null) {
+    if (!health) {
+        health = await getConferenceHealth();
+    }
     const papers = prefetched?.papers || await getPaperDebates();
     const reviewers = prefetched?.reviewers || await getReviewerQuality();
     const mismatches = prefetched?.mismatches || await getExpertiseMismatches();
