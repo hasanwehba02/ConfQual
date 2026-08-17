@@ -44,7 +44,13 @@ Automatically surfaces top-performing entities based on analytics:
 *   Highlights top-rated papers for potential awards based on average score and spread (Best Paper Nominees).
 *   Provides session planning insights by clustering accepted papers by topic.
 
-### 6. Settings & Data Management
+### 6. Conference Comparison & Management
+*   **Multi-Conference Support:** Upload and store multiple conference datasets concurrently. Switch seamlessly between active conferences using the global header dropdown.
+*   **Comparison Dashboard:** A dedicated tab to compare key metrics side-by-side across all uploaded editions (e.g., comparing acceptance rates, total submissions, and average scores between 2023 and 2024).
+*   **Drag & Drop Upload:** Robust file dropping instantly opens the upload drawer to quickly ingest new data.
+*   **Conference Editing & Deletion:** Direct controls to rename conferences or purge specific historical datasets with proper cascading deletes.
+
+### 7. Settings & Data Management
 *   **Anonymization:** A toggle that safely masks names and emails in the dataset while maintaining relational integrity (useful for publishing datasets).
 *   **Chair Permissions:** Toggle to unlock Live Decision Editing.
 *   **Data Purge:** Allows purging the entire dataset to import a new conference dataset from a clean state.
