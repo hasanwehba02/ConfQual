@@ -34,7 +34,7 @@ async function createPaperAuthor(paperId, authorId, authorOrder, isCorresponding
 
 async function bulkCreatePaperAuthors(paperAuthors) {
     const rows = paperAuthors.map(pa => [pa.paperId, pa.authorId, pa.authorOrder, pa.corresponding]);
-    return await bulkInsert('paper_author', ['paper_id', 'author_id', 'author_order', 'corresponding'], rows, '(paper_id, author_id)');
+    return await bulkInsert('paper_author', ['paper_id', 'author_id', 'author_order', 'is_corresponding'], rows, '(paper_id, author_id)');
 }
 
 

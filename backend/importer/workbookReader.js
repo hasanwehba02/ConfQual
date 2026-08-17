@@ -1,17 +1,21 @@
 const ExcelJS = require("exceljs");
 const path = require("path");
 
-let currentFilePath = null;
+const { AsyncLocalStorage } = require("async_hooks");
+const als = new AsyncLocalStorage();
 
 function setFilePath(filePath) {
-    currentFilePath = filePath;
+    const store = als.getStore();
+    if (store) {
+        store.filePath = filePath;
+    }
 }
 
 async function readWorkbook() {
     const workbook = new ExcelJS.Workbook();
     
-    // Fallback for local testing if no path is provided
-    let filePath = currentFilePath;
+    const store = als.getStore();
+    let filePath = store?.filePath;
     if (!filePath) {
         filePath = path.join(
             __dirname,
@@ -29,4 +33,8 @@ async function readWorkbook() {
     return workbook;
 }
 
-module.exports = { readWorkbook, setFilePath };
+function runWithFileContext(filePath, callback) {
+    return als.run({ filePath }, callback);
+}
+
+module.exports = { readWorkbook, setFilePath, runWithFileContext };

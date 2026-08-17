@@ -105,7 +105,7 @@ async function getSystemAnalytics(req, res) {
 
 async function getPaperDetails(req, res) {
     try {
-        const data = await analyticsService.getPaperDetails(req.params.id);
+        const data = await analyticsService.getPaperDetails(req.params.id, req.query.conferenceId);
         if (!data) return res.status(404).json({ error: "Paper not found" });
         res.json(data);
     } catch (error) {

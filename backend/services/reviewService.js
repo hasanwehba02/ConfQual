@@ -1,15 +1,15 @@
 const reviewRepository = require("../repositories/reviewRepository");
-const paperService = require("./paperService");
-const programCommitteeService = require("./programCommitteeService");
+const paperRepository = require("../repositories/paperRepository");
+const programCommitteeRepository = require("../repositories/programCommitteeRepository");
 
 async function createReview(reviewDto) {
-    const paper = await paperService.findByExternalSubmissionId(reviewDto.externalSubmissionId);
+    const paper = await paperRepository.findByExternalSubmissionId(reviewDto.externalSubmissionId);
     if (!paper) return null;
 
     const isSubReviewer = !!reviewDto.subReviewerPersonId;
     const actualReviewerId = isSubReviewer ? reviewDto.subReviewerPersonId : reviewDto.externalPersonId;
     
-    let pcm = await programCommitteeService.findByExternalPersonId(actualReviewerId);
+    let pcm = await programCommitteeRepository.findByExternalPersonId(actualReviewerId);
     if (!pcm) {
         let firstName = 'Unknown';
         let lastName = 'Unknown';
@@ -20,7 +20,6 @@ async function createReview(reviewDto) {
             lastName = (reviewDto.subReviewerLastName || 'Unknown').replace('CognomSubreviewer', 'CogSub');
             email = reviewDto.subReviewerEmail || null;
         } else {
-            // It's the primary member but missing from PC sheet. Parse their name from memberName.
             const nameStr = (reviewDto.memberName || '').trim();
             if (nameStr) {
                 if (nameStr.toLowerCase().startsWith('reviewer')) {
@@ -35,8 +34,7 @@ async function createReview(reviewDto) {
             }
         }
 
-        // Auto-create missing reviewer
-        pcm = await programCommitteeService.createProgramCommitteeMember({
+        pcm = await programCommitteeRepository.createProgramCommitteeMember({
             conferenceId: paper.conference_id,
             externalPersonId: actualReviewerId,
             firstName: firstName,
