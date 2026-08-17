@@ -7,6 +7,11 @@ async function importSubmissions(conference) {
 
     const submissionsSheet = workbook.getWorksheet("Submissions");
 
+    if (!submissionsSheet) {
+        console.log("No 'Submissions' sheet found. Skipping submissions import.");
+        return;
+    }
+
     let imported = 0;
     let skipped = 0;
 
