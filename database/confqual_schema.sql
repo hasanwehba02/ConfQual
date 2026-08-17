@@ -97,6 +97,7 @@ CREATE TABLE program_committee_member_topic (
     CONSTRAINT fk_pcmt_topic
         FOREIGN KEY (topic_id)
         REFERENCES topic(id)
+        ON DELETE CASCADE
 );
 
 
@@ -115,6 +116,7 @@ CREATE TABLE paper_topic (
     CONSTRAINT fk_pt_topic
         FOREIGN KEY (topic_id)
         REFERENCES topic(id)
+        ON DELETE CASCADE
 );
 
 
@@ -132,7 +134,8 @@ CREATE TABLE assignment (
 
     CONSTRAINT fk_assignment_pcm
         FOREIGN KEY (program_committee_member_id)
-        REFERENCES program_committee_member(id),
+        REFERENCES program_committee_member(id)
+        ON DELETE CASCADE,
 
     CONSTRAINT uq_assignment
         UNIQUE (paper_id, program_committee_member_id)
@@ -155,7 +158,8 @@ CREATE TABLE bid (
 
     CONSTRAINT fk_bid_pcm
         FOREIGN KEY (program_committee_member_id)
-        REFERENCES program_committee_member(id),
+        REFERENCES program_committee_member(id)
+        ON DELETE CASCADE,
 
     CONSTRAINT uq_bid
         UNIQUE (paper_id, program_committee_member_id)
@@ -176,7 +180,8 @@ CREATE TABLE conflict (
 
     CONSTRAINT fk_conflict_pcm
         FOREIGN KEY (program_committee_member_id)
-        REFERENCES program_committee_member(id),
+        REFERENCES program_committee_member(id)
+        ON DELETE CASCADE,
 
     CONSTRAINT uq_conflict
         UNIQUE (paper_id, program_committee_member_id)
@@ -226,6 +231,7 @@ CREATE TABLE review (
     CONSTRAINT fk_review_pcm
         FOREIGN KEY (program_committee_member_id)
         REFERENCES program_committee_member(id)
+        ON DELETE CASCADE
 );
 
 
@@ -250,6 +256,7 @@ CREATE TABLE comment (
     CONSTRAINT fk_comment_pcm
         FOREIGN KEY (program_committee_member_id)
         REFERENCES program_committee_member(id)
+        ON DELETE CASCADE
 );
 
 
@@ -275,7 +282,8 @@ CREATE TABLE meta_review (
 
     CONSTRAINT fk_meta_review_pcm
         FOREIGN KEY (program_committee_member_id)
-        REFERENCES program_committee_member(id),
+        REFERENCES program_committee_member(id)
+        ON DELETE CASCADE,
 
     CONSTRAINT uq_meta_review
         UNIQUE (paper_id)

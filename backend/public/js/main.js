@@ -253,43 +253,6 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             
             if (paper.reviews && paper.reviews.length > 0) {
-                // Same fuzzy logic as backend
-                const stopWords = new Set(['and', 'the', 'for', 'with', 'from', 'based', 'system', 'systems', 'science', 'engineering']);
-                const extractWords = (str) => {
-                    if (!str) return [];
-                    return str.toLowerCase()
-                              .replace(/[^a-z0-9]/g, ' ')
-                              .split(/\s+/)
-                              .filter(w => w.length > 2 && !stopWords.has(w));
-                };
-
-                const checkMismatch = (pTopics, rTopics) => {
-                    if (!pTopics || !rTopics) return false; // If either has no topics, it's not flagged as mismatch by backend
-                    
-                    // Exact topic check
-                    const pArr = pTopics.split(', ').map(t => t.trim().toLowerCase());
-                    const rArr = rTopics.split(', ').map(t => t.trim().toLowerCase());
-                    if (pArr.some(pt => rArr.includes(pt))) return false;
-                    
-                    // Fuzzy check
-                    const pWords = extractWords(pTopics);
-                    const rWords = extractWords(rTopics);
-                    const hasOverlap = pWords.some(pw => rWords.includes(pw));
-                    return !hasOverlap;
-                };
-
-                // Add isMismatch flag to each review
-                paper.reviews.forEach(r => {
-                    r.isMismatch = checkMismatch(paper.topics, r.topics);
-                });
-
-                // Sort reviews so mismatches appear first
-                paper.reviews.sort((a, b) => {
-                    if (a.isMismatch && !b.isMismatch) return -1;
-                    if (!a.isMismatch && b.isMismatch) return 1;
-                    return 0;
-                });
-
                 paper.reviews.forEach(r => {
                     const mismatchBadge = r.isMismatch 
                         ? `<span style="background: #e63946; color: white; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 8px;">MISMATCH</span>` 
@@ -1267,7 +1230,6 @@ document.addEventListener('DOMContentLoaded', () => {
         Chart.defaults.font.family = "'Roboto Mono', monospace";
         Chart.defaults.color = '#000000';
 
-        if (reviewerChartInstance) reviewerChartInstance.destroy();
         const ctxPie = document.getElementById('reviewerChart').getContext('2d');
         const mainReviewers = parseInt(analytics.health.total_reviewers) - parseInt(analytics.health.total_sub_reviewers);
         
