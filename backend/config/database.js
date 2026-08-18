@@ -4,12 +4,9 @@ const { Pool } = require("pg");
 const { AsyncLocalStorage } = require("async_hooks");
 
 let connStr = process.env.DATABASE_URL;
-if (connStr && !connStr.includes('uselibpqcompat')) {
-    connStr += (connStr.includes('?') ? '&' : '?') + 'uselibpqcompat=true';
-}
 
 const dbConfig = connStr
-    ? { 
+    ? {
         connectionString: connStr,
         ssl: { rejectUnauthorized: false },
         max: 20
@@ -69,7 +66,7 @@ const clientProxy = new Proxy(pool, {
                 }
             };
         }
-        
+
         // Pass through everything else (like .connect(), .end(), etc)
         const value = Reflect.get(target, prop, receiver);
         return typeof value === 'function' ? value.bind(target) : value;
