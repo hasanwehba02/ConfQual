@@ -17,9 +17,6 @@ async function runDiagnostics() {
 
     // 2. Try Connecting
     let options = { connectionString: connStr };
-    if (!connStr.includes('uselibpqcompat')) {
-        options.connectionString += (connStr.includes('?') ? '&' : '?') + 'uselibpqcompat=true';
-    }
     options.ssl = { rejectUnauthorized: false };
 
     console.log("\n⏳ Attempting to connect to the database...");
