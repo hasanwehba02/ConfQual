@@ -116,10 +116,14 @@ No new routes. Existing endpoints return the new fields:
   <option value="adjusted_score_asc">Adj. Score (Low to High)</option>
   ```
 
+**`backend/public/js/renderers.js`:**
+
+- Add `getBiasBadgeClass(biasLabel)` and `getBiasBadgeColor(biasLabel)` helpers following the existing badge-color conventions (green = calibrated, orange = lenient/strict, red = extreme; gray "—" when null).
+
 **`backend/public/js/main.js`:**
 
 - Papers table: new `<td>` for Adj. Avg with `+`/`-` formatting and a tooltip "Bias-corrected average (z-score normalized per reviewer)". Subtle highlight when `|adjusted − average| ≥ 0.5`.
-- Reviewer Explorer: new `<td>` for the Bias column with colored badge (green = calibrated, orange = lenient/strict, red = extreme; "—" when null).
+- Reviewer Explorer: new `<td>` for the Bias column using the `getBiasBadgeClass` helper from `renderers.js` (green = calibrated, orange = lenient/strict, red = extreme; "—" when null).
 - The existing sort parser (`substring` on last underscore) already converts `adjusted_score_desc` → `sortBy=adjusted_score&sortOrder=DESC`.
 
 ### 6. Tests — `backend/tests/scoreNormalization.test.js` (`node:test`)
