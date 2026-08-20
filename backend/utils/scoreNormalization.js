@@ -41,6 +41,7 @@ function computeReviewerStats(reviews) {
  */
 function applyNormalization(reviews, reviewerStats, confStats) {
     return reviews.map((r) => {
+        if (r.totalScore == null) return null;
         const st = reviewerStats.get(r.reviewerId);
         if (st && st.std > 0) {
             const z = (r.totalScore - st.mean) / st.std;

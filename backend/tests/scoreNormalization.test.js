@@ -79,6 +79,18 @@ test('applyNormalization handles negative scores correctly', () => {
     assert.deepStrictEqual(adjusted, [0, 1, 2]);
 });
 
+test('applyNormalization passes null scores through as null', () => {
+    const reviews = [
+        { reviewerId: 1, totalScore: 1 },
+        { reviewerId: 1, totalScore: 2 },
+        { reviewerId: 1, totalScore: 3 },
+        { reviewerId: 1, totalScore: null }
+    ];
+    const stats = computeReviewerStats(reviews);
+    const adjusted = applyNormalization(reviews, stats, { mean: 0, std: 2 });
+    assert.deepStrictEqual(adjusted, [-2, 0, 2, null]);
+});
+
 test('applyNormalization yields conf_mean for all when conf_std is zero (no NaN/Infinity)', () => {
     const reviews = [
         { reviewerId: 1, totalScore: 1 },
