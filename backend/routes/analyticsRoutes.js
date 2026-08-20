@@ -27,6 +27,7 @@ router.get("/late-submissions", analyticsController.getLateSubmissions);
 router.get("/papers/:id", analyticsController.getPaperDetails);
 router.put("/papers/:id/decision", analyticsController.updatePaperDecision);
 router.get("/reviewers/:id", analyticsController.getReviewerDetails);
+router.get("/reviewers/:id/report", analyticsController.getReviewerReport);
 router.post("/reset", analyticsController.resetDb);
 
 router.post("/process-conference", upload.single('excelFile'), analyticsController.processUpload);
