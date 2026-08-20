@@ -328,8 +328,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const rev = await res.json();
             
             let html = `
-                <p style="font-family: 'Roboto Mono', monospace; font-size: 0.85rem; margin-bottom: 0.5rem;"><strong>ROLE:</strong> ${escapeHtml(rev.role)}</p>
-                <p style="font-family: 'Roboto Mono', monospace; font-size: 0.85rem; margin-bottom: 1.5rem;"><strong>EMAIL:</strong> ${escapeHtml(rev.email) || 'N/A'}</p>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-light); flex-wrap: wrap; gap: 0.75rem;">
+                    <div>
+                        <p style="font-family: 'Roboto Mono', monospace; font-size: 0.85rem; margin-bottom: 0.25rem;"><strong>ROLE:</strong> ${escapeHtml(rev.role)}</p>
+                        <p style="font-family: 'Roboto Mono', monospace; font-size: 0.85rem; margin: 0;"><strong>EMAIL:</strong> ${escapeHtml(rev.email) || 'N/A'}</p>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                        <label style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; cursor: pointer; user-select: none; color: var(--text-muted);">
+                            <input type="checkbox" id="report-include-text" style="cursor: pointer;">
+                            <span>Include review text</span>
+                        </label>
+                        <button id="export-pdf-btn" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
+                            <i class="ph ph-file-pdf"></i> Export PDF
+                        </button>
+                    </div>
+                </div>
                 
                 <h3>PAPER ASSIGNMENTS (${rev.assignments ? rev.assignments.length : 0})</h3>
                 <div class="detail-list">
@@ -363,7 +376,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <div class="detail-text" style="font-family: 'Roboto Mono', monospace; font-size: 0.75rem;">
                                 <strong>BID STATUS:</strong> ${a.bid_status ?? 'NO BID'}
                             </div>
-                            ${a.review_text ? `<div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border-light); font-size: 0.85rem;"><strong>Review:</strong><br/>${escapeHtml(a.review_text).replace(/\\n/g, '<br/>')}</div>` : ''}
+                            ${a.review_text ? `<div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border-light); font-size: 0.85rem;"><strong>Review:</strong><br/>${escapeHtml(a.review_text).replace(/\n/g, '<br/>')}</div>` : ''}
                             ${commentsHtml}
                         </div>
                     `;
@@ -405,6 +418,46 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             html += '</div>';
             drawerBody.innerHTML = html;
+
+            const exportBtn = drawerBody.querySelector('#export-pdf-btn');
+            const includeTextCb = drawerBody.querySelector('#report-include-text');
+            if (exportBtn) {
+                exportBtn.addEventListener('click', async () => {
+                    exportBtn.disabled = true;
+                    const origHtml = exportBtn.innerHTML;
+                    exportBtn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Exporting...';
+                    try {
+                        const inc = includeTextCb && includeTextCb.checked ? '1' : '';
+                        const reportRes = await fetch(`/api/analytics/reviewers/${reviewerId}/report?includeReviewText=${inc}`);
+                        if (!reportRes.ok) {
+                            throw new Error('Failed to generate PDF');
+                        }
+                        const blob = await reportRes.blob();
+                        let filename = `Reviewer_${reviewerId}_report.pdf`;
+                        const disposition = reportRes.headers.get('Content-Disposition');
+                        if (disposition && disposition.includes('filename=')) {
+                            const match = disposition.match(/filename="?([^";]+)"?/);
+                            if (match && match[1]) {
+                                filename = match[1];
+                            }
+                        }
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        URL.revokeObjectURL(url);
+                    } catch (err) {
+                        console.error('Error exporting PDF report:', err);
+                        alert('Failed to export PDF report. Please try again.');
+                    } finally {
+                        exportBtn.disabled = false;
+                        exportBtn.innerHTML = origHtml;
+                    }
+                });
+            }
         } catch (error) {
             drawerBody.innerHTML = '<p class="text-danger">Failed to load reviewer details.</p>';
         }
