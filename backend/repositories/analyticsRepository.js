@@ -323,7 +323,7 @@ async function getPaperDebates(options = {}) {
         whereExtra = `AND MAX(p.decision_category) = 'no decision'`;
     }
 
-    const { clause: orderClause } = buildOrderBy(options.sortBy, options.sortOrder, 'score_spread DESC NULLS LAST, total_comments DESC');
+    const { clause: orderClause } = buildOrderBy(options.sortBy, options.sortOrder, 'external_submission_id DESC NULLS LAST');
 
     const limitVal = parseInt(options.limit) || 'ALL';
     const offsetVal = parseInt(options.offset) || 0;
