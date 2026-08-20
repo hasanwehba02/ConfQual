@@ -7,12 +7,20 @@ const paperAuthorRepository = require("../../repositories/paperAuthorRepository"
 
 async function importAuthors(conference) {
     const workbook = await readWorkbook();
-    const authorsSheet = workbook.getWorksheet("Authors");
-
-    if (!authorsSheet) {
+    const candidateSheets = ["Authors", "authors", "Author", "author", "Authors sheet"];
+    const sheetName = candidateSheets.find(name => workbook.getWorksheet(name));
+    if (!sheetName) {
         console.log("No 'Authors' sheet found. Skipping author import.");
         return;
     }
+    const authorsSheet = workbook.getWorksheet(sheetName);
+
+    const headerMap = {};
+    authorsSheet.getRow(1).eachCell((cell, colNumber) => {
+        if (cell.value) {
+            headerMap[String(cell.value).trim().toLowerCase()] = colNumber;
+        }
+    });
 
     let importedAuthors = 0;
     let importedRelationships = 0;
@@ -21,10 +29,13 @@ async function importAuthors(conference) {
     let authorOrder = 1;
     let previousSubmissionId = null;
 
+    const subCol = headerMap['submission #'] || 1;
+    const corrCol = headerMap['corresponding?'] || headerMap['corresponding'] || 8;
+
     const dtos = [];
     for (let i = 2; i <= authorsSheet.rowCount; i++) {
         const row = authorsSheet.getRow(i);
-        const submissionId = row.getCell(1).value;
+        const submissionId = row.getCell(subCol).value;
 
         if (!submissionId) {
             skipped++;
@@ -36,10 +47,11 @@ async function importAuthors(conference) {
             previousSubmissionId = submissionId;
         }
 
-        const author = mapAuthor(row);
+        const author = mapAuthor(row, headerMap);
         author.externalSubmissionId = submissionId;
         author.authorOrder = authorOrder;
-        author.corresponding = row.getCell(8).value === "✔";
+        const corrVal = row.getCell(corrCol).value;
+        author.corresponding = corrVal === "✔" || corrVal === "yes" || corrVal === true;
         
         dtos.push(author);
         authorOrder++;

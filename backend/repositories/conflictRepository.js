@@ -1,4 +1,5 @@
 const client = require("../config/database");
+const bulkInsert = require("../utils/bulkInsert");
 
 async function createConflict(conflictData) {
     const query = `
@@ -26,32 +27,17 @@ async function createConflict(conflictData) {
     return result.rows[0];
 }
 
+async function bulkCreateConflicts(conflicts) {
+    const rows = conflicts.map(c => [c.paperId, c.programCommitteeMemberId]);
+    return await bulkInsert('conflict', ['paper_id', 'program_committee_member_id'], rows, '(paper_id, program_committee_member_id)');
+}
+
 async function batchCreateConflicts(conflicts) {
-    if (conflicts.length === 0) return [];
-    
-    let query = `
-        INSERT INTO conflict (
-            paper_id,
-            program_committee_member_id
-        ) VALUES 
-    `;
-    
-    const values = [];
-    const valueStrings = [];
-    let idx = 1;
-    
-    for (const c of conflicts) {
-        valueStrings.push(`($${idx}, $${idx+1})`);
-        values.push(c.paperId, c.programCommitteeMemberId);
-        idx += 2;
-    }
-    
-    query += valueStrings.join(', ') + ' ON CONFLICT (paper_id, program_committee_member_id) DO NOTHING RETURNING *;';
-    const result = await client.query(query, values);
-    return result.rows;
+    return await bulkCreateConflicts(conflicts);
 }
 
 module.exports = {
     createConflict,
+    bulkCreateConflicts,
     batchCreateConflicts
 };
