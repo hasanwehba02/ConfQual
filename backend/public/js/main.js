@@ -1,6 +1,21 @@
 import { fetchDashboardData, fetchSettings, saveSettings, logError, importData, fetchPapers, fetchReviewers, fetchSubmissions, fetchConferences, fetchComparison, deleteConference, updateConference, uploadConference } from './api.js';
 import { escapeHtml, exportToCsv } from './utils.js';
-import { getScoreBadgeClass, getScoreBadgeColor } from './renderers.js';
+import { getScoreBadgeClass, getScoreBadgeColor, getBiasBadgeClass, getBiasBadgeColor } from './renderers.js';
+
+function formatAdjScoreCell(p) {
+    const avg = parseFloat(p.average_score);
+    const adj = p.adjusted_score !== null && p.adjusted_score !== undefined ? parseFloat(p.adjusted_score) : null;
+    if (adj === null) return '<span class="text-muted">-</span>';
+    if (!isNaN(avg) && Math.abs(adj - avg) >= 0.5) {
+        return `<strong style="color: #f59e0b;" title="Bias-corrected average (z-score normalized per reviewer)">${adj.toFixed(2)}</strong>`;
+    }
+    return adj.toFixed(2);
+}
+
+function formatBiasCell(r) {
+    if (!r.bias_label) return '<span class="text-muted">-</span>';
+    return `<span class="badge ${getBiasBadgeClass(r.bias_label)}">${r.bias_label}</span>`;
+}
 
 window.onerror = function(message, source, lineno, colno, error) {
     fetch('/api/analytics/log', {
@@ -1056,6 +1071,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                     </div>
                 </td>
+                <td style="font-family: 'Roboto Mono', monospace;">${formatAdjScoreCell(p)}</td>
                 <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(p.total_comments) || '0'}</td>
             `;
             const select = tr.querySelector('select');
@@ -1126,6 +1142,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                     </div>
                 </td>
+                <td class="text-center">${formatBiasCell(r)}</td>
                 <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.total_comments) || '0'}</td>
             `;
             tbody.appendChild(tr);
