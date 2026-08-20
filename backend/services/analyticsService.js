@@ -195,9 +195,7 @@ async function getLateSubmissions(conferenceId = null) {
     return result.rows;
 }
 
-// 3. Reviewer Explorer
-async function getReviewers(options) {
-    const reviewers = await getReviewerQuality(options);
+function enrichReviewerBias(reviewers) {
     for (const reviewer of reviewers) {
         reviewer.bias_label = scoreNormalization.deriveBiasLabel(
             reviewer.avg_score_given,
@@ -205,6 +203,13 @@ async function getReviewers(options) {
             reviewer.total_reviews_completed
         );
     }
+    return reviewers;
+}
+
+// 3. Reviewer Explorer
+async function getReviewers(options) {
+    const reviewers = await getReviewerQuality(options);
+    enrichReviewerBias(reviewers);
     const totalCount = reviewers.length > 0 ? parseInt(reviewers[0].full_count) || reviewers.length : reviewers.length;
     return { items: reviewers, totalCount };
 }
@@ -368,7 +373,7 @@ async function getSystemAnalytics(prefetched = null) {
         health,
         mismatches: prefetched?.mismatches || await getExpertiseMismatches(),
         debates: prefetched?.papers || await getPaperDebates(),
-        reviewers: prefetched?.reviewers || await getReviewerQuality(),
+        reviewers: enrichReviewerBias(prefetched?.reviewers || await getReviewerQuality()),
         coiViolations: prefetched?.coiViolations || await analyticsRepository.getCOIViolations(),
         scorecard,
         distributions,
@@ -485,6 +490,7 @@ async function getDashboardData(conferenceId = null) {
     const health = await getConferenceHealth(cid);
     const papers = await getPaperDebates({ conferenceId: cid });
     const reviewers = await getReviewerQuality({ conferenceId: cid });
+    enrichReviewerBias(reviewers);
     const mismatches = await getExpertiseMismatches(cid);
     const coiViolations = await analyticsRepository.getCOIViolations(cid);
     const missingMetareviews = await analyticsRepository.getMissingMetareviews(cid);
