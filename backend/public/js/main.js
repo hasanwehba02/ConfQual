@@ -662,7 +662,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Fetch specific datasets for sorting/filtering ---
     // Conference-aware fetch wrappers
     window.fetchPapers = async function() {
-        const sortVal = document.getElementById('paper-sort')?.value || 'score_spread_desc';
+        const sortVal = document.getElementById('paper-sort')?.value || 'external_submission_id_desc';
         const lastUnderscore = sortVal.lastIndexOf('_');
         const sortBy = sortVal.substring(0, lastUnderscore);
         const sortOrder = sortVal.substring(lastUnderscore + 1).toUpperCase();
