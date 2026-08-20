@@ -5,8 +5,10 @@ const paperRepository = require("../../repositories/paperRepository");
 const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
 
 async function importPcTopics(workbook, conference) {
-    const sheet = workbook.getWorksheet("PC topics");
-    if (!sheet) return;
+    const candidateSheets = ["PC topics", "PC Topics", "pc topics", "pc_topics", "Reviewer topics"];
+    const sheetName = candidateSheets.find(name => workbook.getWorksheet(name));
+    if (!sheetName) return;
+    const sheet = workbook.getWorksheet(sheetName);
 
     let imported = 0;
     let skipped = 0;
@@ -31,12 +33,19 @@ async function importPcTopics(workbook, conference) {
         dtos.push(dto);
     }
 
-    const chunkSize = 30;
+    const uniqueTopics = [...new Set(dtos.map(d => d.topicName))];
+    const topicMap = {};
+    for (const name of uniqueTopics) {
+        topicMap[name] = await topicRepository.ensureTopicExists(name);
+    }
+
+    for (const dto of dtos) {
+        dto.topicId = topicMap[dto.topicName];
+    }
+
+    const chunkSize = 200;
     for (let i = 0; i < dtos.length; i += chunkSize) {
         const chunk = dtos.slice(i, i + chunkSize);
-        for (const dto of chunk) {
-            dto.topicId = await topicRepository.ensureTopicExists(dto.topicName);
-        }
         imported += await topicRepository.bulkCreatePcTopics(chunk);
     }
 
@@ -45,8 +54,10 @@ async function importPcTopics(workbook, conference) {
 }
 
 async function importSubmissionTopics(workbook, conference) {
-    const sheet = workbook.getWorksheet("Submission topics");
-    if (!sheet) return;
+    const candidateSheets = ["Submission topics", "Submission Topics", "submission topics", "submission_topics", "Paper topics"];
+    const sheetName = candidateSheets.find(name => workbook.getWorksheet(name));
+    if (!sheetName) return;
+    const sheet = workbook.getWorksheet(sheetName);
 
     let imported = 0;
     let skipped = 0;
@@ -71,12 +82,19 @@ async function importSubmissionTopics(workbook, conference) {
         dtos.push(dto);
     }
 
-    const chunkSize = 30;
+    const uniqueTopics = [...new Set(dtos.map(d => d.topicName))];
+    const topicMap = {};
+    for (const name of uniqueTopics) {
+        topicMap[name] = await topicRepository.ensureTopicExists(name);
+    }
+
+    for (const dto of dtos) {
+        dto.topicId = topicMap[dto.topicName];
+    }
+
+    const chunkSize = 200;
     for (let i = 0; i < dtos.length; i += chunkSize) {
         const chunk = dtos.slice(i, i + chunkSize);
-        for (const dto of chunk) {
-            dto.topicId = await topicRepository.ensureTopicExists(dto.topicName);
-        }
         imported += await topicRepository.bulkCreatePaperTopics(chunk);
     }
 

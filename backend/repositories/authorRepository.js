@@ -48,29 +48,24 @@ async function findByExternalPersonId(externalPersonId) {
     return result.rows[0];
 }
 
-
-// getIdMap: returns {externalPersonId -> authorId} scoped to authors
-// that have papers in the given conference
-async function getIdMap(conferenceId) {
+// getIdMap: returns {externalPersonId -> authorId}
+async function getIdMap(_conferenceId) {
     const query = `
-        SELECT DISTINCT a.external_person_id, a.id
-        FROM author a
-        JOIN paper_author pa ON pa.author_id = a.id
-        JOIN paper p ON p.id = pa.paper_id
-        WHERE p.conference_id = $1
+        SELECT external_person_id, id
+        FROM author
     `;
-    const result = await client.query(query, [conferenceId]);
+    const result = await client.query(query);
     const map = {};
     for (const row of result.rows) {
         map[row.external_person_id] = row.id;
     }
     return map;
 }
+
 async function bulkCreateAuthors(authors) {
     const rows = authors.map(a => [a.externalPersonId, a.firstName, a.lastName, a.email, a.country, a.affiliation, a.webPage || null]);
     return await bulkInsert('author', ['external_person_id', 'first_name', 'last_name', 'email', 'country', 'affiliation', 'web_page'], rows, null);
 }
-
 
 module.exports = {
     getIdMap,
