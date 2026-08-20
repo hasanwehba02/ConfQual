@@ -188,6 +188,12 @@ async function getReviewerQuality(options = {}) {
             SELECT program_committee_member_id, COUNT(*) as total_comments
             FROM comment
             GROUP BY program_committee_member_id
+        ),
+        ConferenceStats AS (
+            SELECT AVG(r.total_score) AS conf_mean, STDDEV(r.total_score) AS conf_std
+            FROM review r
+            JOIN paper p ON r.paper_id = p.id
+            WHERE r.is_superseded = false AND p.is_deleted = false AND p.conference_id = $1
         )
         SELECT 
             COUNT(*) OVER() as full_count,
@@ -199,15 +205,19 @@ async function getReviewerQuality(options = {}) {
             COUNT(DISTINCT r.id) as total_reviews_completed,
             ROUND(AVG(cardinality(regexp_split_to_array(trim(r.review_text), '\\s+'))), 0) as avg_word_count,
             ROUND(AVG(r.total_score), 2) as avg_score_given,
+            ROUND(STDDEV(r.total_score), 2) as reviewer_std,
             rcal.peers_avg,
             COALESCE(rc.total_comments, 0) as total_comments,
             rb.bidding_match_percentage,
-            rcal.calibration_index
+            rcal.calibration_index,
+            MAX(cs.conf_mean) AS conf_mean,
+            MAX(cs.conf_std) AS conf_std
         FROM program_committee_member pcm
         LEFT JOIN review r ON (pcm.id = r.program_committee_member_id OR pcm.external_person_id = r.sub_reviewer_person_id) AND r.is_superseded = false
         LEFT JOIN ReviewerComments rc ON pcm.id = rc.program_committee_member_id
         LEFT JOIN ReviewerBidding rb ON pcm.id = rb.program_committee_member_id
         LEFT JOIN ReviewerCalibration rcal ON pcm.id = rcal.program_committee_member_id
+        CROSS JOIN ConferenceStats cs
         WHERE pcm.conference_id = $1
         ${filterClause}
         GROUP BY pcm.id, pcm.external_person_id, pcm.first_name, pcm.last_name, pcm.role, rc.total_comments, rb.bidding_match_percentage, rcal.peers_avg, rcal.calibration_index
