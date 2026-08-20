@@ -163,3 +163,39 @@ test('buildReportData returns null when reviewer not found', async () => {
         repo.getReviewerDetails = origDetails;
     }
 });
+
+test('buildReportFilename creates sanitized filename from reviewer name (anonymized and regular)', () => {
+    // Regular name
+    assert.strictEqual(
+        reportService.buildReportFilename({ first_name: 'Jane', last_name: 'Doe' }),
+        'Jane_Doe_report.pdf'
+    );
+    // Anonymized name (with or without prefix)
+    assert.strictEqual(
+        reportService.buildReportFilename({ first_name: 'Reviewer_14', last_name: '' }),
+        'Reviewer_14_report.pdf'
+    );
+    assert.strictEqual(
+        reportService.buildReportFilename({ first_name: 'conf2024_Reviewer_14', last_name: '' }),
+        'conf2024_Reviewer_14_report.pdf'
+    );
+    // Sub-reviewer anonymized name
+    assert.strictEqual(
+        reportService.buildReportFilename({ first_name: 'subnom42', last_name: 'cognom42' }),
+        'subnom42_cognom42_report.pdf'
+    );
+    // Special characters / whitespace
+    assert.strictEqual(
+        reportService.buildReportFilename({ first_name: ' Jean-Luc / ', last_name: 'Picard ' }),
+        'Jean-Luc_Picard_report.pdf'
+    );
+    // Fallback if empty names
+    assert.strictEqual(
+        reportService.buildReportFilename({ first_name: '', last_name: '', id: 8 }),
+        'Reviewer_8_report.pdf'
+    );
+    assert.strictEqual(
+        reportService.buildReportFilename(null, '99'),
+        'Reviewer_99_report.pdf'
+    );
+});

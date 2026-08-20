@@ -433,7 +433,15 @@ document.addEventListener('DOMContentLoaded', () => {
                             throw new Error('Failed to generate PDF');
                         }
                         const blob = await reportRes.blob();
-                        let filename = `Reviewer_${reviewerId}_report.pdf`;
+                        const fallbackName = [rev.first_name, rev.last_name]
+                            .filter(Boolean)
+                            .map(s => String(s).trim())
+                            .filter(Boolean)
+                            .join("_")
+                            .replace(/\s+/g, "_")
+                            .replace(/[^a-zA-Z0-9_-]/g, "")
+                            .replace(/_+/g, "_");
+                        let filename = `${fallbackName || `Reviewer_${reviewerId}`}_report.pdf`;
                         const disposition = reportRes.headers.get('Content-Disposition');
                         if (disposition && disposition.includes('filename=')) {
                             const match = disposition.match(/filename="?([^";]+)"?/);

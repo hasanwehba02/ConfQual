@@ -19,6 +19,20 @@ function fmtNum(value, fallback = '-') {
     return Number.isNaN(n) ? fallback : n.toFixed(2);
 }
 
+function buildReportFilename(reviewer, fallbackId = 'report') {
+    if (!reviewer) return `Reviewer_${fallbackId}_report.pdf`;
+    const nameParts = [reviewer.first_name, reviewer.last_name]
+        .filter(Boolean)
+        .map(s => String(s).trim())
+        .filter(Boolean);
+    const rawName = nameParts.length > 0 ? nameParts.join('_') : `Reviewer_${reviewer.id || fallbackId}`;
+    const safeName = rawName
+        .replace(/\s+/g, '_')
+        .replace(/[^a-zA-Z0-9_-]/g, '')
+        .replace(/_+/g, '_');
+    return `${safeName || `Reviewer_${fallbackId}`}_report.pdf`;
+}
+
 async function buildReportData(reviewerId) {
     const reviewer = await analyticsRepository.getReviewerDetails(reviewerId);
     if (!reviewer) return null;
@@ -126,6 +140,12 @@ function buildReportHtml(data, { includeReviewText = false } = {}) {
         bidsHtml = '<h2>Submitted Bids</h2><p class="muted">No bids found.</p>';
     }
 
+    const fullName = [reviewer.first_name, reviewer.last_name]
+        .filter(Boolean)
+        .map(s => String(s).trim())
+        .filter(Boolean)
+        .join(' ') || `Reviewer #${reviewer.id}`;
+
     return `<!DOCTYPE html>
 <html>
 <head>
@@ -149,7 +169,7 @@ function buildReportHtml(data, { includeReviewText = false } = {}) {
         table { width: 100%; border-collapse: collapse; font-size: 12px; }
         th { text-align: left; padding: 6px 8px; border-bottom: 2px solid #e5e7eb; color: #4b5563; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
         td { padding: 6px 8px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
-        .review-text { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e5e7eb; font-size: 11px; color: #374151; white-space: normal; }
+        .review-text { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e5e7eb; font-size: 11px; color: #374151; white-space: pre-wrap; }
         .comments { margin-top: 4px; }
         .comment { font-size: 11px; font-style: italic; color: #6b7280; }
         .muted { color: #6b7280; font-size: 12px; }
@@ -157,7 +177,7 @@ function buildReportHtml(data, { includeReviewText = false } = {}) {
     </style>
 </head>
 <body>
-    <h1>${escapeHtml(`${reviewer.first_name} ${reviewer.last_name}`)}</h1>
+    <h1>${escapeHtml(fullName)}</h1>
     <div class="meta">
         ${fmt(reviewer.role)}${reviewer.email ? ` · ${escapeHtml(reviewer.email)}` : ''} · Generated ${escapeHtml(generated)}
     </div>
@@ -172,5 +192,6 @@ function buildReportHtml(data, { includeReviewText = false } = {}) {
 module.exports = {
     buildReportData,
     buildReportHtml,
+    buildReportFilename,
     escapeHtml
 };
