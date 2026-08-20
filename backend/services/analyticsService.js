@@ -1,6 +1,7 @@
 const analyticsRepository = require("../repositories/analyticsRepository");
 const analyticsMath = require("../utils/analyticsMath");
 const topicMatcher = require("../utils/topicMatcher");
+const scoreNormalization = require("../utils/scoreNormalization");
 
 async function getConferenceHealth(conferenceId = null) {
     return await analyticsRepository.getConferenceHealth(conferenceId);
@@ -197,6 +198,13 @@ async function getLateSubmissions(conferenceId = null) {
 // 3. Reviewer Explorer
 async function getReviewers(options) {
     const reviewers = await getReviewerQuality(options);
+    for (const reviewer of reviewers) {
+        reviewer.bias_label = scoreNormalization.deriveBiasLabel(
+            reviewer.avg_score_given,
+            reviewer.conf_mean,
+            reviewer.total_reviews_completed
+        );
+    }
     const totalCount = reviewers.length > 0 ? parseInt(reviewers[0].full_count) || reviewers.length : reviewers.length;
     return { items: reviewers, totalCount };
 }
