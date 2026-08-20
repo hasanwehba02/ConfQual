@@ -1,4 +1,6 @@
 const analyticsService = require("../services/analyticsService");
+const reportService = require("../services/reportService");
+const { renderPdf, PdfTimeoutError } = require("../utils/pdfRenderer");
 
 async function getConferenceHealth(req, res) {
     try {
@@ -122,6 +124,31 @@ async function getReviewerDetails(req, res) {
     }
 }
 
+async function getReviewerReport(req, res) {
+    try {
+        const rawInclude = String(req.query.includeReviewText || '').toLowerCase();
+        const includeReviewText = rawInclude === '1' || rawInclude === 'true';
+
+        const data = await reportService.buildReportData(req.params.id);
+        if (!data) {
+            return res.status(404).json({ error: "Reviewer not found" });
+        }
+
+        const html = reportService.buildReportHtml(data, { includeReviewText });
+        const pdfBuffer = await renderPdf(html);
+
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition", `attachment; filename="Reviewer_${req.params.id}_report.pdf"`);
+        res.send(pdfBuffer);
+    } catch (error) {
+        if (error instanceof PdfTimeoutError || error.name === 'PdfTimeoutError') {
+            return res.status(503).json({ error: "PDF generation timed out" });
+        }
+        console.error("Error generating reviewer report:", error);
+        res.status(500).json({ error: "Failed to generate PDF" });
+    }
+}
+
 async function updatePaperDecision(req, res) {
     try {
         const { id } = req.params;
@@ -183,6 +210,7 @@ module.exports = {
     getSystemAnalytics,
     getPaperDetails,
     getReviewerDetails,
+    getReviewerReport,
     updatePaperDecision,
     processUpload,
     getDashboard: async (req, res) => {
