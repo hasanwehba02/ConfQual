@@ -1,6 +1,6 @@
 import { fetchDashboardData, fetchSettings, saveSettings, logError, importData, fetchPapers, fetchReviewers, fetchSubmissions, fetchConferences, fetchComparison, deleteConference, updateConference, uploadConference } from './api.js';
 import { escapeHtml, exportToCsv } from './utils.js';
-import { getScoreBadgeClass, getScoreBadgeColor, getBiasBadgeClass, getBiasBadgeColor } from './renderers.js';
+import { getScoreBadgeClass, getScoreBadgeColor, getBiasBadgeClass } from './renderers.js';
 
 function formatAdjScoreCell(p) {
     const avg = parseFloat(p.average_score);
