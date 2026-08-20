@@ -228,6 +228,78 @@ async function getReviewerQuality(options = {}) {
     return maskNames(result.rows, settings, 'id');
 }
 
+async function getReviewerStatsById(reviewerId) {
+    const query = `
+        WITH PaperStats AS (
+            SELECT r.paper_id, SUM(r.total_score) as sum_score, COUNT(r.id) as review_count
+            FROM review r
+            JOIN paper p ON r.paper_id = p.id AND p.is_deleted = false
+            WHERE r.is_superseded = false AND p.is_deleted = false AND p.conference_id = (SELECT conference_id FROM program_committee_member WHERE id = $1)
+            GROUP BY r.paper_id
+        ),
+        ReviewerCalibration AS (
+            SELECT 
+                pcm.id as program_committee_member_id,
+                ROUND(AVG(
+                    CASE 
+                        WHEN ps.review_count <= 1 THEN r.total_score
+                        ELSE ((ps.sum_score - r.total_score) / (ps.review_count - 1))
+                    END
+                ), 2) as peers_avg,
+                ROUND(AVG(
+                    CASE 
+                        WHEN ps.review_count <= 1 THEN 0
+                        ELSE r.total_score - ((ps.sum_score - r.total_score) / (ps.review_count - 1))
+                    END
+                ), 2) as calibration_index
+            FROM review r
+            JOIN program_committee_member pcm ON (pcm.id = r.program_committee_member_id OR pcm.external_person_id = r.sub_reviewer_person_id)
+            JOIN PaperStats ps ON r.paper_id = ps.paper_id
+            WHERE r.is_superseded = false
+            GROUP BY pcm.id
+            HAVING COUNT(r.id) > 1
+        ),
+        ReviewerBidding AS (
+            SELECT 
+                a.program_committee_member_id,
+                CASE 
+                    WHEN EXISTS (SELECT 1 FROM bid WHERE program_committee_member_id = a.program_committee_member_id AND LOWER(bid) IN ('yes', 'maybe'))
+                    THEN ROUND(COUNT(b.id) * 100.0 / NULLIF(COUNT(a.id), 0), 2)
+                    ELSE NULL
+                END as bidding_match_percentage
+            FROM assignment a
+            LEFT JOIN bid b ON a.paper_id = b.paper_id 
+                AND a.program_committee_member_id = b.program_committee_member_id 
+                AND LOWER(b.bid) IN ('yes', 'maybe')
+            GROUP BY a.program_committee_member_id
+        ),
+        ConferenceStats AS (
+            SELECT AVG(r.total_score) AS conf_mean, STDDEV(r.total_score) AS conf_std
+            FROM review r
+            JOIN paper p ON r.paper_id = p.id
+            WHERE r.is_superseded = false AND p.is_deleted = false AND p.conference_id = (SELECT conference_id FROM program_committee_member WHERE id = $1)
+        )
+        SELECT 
+            COUNT(DISTINCT r.id)::int as total_reviews_completed,
+            ROUND(AVG(r.total_score), 2) as avg_score_given,
+            ROUND(STDDEV(r.total_score), 2) as reviewer_std,
+            MAX(rcal.peers_avg) as peers_avg,
+            MAX(rcal.calibration_index) as calibration_index,
+            MAX(rb.bidding_match_percentage) as bidding_match_percentage,
+            MAX(cs.conf_mean) as conf_mean,
+            MAX(cs.conf_std) as conf_std
+        FROM program_committee_member pcm
+        LEFT JOIN review r ON (pcm.id = r.program_committee_member_id OR pcm.external_person_id = r.sub_reviewer_person_id) AND r.is_superseded = false
+        LEFT JOIN ReviewerCalibration rcal ON pcm.id = rcal.program_committee_member_id
+        LEFT JOIN ReviewerBidding rb ON pcm.id = rb.program_committee_member_id
+        CROSS JOIN ConferenceStats cs
+        WHERE pcm.id = $1
+        GROUP BY pcm.id
+    `;
+    const result = await client.query(query, [reviewerId]);
+    return result.rows[0] || null;
+}
+
 async function getSubmissions(options = {}) {
     const cid = await resolveConferenceId(options.conferenceId);
     const settings = await getAnonymizationSettings(cid);
@@ -784,6 +856,7 @@ async function getSentimentMismatches(conferenceId = null) {
 module.exports = {
     getConferenceHealth,
     getReviewerQuality,
+    getReviewerStatsById,
     getSubmissions,
     getPaperDebates,
     getExpertiseMismatches,
