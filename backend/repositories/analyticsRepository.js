@@ -74,7 +74,7 @@ const ALLOWED_SORT_COLUMNS = new Set([
     'id', 'external_submission_id', 'title', 'total_reviews', 'average_score',
     'score_spread', 'total_comments', 'reviewer_id', 'first_name', 'last_name',
     'total_reviews_completed', 'avg_word_count', 'avg_score_given', 'total_comments',
-    'calibration_index', 'peers_avg', 'review_date', 'total_score'
+    'calibration_index', 'peers_avg', 'review_date', 'total_score', 'adjusted_score'
 ]);
 
 function buildOrderBy(sortBy, sortOrder, defaultOrder) {
@@ -329,6 +329,39 @@ async function getPaperDebates(options = {}) {
     values.push(offsetVal);
 
     const query = `
+        WITH ReviewIdentity AS (
+            SELECT r.id AS review_id, r.paper_id, r.total_score,
+                   COALESCE(r.sub_reviewer_person_id, pcm.external_person_id) AS reviewer_person_id
+            FROM review r
+            JOIN program_committee_member pcm ON pcm.id = r.program_committee_member_id
+            JOIN paper p ON r.paper_id = p.id
+            WHERE r.is_superseded = false
+              AND p.is_deleted = false
+              AND p.conference_id = $1
+        ),
+        ReviewerZStats AS (
+            SELECT reviewer_person_id,
+                   COUNT(*)::int AS review_count,
+                   AVG(total_score) AS reviewer_mean,
+                   STDDEV(total_score) AS reviewer_std
+            FROM ReviewIdentity
+            GROUP BY reviewer_person_id
+            HAVING COUNT(*) >= 3
+        ),
+        ConferenceStats AS (
+            SELECT AVG(total_score) AS conf_mean, STDDEV(total_score) AS conf_std
+            FROM ReviewIdentity
+        ),
+        NormalizedReviews AS (
+            SELECT ri.review_id,
+                   CASE WHEN rz.reviewer_std IS NOT NULL AND rz.reviewer_std > 0
+                        THEN cs.conf_mean + ((ri.total_score - rz.reviewer_mean) / rz.reviewer_std) * cs.conf_std
+                        ELSE ri.total_score
+                   END AS adjusted_score
+            FROM ReviewIdentity ri
+            LEFT JOIN ReviewerZStats rz USING (reviewer_person_id)
+            CROSS JOIN ConferenceStats cs
+        )
         SELECT 
             COUNT(*) OVER() as full_count,
             p.id,
@@ -339,9 +372,11 @@ async function getPaperDebates(options = {}) {
             COUNT(DISTINCT r.id) as total_reviews,
             ROUND(AVG(r.total_score), 2) as average_score,
             (MAX(r.total_score) - MIN(r.total_score)) as score_spread,
-            COALESCE((SELECT COUNT(*) FROM comment c WHERE c.paper_id = p.id), 0) as total_comments
+            COALESCE((SELECT COUNT(*) FROM comment c WHERE c.paper_id = p.id), 0) as total_comments,
+            ROUND(AVG(nr.adjusted_score), 2) as adjusted_score
         FROM paper p
         LEFT JOIN review r ON p.id = r.paper_id AND r.is_superseded = false
+        LEFT JOIN NormalizedReviews nr ON nr.review_id = r.id
         WHERE p.is_deleted = false AND p.conference_id = $1
         ${excludeDeskNoDecision}
         GROUP BY p.id
