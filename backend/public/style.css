@@ -234,6 +234,21 @@ th, .metric-value, .brand {
     margin-bottom: 1rem;
 }
 
+.alert-card .btn,
+.alerts-container .btn {
+    background: #0f172a;
+    color: #ffffff;
+    border-color: #0f172a;
+    font-weight: 500;
+}
+
+.alert-card .btn:hover,
+.alerts-container .btn:hover {
+    background: #1e293b;
+    border-color: #1e293b;
+    color: #ffffff;
+}
+
 /* Main Workspace */
 .main-workspace {
     padding: 2rem;
