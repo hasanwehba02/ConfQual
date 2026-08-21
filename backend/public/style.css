@@ -642,3 +642,59 @@ th, .metric-value, .brand {
     font-size: 0.875rem;
     color: var(--text-main);
 }
+
+/* Quality Profile Custom Layout */
+.quality-profile-charts {
+    grid-template-columns: 2fr 1fr;
+    align-items: stretch;
+}
+
+@media (max-width: 900px) {
+    .quality-profile-charts {
+        grid-template-columns: 1fr;
+    }
+}
+
+.thematic-table-scroll {
+    max-height: 240px;
+    overflow-y: auto;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+}
+
+.geo-diversity-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.geo-diversity-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    flex: 1;
+    padding: 0.75rem 0.5rem;
+}
+
+.geo-diversity-percentage {
+    font-size: 2.25rem;
+    font-weight: 700;
+    color: var(--text-main);
+    margin-bottom: 0.25rem;
+    line-height: 1;
+}
+
+.geo-diversity-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.geo-diversity-breakdown {
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--text-muted);
+    margin: 0;
+}

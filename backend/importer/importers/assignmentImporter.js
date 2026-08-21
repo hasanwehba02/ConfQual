@@ -1,11 +1,11 @@
 const { readWorkbook } = require("../workbookReader");
+const { findWorksheet } = require("../../utils/excelHelper");
 const mapAssignment = require("../mappers/assignmentMapper");
 const assignmentRepository = require("../../repositories/assignmentRepository");
 const paperRepository = require("../../repositories/paperRepository");
 const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
 
-async function importAssignmentsForSheet(workbook, sheetName, conference, isSuperseded = false) {
-    const sheet = workbook.getWorksheet(sheetName);
+async function importAssignmentsForSheet(workbook, sheet, conference, isSuperseded = false) {
     if (!sheet) return;
     const paperMap = await paperRepository.getIdMap(conference.id);
     const pcmMap = await programCommitteeRepository.getIdMap(conference.id);
@@ -32,13 +32,22 @@ async function importAssignmentsForSheet(workbook, sheetName, conference, isSupe
         const chunk = dtos.slice(i, i + chunkSize);
         imported += await assignmentRepository.bulkCreateAssignments(chunk);
     }
-    console.log();
+    console.log(`Imported assignments: ${imported}, skipped: ${skipped}`);
 }
 
 async function importAssignments(conference) {
     const workbook = await readWorkbook();
-    await importAssignmentsForSheet(workbook, "Submission assignment", conference);
-    console.log("assignment imported successfully.\n");
+    const candidateSheets = [
+        "Submission assignment", "Submission assignments", "Submission_assignment",
+        "Assignments", "assignments", "Assignment", "assignment"
+    ];
+    const sheet = findWorksheet(workbook, candidateSheets);
+    if (sheet) {
+        await importAssignmentsForSheet(workbook, sheet, conference);
+        console.log(`Assignments imported successfully from sheet '${sheet.name}'.\n`);
+    } else {
+        console.log("No assignments sheet found. Skipping.\n");
+    }
 }
 
 module.exports = importAssignments;
