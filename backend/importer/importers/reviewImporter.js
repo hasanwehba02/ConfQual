@@ -55,7 +55,7 @@ async function importReviewsForSheet(workbook, sheetName, conference, isSupersed
         const results = await reviewRepository.batchCreateReviews(chunk);
         imported += results.length;
     }
-    console.log();
+    console.log(`Imported reviews: ${imported}, skipped: ${skipped}`);
 }
 
 async function importReviews(conference) {

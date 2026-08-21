@@ -28,7 +28,7 @@ async function getAnonymizationSettings(conferenceId = null) {
             }
         }
         return settings;
-    } catch (e) {
+    } catch {
         return { is_anonymized: false, anonymization_prefix: '', decision_editing_enabled: false };
     }
 }
