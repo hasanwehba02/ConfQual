@@ -1,220 +1,259 @@
 const analyticsRepository = require("../repositories/analyticsRepository");
-const analyticsMath = require("../utils/analyticsMath");
-const topicMatcher = require("../utils/topicMatcher");
-const scoreNormalization = require("../utils/scoreNormalization");
+const Sentiment = require("sentiment");
+const sentiment = new Sentiment();
 
+// 1. System Health
 async function getConferenceHealth(conferenceId = null) {
-    return await analyticsRepository.getConferenceHealth(conferenceId);
+    const health = await analyticsRepository.getConferenceHealth(conferenceId);
+    if (!health) return null;
+    return {
+        conferenceId: health.conferenceId,
+        conference_name: health.conference_name,
+        conference_year: health.conference_year,
+        total_papers: parseInt(health.total_papers) || 0,
+        total_reviewers: parseInt(health.total_reviewers) || 0,
+        total_reviews: parseInt(health.total_reviews) || 0,
+        total_assignments: parseInt(health.total_assignments) || 0,
+        total_sub_reviewers: parseInt(health.total_sub_reviewers) || 0,
+        average_score: health.average_score ? parseFloat(health.average_score) : 0,
+        system_status: (health.total_papers > 0 && health.total_reviews > 0) ? "NORMAL" : "PENDING_DATA"
+    };
+}
+
+// 2. Reviewer Bias & Normalization
+function enrichReviewerBias(reviewers) {
+    reviewers.forEach(reviewer => {
+        const calibration = reviewer.calibration_index !== null ? parseFloat(reviewer.calibration_index) : 0;
+        const totalReviews = parseInt(reviewer.total_reviews_completed) || 0;
+
+        let biasCategory = "Standard";
+        let isReliable = true;
+
+        if (totalReviews > 1) {
+            if (calibration > 1.5) {
+                biasCategory = "Severe Positive (Easy)";
+            } else if (calibration > 0.8) {
+                biasCategory = "Mild Positive (Generous)";
+            } else if (calibration < -1.5) {
+                biasCategory = "Severe Negative (Harsh)";
+            } else if (calibration < -0.8) {
+                biasCategory = "Mild Negative (Critical)";
+            }
+        }
+
+        // Reliability check: Low word count + extreme scores
+        const avgWords = parseInt(reviewer.avg_word_count) || 0;
+        const avgScore = reviewer.avg_score_given !== null ? parseFloat(reviewer.avg_score_given) : 0;
+        if (avgWords < 50 && (avgScore >= 2 || avgScore <= -2)) {
+            isReliable = false;
+        }
+
+        reviewer.bias_category = biasCategory;
+        reviewer.is_reliable = isReliable;
+    });
+
+    return reviewers;
 }
 
 async function getReviewerQuality(options = {}) {
-    return await analyticsRepository.getReviewerQuality(options);
+    const reviewers = await analyticsRepository.getReviewerQuality(options);
+    return enrichReviewerBias(reviewers);
 }
 
+// 3. Paper Explorer (Debates & Normalized Rankings)
 async function getPaperDebates(options = {}) {
     const papers = await analyticsRepository.getPaperDebates(options);
-    for (const paper of papers) {
-        if (paper.reviews && Array.isArray(paper.reviews)) {
-            for (const review of paper.reviews) {
-                review.isMismatch = topicMatcher.checkMismatch(paper.topics, review.reviewer_topics);
-            }
+
+    papers.forEach(paper => {
+        const spread = paper.score_spread !== null ? parseFloat(paper.score_spread) : 0;
+        const totalReviews = parseInt(paper.total_reviews) || 0;
+        const totalComments = parseInt(paper.total_comments) || 0;
+        const avgScore = paper.average_score !== null ? parseFloat(paper.average_score) : 0;
+        const adjustedScore = paper.adjusted_score !== null ? parseFloat(paper.adjusted_score) : avgScore;
+
+        let debateStatus = "Consensus";
+        let isCritical = false;
+
+        if (spread > 2.0 && totalReviews >= 2) {
+            debateStatus = "High Variance";
+            isCritical = true;
+        } else if (spread === 0 && totalReviews >= 2) {
+            debateStatus = "Unanimous";
         }
-    }
+
+        // Check if borderline/controversial without committee discussion
+        if (totalReviews >= 2 && Math.abs(avgScore) <= 0.5 && totalComments === 0) {
+            debateStatus = "Unresolved Borderline";
+            isCritical = true;
+        }
+
+        // Detect substantial shift between raw and normalized scores
+        const scoreShift = Math.abs(adjustedScore - avgScore);
+        if (scoreShift >= 0.75) {
+            paper.significant_normalization_shift = true;
+        }
+
+        paper.debate_status = debateStatus;
+        paper.is_critical = isCritical;
+        paper.score_variance = spread.toFixed(2);
+    });
+
     return papers;
 }
 
+// 4. Topic & Expertise Alignment
 async function getExpertiseMismatches(conferenceId = null) {
-    const allReviewsWithTopics = await analyticsRepository.getExpertiseMismatches(conferenceId);
-    const mismatches = allReviewsWithTopics.filter(r => {
-        return topicMatcher.checkMismatch(r.paper_topics, r.reviewer_topics);
+    const rows = await analyticsRepository.getExpertiseMismatches(conferenceId);
+
+    const mismatches = [];
+
+    rows.forEach(row => {
+        const paperTopics = row.paper_topics ? row.paper_topics.split(", ") : [];
+        const reviewerTopics = row.reviewer_topics ? row.reviewer_topics.split(", ") : [];
+
+        // Check intersection of topics
+        const intersection = paperTopics.filter(t => reviewerTopics.includes(t));
+
+        if (intersection.length === 0 && paperTopics.length > 0) {
+            mismatches.push({
+                review_id: row.review_id,
+                external_submission_id: row.external_submission_id,
+                paper_title: row.paper_title,
+                reviewer_id: row.reviewer_id,
+                reviewer_name: `${row.reviewer_first_name} ${row.reviewer_last_name}`,
+                score: row.total_score,
+                paper_topics: row.paper_topics,
+                reviewer_topics: row.reviewer_topics,
+                reason: "Zero topic overlap between paper and reviewer expertise"
+            });
+        }
     });
-    
+
     return {
         totalMismatches: mismatches.length,
         details: mismatches
     };
 }
 
-// 1. Alerts (Action Center)
+// 5. Intelligent Action Alerts
 async function getAlerts(prefetched = null, conferenceId = null) {
-    const cid = conferenceId;
     const alerts = [];
-    const papers = prefetched?.papers || await getPaperDebates({ conferenceId: cid });
-    const reviewers = prefetched?.reviewers || await getReviewerQuality({ conferenceId: cid });
-    const mismatches = prefetched?.mismatches || await getExpertiseMismatches(cid);
+    const cid = conferenceId;
+
+    // 1. Conflict of Interest Violations
     const coiViolations = prefetched?.coiViolations || await analyticsRepository.getCOIViolations(cid);
-    const missingMetareviews = prefetched?.missingMetareviews || await analyticsRepository.getMissingMetareviews(cid);
-    const sentimentMismatches = prefetched?.sentimentMismatches || await analyticsRepository.getSentimentMismatches(cid);
-    
-    // Alert: Sentiment Mismatches
-    if (sentimentMismatches.length > 0) {
+    coiViolations.forEach(coi => {
         alerts.push({
-            type: 'warning',
-            title: 'Sentiment Mismatches',
-            message: `${sentimentMismatches.length} positive reviews were given low scores (<= 1).`,
-            action: 'Audit Reviews',
-            target: 'tab-papers',
-            filterKey: 'paper',
-            affectedIds: [...new Set(sentimentMismatches.map(s => s.external_submission_id))]
+            severity: "CRITICAL",
+            category: "INTEGRITY",
+            title: `COI Violation: Paper #${coi.external_submission_id}`,
+            message: `Reviewer ${coi.reviewer_first_name} ${coi.reviewer_last_name} is assigned to Paper #${coi.external_submission_id} despite having a recorded Conflict of Interest.`,
+            action: "Reassign paper immediately.",
+            affectedIds: [coi.external_submission_id],
+            target: "tab-papers",
+            filterKey: "paper",
+            customTitle: "COI Violations"
         });
-    }
-    // Alert: COI Violations
-    if (coiViolations.length > 0) {
+    });
+
+    // 2. High Variance Debates with 0 Discussion
+    const papers = prefetched?.papers || await getPaperDebates({ conferenceId: cid });
+    const silentDebates = papers.filter(p => p.score_spread > 2.0 && parseInt(p.total_comments) === 0);
+    if (silentDebates.length > 0) {
         alerts.push({
-            type: 'danger',
-            title: 'Conflict of Interest Violations',
-            message: `${coiViolations.length} assignments were given to PC members who declared a conflict with the paper.`,
-            action: 'Audit Assignments',
-            target: 'tab-papers',
-            filterKey: 'paper',
-            affectedIds: [...new Set(coiViolations.map(c => c.external_submission_id))]
+            severity: "HIGH",
+            category: "DISCUSSION",
+            title: `${silentDebates.length} Heavily Debated Papers Have Zero Discussion`,
+            message: `Papers with extreme score divergence (>2.0 spread) currently have 0 PC comments.`,
+            action: "Open discussion threads or assign a metareviewer.",
+            affectedIds: silentDebates.map(p => p.external_submission_id),
+            target: "tab-papers",
+            filterKey: "paper",
+            customTitle: "Debated Papers with Zero Comments"
         });
     }
 
-    // Alert: Missing Metareviews
-    if (missingMetareviews.length > 0) {
-        alerts.push({
-            type: 'danger',
-            title: 'Missing Metareviews',
-            message: `${missingMetareviews.length} highly debated papers (variance > 1.0) are missing a final metareview.`,
-            action: 'Assign Metareviewer',
-            target: 'tab-papers',
-            filterKey: 'paper',
-            affectedIds: missingMetareviews.map(m => m.external_submission_id)
-        });
-    }
-
-    // Alert: Missing Reviews (Less than 3)
-    const alertMissingReviews = papers.filter(p => p.total_reviews < 3 && p.decision_category !== 'desk reject');
-    if (alertMissingReviews.length > 0) {
-        alerts.push({
-            type: 'warning',
-            title: 'Missing Reviews',
-            message: `${alertMissingReviews.length} papers have fewer than 3 completed reviews.`,
-            action: 'View Papers',
-            target: 'tab-papers',
-            filterKey: 'paper',
-            affectedIds: alertMissingReviews.map(p => p.external_submission_id)
-        });
-    }
-    
-    // Alert: High Variance, Low Discussion
-    const concerningDebates = papers.filter(p => parseFloat(p.score_spread) > 1.0 && parseInt(p.total_comments) === 0);
-    if (concerningDebates.length > 0) {
-        alerts.push({
-            type: 'danger',
-            title: 'Unresolved Debates',
-            message: `${concerningDebates.length} papers have high score variance (>1.0) but ZERO comments.`,
-            action: 'Investigate',
-            target: 'tab-papers',
-            filterKey: 'paper',
-            affectedIds: concerningDebates.map(p => p.external_submission_id)
-        });
-    }
-    
-    // Alert: Severe Mismatches
+    // 3. Expertise Mismatches
+    const mismatches = prefetched?.mismatches || await getExpertiseMismatches(cid);
     if (mismatches.totalMismatches > 0) {
         alerts.push({
-            type: 'danger',
-            title: 'Expertise Mismatches',
-            message: `${mismatches.totalMismatches} reviews were assigned to PC members with zero overlapping topics.`,
-            action: 'Review Assignments',
-            target: 'tab-papers',
-            filterKey: 'paper',
-            affectedIds: [...new Set(mismatches.details.map(m => m.external_submission_id))]
+            severity: "MEDIUM",
+            category: "EXPERTISE",
+            title: `${mismatches.totalMismatches} Potential Expertise Mismatches`,
+            message: `Found reviews where reviewer profile topics have zero overlap with submission topics.`,
+            action: "Review assignments for domain-specific accuracy.",
+            affectedIds: [...new Set(mismatches.details.map(m => m.external_submission_id))],
+            target: "tab-papers",
+            filterKey: "paper",
+            customTitle: "Expertise Mismatches"
         });
     }
 
-    // Alert: Low Bidding Satisfaction
-    const unhappyReviewers = reviewers.filter(r => r.bidding_match_percentage !== null && parseFloat(r.bidding_match_percentage) <= 50);
-    if (unhappyReviewers.length > 0) {
+    // 4. Missing Metareviews
+    const missingMetas = prefetched?.missingMetareviews || await analyticsRepository.getMissingMetareviews(cid);
+    if (missingMetas.length > 0) {
         alerts.push({
-            type: 'warning',
-            title: 'Low Bidding Satisfaction',
-            message: `${unhappyReviewers.length} reviewers were assigned a workload where 50% or less matched their bids.`,
-            action: 'Check Reviewers',
-            target: 'tab-reviewers',
-            filterKey: 'reviewer',
-            affectedIds: unhappyReviewers.map(r => r.id)
+            severity: "MEDIUM",
+            category: "PROCESS",
+            title: `${missingMetas.length} Papers Missing Metareviews`,
+            message: `Completed papers ready for decision have no meta-review recorded.`,
+            action: "Prompt senior PC/Area Chairs to draft summary evaluations.",
+            affectedIds: missingMetas.map(m => m.external_submission_id),
+            target: "tab-papers",
+            filterKey: "paper",
+            customTitle: "Missing Metareviews"
         });
     }
-    
-    // Alert: Low Effort Reviewers
-    const lowEffort = reviewers.filter(r => r.avg_word_count && parseFloat(r.avg_word_count) < 50);
-    if (lowEffort.length > 0) {
+
+    // 5. Short / Low Effort Reviews
+    const reviewers = prefetched?.reviewers || await getReviewerQuality({ conferenceId: cid });
+    const lowEffortReviewers = reviewers.filter(r => parseInt(r.avg_word_count) < 60 && parseInt(r.total_reviews_completed) > 0);
+    if (lowEffortReviewers.length > 0) {
         alerts.push({
-            type: 'warning',
-            title: 'Low Effort Reviewers',
-            message: `${lowEffort.length} reviewers have an average word count below 50 words.`,
-            action: 'Audit Reviewers',
-            target: 'tab-reviewers',
-            filterKey: 'reviewer',
-            affectedIds: lowEffort.map(r => r.id)
+            severity: "LOW",
+            category: "QUALITY",
+            title: `${lowEffortReviewers.length} Reviewers with Low Feedback Volume`,
+            message: `Reviewers with average review length under 60 words detected.`,
+            action: "Flag for quality check prior to author notification.",
+            affectedIds: lowEffortReviewers.map(r => r.id),
+            target: "tab-reviewers",
+            filterKey: "reviewer",
+            customTitle: "Low Feedback Volume Reviewers"
         });
     }
-    
+
+    // 6. Sentiment Mismatches
+    const sentimentMismatches = prefetched?.sentimentMismatches || await analyticsRepository.getSentimentMismatches(cid);
+    if (sentimentMismatches.length > 0) {
+        alerts.push({
+            severity: "HIGH",
+            category: "INTEGRITY",
+            title: `${sentimentMismatches.length} Sentiment/Score Mismatches Detected`,
+            message: `Found reviews where the score is extremely low (<=1) but the review text is overwhelmingly positive (sentiment >= 10).`,
+            action: "Check for miscalibrated scoring or sarcastic review text.",
+            affectedIds: [...new Set(sentimentMismatches.map(m => m.external_submission_id))],
+            target: "tab-papers",
+            filterKey: "paper",
+            customTitle: "Sentiment Mismatches"
+        });
+    }
+
     return alerts;
 }
 
-// 2. Paper Explorer
+// 6. Paginated & Filtered Queries
 async function getPapers(options = {}) {
-    let papers = await getPaperDebates(options);
-    if (options.zeroActivity === 'true') {
-        papers = papers.filter(p => parseInt(p.total_reviews) === 0 && parseInt(p.total_comments) === 0);
-    }
+    const papers = await getPaperDebates(options);
     const totalCount = papers.length > 0 ? parseInt(papers[0].full_count) || papers.length : papers.length;
     return { items: papers, totalCount };
 }
 
-// Late Submissions (After deadline)
-async function getLateSubmissions(conferenceId = null) {
-    const client = require("../config/database");
-    
-    let cid;
-    if (conferenceId) {
-        cid = conferenceId;
-    } else {
-        const r = await client.query('SELECT id FROM conference ORDER BY uploaded_at DESC LIMIT 1');
-        cid = r.rows[0]?.id;
-    }
-    if (!cid) return [];
-
-    const query = `
-        SELECT 
-            p.external_submission_id,
-            p.title,
-            p.submitted_at,
-            c.submission_deadline
-        FROM paper p
-        JOIN conference c ON p.conference_id = c.id
-        WHERE p.submitted_at > c.submission_deadline
-        AND p.is_deleted = false
-        AND p.conference_id = $1
-    `;
-    const result = await client.query(query, [cid]);
-    return result.rows;
-}
-
-function enrichReviewerBias(reviewers) {
-    for (const reviewer of reviewers) {
-        reviewer.bias_label = scoreNormalization.deriveBiasLabel(
-            reviewer.avg_score_given,
-            reviewer.conf_mean,
-            reviewer.total_reviews_completed
-        );
-    }
-    return reviewers;
-}
-
-// 3. Reviewer Explorer
-async function getReviewers(options) {
+async function getReviewers(options = {}) {
     const reviewers = await getReviewerQuality(options);
-    enrichReviewerBias(reviewers);
     const totalCount = reviewers.length > 0 ? parseInt(reviewers[0].full_count) || reviewers.length : reviewers.length;
     return { items: reviewers, totalCount };
 }
 
-// 5. Submissions Timeline
 async function getSubmissions(options = {}) {
     const submissions = await analyticsRepository.getSubmissions(options);
     const totalCount = submissions.length > 0 ? parseInt(submissions[0].full_count) || submissions.length : submissions.length;
@@ -222,20 +261,28 @@ async function getSubmissions(options = {}) {
 }
 
 // 4. System Analytics
-async function getQualityScorecard(health, prefetched = null) {
-    if (!health) {
-        health = await getConferenceHealth();
+async function getQualityScorecard(health, prefetched = null, conferenceId = null) {
+    let cid = conferenceId;
+    if (typeof health === 'number' || typeof health === 'string') {
+        cid = health;
+        health = await getConferenceHealth(cid);
+    } else if (!health || typeof health !== 'object') {
+        health = await getConferenceHealth(cid);
+        cid = health?.conferenceId || cid;
+    } else {
+        cid = health.conferenceId || cid;
     }
-    const papers = prefetched?.papers || await getPaperDebates();
-    const reviewers = prefetched?.reviewers || await getReviewerQuality();
-    const mismatches = prefetched?.mismatches || await getExpertiseMismatches();
-    const coiViolations = prefetched?.coiViolations || await analyticsRepository.getCOIViolations();
-    const missingMetareviews = prefetched?.missingMetareviews || await analyticsRepository.getMissingMetareviews();
 
-    const totalPapers = parseInt(health.total_papers) || 1;
-    const totalReviewers = parseInt(health.total_reviewers) || 1;
-    const totalAssignments = parseInt(health.total_assignments) || 1;
-    const totalReviews = parseInt(health.total_reviews) || 1;
+    const papers = prefetched?.papers || await getPaperDebates({ conferenceId: cid });
+    const reviewers = prefetched?.reviewers || await getReviewerQuality({ conferenceId: cid });
+    const mismatches = prefetched?.mismatches || await getExpertiseMismatches(cid);
+    const coiViolations = prefetched?.coiViolations || await analyticsRepository.getCOIViolations(cid);
+    const missingMetareviews = prefetched?.missingMetareviews || await analyticsRepository.getMissingMetareviews(cid);
+
+    const totalPapers = parseInt(health?.total_papers) || 1;
+    const totalReviewers = parseInt(health?.total_reviewers) || 1;
+    const totalAssignments = parseInt(health?.total_assignments) || 1;
+    const totalReviews = parseInt(health?.total_reviews) || 1;
 
     let scorecard = {
         coverage: { score: 100, deductions: [] },
@@ -354,27 +401,28 @@ async function getQualityScorecard(health, prefetched = null) {
     return scorecard;
 }
 
-async function getSystemAnalytics(prefetched = null) {
-    const health = prefetched?.health || await getConferenceHealth();
+async function getSystemAnalytics(prefetched = null, conferenceId = null) {
+    const cid = conferenceId;
+    const health = prefetched?.health || await getConferenceHealth(cid);
     
     // Pass prefetched data into the scorecard generator
-    const scorecard = await getQualityScorecard(health, prefetched);
+    const scorecard = await getQualityScorecard(health, prefetched, cid);
     
     // Top Reviewers
-    const topReviewers = prefetched?.topReviewers || await analyticsRepository.getTopReviewers();
+    const topReviewers = prefetched?.topReviewers || await analyticsRepository.getTopReviewers(cid);
     
     // System Distributions
-    const distributions = prefetched?.distributions || await analyticsRepository.getSystemDistributions();
+    const distributions = prefetched?.distributions || await analyticsRepository.getSystemDistributions(cid);
     
-    const topPapers = await analyticsRepository.getTopPapers();
-    const sessionClusters = await analyticsRepository.getSessionClusters();
+    const topPapers = await analyticsRepository.getTopPapers(cid);
+    const sessionClusters = await analyticsRepository.getSessionClusters(cid);
     
     return {
         health,
-        mismatches: prefetched?.mismatches || await getExpertiseMismatches(),
-        debates: prefetched?.papers || await getPaperDebates(),
-        reviewers: enrichReviewerBias(prefetched?.reviewers || await getReviewerQuality()),
-        coiViolations: prefetched?.coiViolations || await analyticsRepository.getCOIViolations(),
+        mismatches: prefetched?.mismatches || await getExpertiseMismatches(cid),
+        debates: prefetched?.papers || await getPaperDebates({ conferenceId: cid }),
+        reviewers: enrichReviewerBias(prefetched?.reviewers || await getReviewerQuality({ conferenceId: cid })),
+        coiViolations: prefetched?.coiViolations || await analyticsRepository.getCOIViolations(cid),
         scorecard,
         distributions,
         topPapers,
@@ -398,80 +446,78 @@ async function getAcademicQualityProfile(prefetched = null, conferenceId = null)
     const acceptance = await analyticsRepository.getAcceptanceRate(cid);
     const diversity = prefetched?.diversity || await analyticsRepository.getGeographicDiversity(cid);
     const competence = await analyticsRepository.getThematicCompetence(cid);
-    const papers = prefetched?.papers || await getPaperDebates({ conferenceId: cid });
-    
-    // A. Peer-Review Rigor & Selectivity
-    const totalPapers = parseInt(acceptance.total_papers) || 1;
-    const acceptedPapers = parseInt(acceptance.accepted_papers) || 0;
-    const acceptanceRate = (acceptedPapers / totalPapers) * 100;
-    
-    let selectivityRank;
-    if (acceptanceRate <= 25) selectivityRank = "CORE A/A* (Highly Selective)";
-    else if (acceptanceRate <= 35) selectivityRank = "CORE B (Moderately Selective)";
-    else selectivityRank = "Below CORE B (Low Selectivity)";
 
-    // Review Density
-    const totalReviews = parseInt(health.total_reviews) || 0;
-    const avgReviewsPerPaper = (totalReviews / totalPapers).toFixed(2);
-    
-    const europeanBaselinePapers = papers.filter(p => parseInt(p.total_reviews) >= 3);
-    const europeanBaselinePercentage = ((europeanBaselinePapers.length / totalPapers) * 100).toFixed(1);
+    const totalPapers = parseInt(health?.total_papers) || 0;
+    const acceptedPapers = parseInt(acceptance?.accepted_papers) || 0;
+    const acceptanceRate = totalPapers > 0 ? ((acceptedPapers / totalPapers) * 100).toFixed(1) : 0;
 
-    // B. PC Internationalization
-    const totalCountries = diversity.length;
+    let rank = "Unranked / Regional";
+    if (acceptanceRate > 0 && acceptanceRate <= 20) {
+        rank = "A* / Top-Tier Elite";
+    } else if (acceptanceRate > 20 && acceptanceRate <= 28) {
+        rank = "A / Leading International";
+    } else if (acceptanceRate > 28 && acceptanceRate <= 38) {
+        rank = "B / Good International";
+    } else if (acceptanceRate > 38) {
+        rank = "C / Regional";
+    }
+
+    const totalReviews = parseInt(health?.total_reviews) || 0;
+    const avgReviewsPerPaper = totalPapers > 0 ? (totalReviews / totalPapers).toFixed(1) : 0;
+
     let domesticCountry = "Unknown";
     let domesticCount = 0;
     let internationalCount = 0;
-    
-    if (diversity.length > 0) {
-        // Assume the country with the most PC members is the "domestic" host
+    const totalCountries = diversity ? diversity.length : 0;
+
+    if (diversity && diversity.length > 0) {
         domesticCountry = diversity[0].country;
-        domesticCount = parseInt(diversity[0].member_count);
-        
-        // Sum the rest as international
+        domesticCount = parseInt(diversity[0].member_count) || 0;
         for (let i = 1; i < diversity.length; i++) {
-            internationalCount += parseInt(diversity[i].member_count);
+            internationalCount += parseInt(diversity[i].member_count) || 0;
         }
     }
-    
-    const totalPCWithCountry = domesticCount + internationalCount;
-    const internationalPercentage = totalPCWithCountry > 0 ? ((internationalCount / totalPCWithCountry) * 100).toFixed(1) : 0;
 
-    // C. Expertise Alignment (Thematic Gap Analysis)
-    const topTopics = competence.slice(0, 5); // Top 5 most submitted topics
-    const gapTopics = topTopics.filter(t => parseInt(t.available_experts) < 3);
+    const totalPC = domesticCount + internationalCount;
+    const internationalPercentage = totalPC > 0 ? ((internationalCount / totalPC) * 100).toFixed(1) : 0;
 
-    // D. Standard Compatibility Statement
-    let compatibilityStatement = `Based on an acceptance rate of ${acceptanceRate.toFixed(1)}% and an international PC representation spanning ${totalCountries} countries (${internationalPercentage}% international), this venue fits the operational standards of a ${selectivityRank} / GII-GRIN-SCIE Class ${internationalPercentage > 30 ? '1/2' : '3'} international conference.`;
-    
-    if (europeanBaselinePercentage >= 90) {
-        compatibilityStatement += ` Furthermore, the review rigor is exceptional, with ${europeanBaselinePercentage}% of papers meeting the European baseline of 3+ independent external reviews.`;
-    } else {
-        compatibilityStatement += ` However, review density is a concern, as only ${europeanBaselinePercentage}% of papers met the European baseline of 3+ independent external reviews.`;
+    const gapTopics = competence ? competence.filter(c => parseInt(c.available_experts) === 0 && parseInt(c.submitted_papers) > 0) : [];
+
+    let statement = `Conference demonstrates ${rank} selectivity characteristics with an acceptance rate of ${acceptanceRate}%. `;
+    statement += `Peer review rigor is established with an average of ${avgReviewsPerPaper} reviews per submission. `;
+    if (totalPC > 0) {
+        statement += `The Program Committee includes members from ${totalCountries} countries (${internationalPercentage}% international diversity). `;
+    }
+    if (gapTopics.length > 0) {
+        statement += `Identified ${gapTopics.length} topic areas with submissions but no matched PC expertise.`;
     }
 
     return {
         selectivity: {
-            acceptanceRate: acceptanceRate.toFixed(1),
+            acceptanceRate,
+            rank,
             acceptedPapers,
-            totalPapers,
-            rank: selectivityRank
+            totalPapers
         },
         rigor: {
             avgReviewsPerPaper,
-            europeanBaselinePercentage
+            totalReviews
         },
         internationalization: {
-            totalCountries,
             domesticCountry,
             domesticCount,
             internationalCount,
+            totalCountries,
             internationalPercentage
         },
-        thematicCompetence: topTopics,
+        thematicCompetence: competence || [],
         gapTopics,
-        compatibilityStatement
+        compatibilityStatement: statement
     };
+}
+
+async function getLateSubmissions() {
+    return [];
 }
 
 async function updatePaperDecision(id, decision) {
@@ -507,7 +553,7 @@ async function getDashboardData(conferenceId = null) {
     };
 
     const alerts = await getAlerts(prefetched, cid);
-    const systemAnalytics = await getSystemAnalytics(prefetched);
+    const systemAnalytics = await getSystemAnalytics(prefetched, cid);
     const qualityProfile = await getAcademicQualityProfile(prefetched, cid);
 
     return {

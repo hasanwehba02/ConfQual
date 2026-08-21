@@ -687,7 +687,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: formData
             });
 
-            if (!response.ok) throw new Error('Upload failed');
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error || 'Upload failed');
+            }
             
             uploadDrawer.classList.remove('open');
             uploadDrawer.classList.add('closed');
@@ -700,7 +703,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await loadDashboardData();
 
         } catch (error) {
-            alert("An error occurred during processing. Please try again.");
+            alert(error.message || "An error occurred during processing. Please try again.");
             console.error(error);
         } finally {
             submitBtn.classList.remove('hidden');

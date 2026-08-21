@@ -1,11 +1,11 @@
 const { readWorkbook } = require("../workbookReader");
+const { findWorksheet } = require("../../utils/excelHelper");
 const mapMetaReview = require("../mappers/metaReviewMapper");
 const metaReviewRepository = require("../../repositories/metaReviewRepository");
 const paperRepository = require("../../repositories/paperRepository");
 const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
 
-async function importMetaReviewsForSheet(workbook, sheetName, conference, _isSuperseded = false) {
-    const sheet = workbook.getWorksheet(sheetName);
+async function importMetaReviewsForSheet(workbook, sheet, conference, _isSuperseded = false) {
     if (!sheet) return;
     const paperMap = await paperRepository.getIdMap(conference.id);
     const pcmMap = await programCommitteeRepository.getIdMap(conference.id);
@@ -45,11 +45,11 @@ async function importMetaReviewsForSheet(workbook, sheetName, conference, _isSup
 
 async function importMetaReviews(conference) {
     const workbook = await readWorkbook();
-    const candidateSheets = ["Metareviews", "Meta reviews", "meta reviews", "Metareview", "Meta Reviews", "metareviews"];
-    const sheetName = candidateSheets.find(name => workbook.getWorksheet(name));
-    if (sheetName) {
-        await importMetaReviewsForSheet(workbook, sheetName, conference);
-        console.log(`Meta-reviews imported successfully from sheet '${sheetName}'.\n`);
+    const candidateSheets = ["Metareviews", "Meta reviews", "meta reviews", "Metareview", "Meta Reviews", "metareviews", "Meta-reviews"];
+    const sheet = findWorksheet(workbook, candidateSheets);
+    if (sheet) {
+        await importMetaReviewsForSheet(workbook, sheet, conference);
+        console.log(`Meta-reviews imported successfully from sheet '${sheet.name}'.\n`);
     } else {
         console.log("No meta-reviews sheet found. Skipping.\n");
     }

@@ -1,11 +1,11 @@
 const { readWorkbook } = require("../workbookReader");
+const { findWorksheet } = require("../../utils/excelHelper");
 const mapBid = require("../mappers/bidMapper");
 const bidRepository = require("../../repositories/bidRepository");
 const paperRepository = require("../../repositories/paperRepository");
 const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
 
-async function importBidsForSheet(workbook, sheetName, conference, _isSuperseded = false) {
-    const sheet = workbook.getWorksheet(sheetName);
+async function importBidsForSheet(workbook, sheet, conference) {
     if (!sheet) return;
     const paperMap = await paperRepository.getIdMap(conference.id);
     const pcmMap = await programCommitteeRepository.getIdMap(conference.id);
@@ -22,7 +22,7 @@ async function importBidsForSheet(workbook, sheetName, conference, _isSuperseded
     for (let i = 2; i <= sheet.rowCount; i++) {
         const row = sheet.getRow(i);
         const dto = mapBid(row, headerMap);
-        if (!dto.externalSubmissionId || !dto.externalPersonId) {
+        if (!dto.externalSubmissionId || !dto.externalPersonId || !dto.bid) {
             skipped++;
             continue;
         }
@@ -32,6 +32,7 @@ async function importBidsForSheet(workbook, sheetName, conference, _isSuperseded
             skipped++;
             continue;
         }
+        dto.bid = String(dto.bid).trim();
         dtos.push(dto);
     }
     const chunkSize = 200;
@@ -45,11 +46,14 @@ async function importBidsForSheet(workbook, sheetName, conference, _isSuperseded
 
 async function importBids(conference) {
     const workbook = await readWorkbook();
-    const candidateSheets = ["Paper bidding", "Paper Bidding", "paper bidding", "Bids", "bids", "Bid", "bid"];
-    const sheetName = candidateSheets.find(name => workbook.getWorksheet(name));
-    if (sheetName) {
-        await importBidsForSheet(workbook, sheetName, conference);
-        console.log(`Bids imported successfully from sheet '${sheetName}'.\n`);
+    const candidateSheets = [
+        "Paper bidding", "Paper Bidding", "paper bidding", 
+        "Paper bids", "Paper Bids", "Bids", "bids", "Bid", "bid", "bidding", "Paper_bidding"
+    ];
+    const sheet = findWorksheet(workbook, candidateSheets);
+    if (sheet) {
+        await importBidsForSheet(workbook, sheet, conference);
+        console.log(`Bids imported successfully from sheet '${sheet.name}'.\n`);
     } else {
         console.log("No bids sheet found. Skipping.\n");
     }

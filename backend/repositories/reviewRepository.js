@@ -24,23 +24,24 @@ async function createReview(reviewData) {
         RETURNING *;
     `;
 
+    const subId = reviewData.subReviewerPersonId ? parseInt(reviewData.subReviewerPersonId, 10) || null : null;
     const values = [
         reviewData.paperId,
         reviewData.programCommitteeMemberId,
-        reviewData.reviewNumber,
-        reviewData.version,
-        reviewData.reviewText,
-        reviewData.scores,
-        reviewData.totalScore,
-        reviewData.reviewDate,
-        reviewData.reviewTime,
-        reviewData.hasAttachment,
-        reviewData.isSuperseded,
-        reviewData.subReviewerPersonId,
-        reviewData.subReviewerFirstName,
-        reviewData.subReviewerLastName,
-        reviewData.subReviewerEmail,
-        reviewData.sentimentScore
+        reviewData.reviewNumber || 1,
+        reviewData.version || 1,
+        reviewData.reviewText || '',
+        reviewData.scores || null,
+        reviewData.totalScore !== null && reviewData.totalScore !== undefined && !isNaN(reviewData.totalScore) ? reviewData.totalScore : null,
+        reviewData.reviewDate || null,
+        reviewData.reviewTime || null,
+        Boolean(reviewData.hasAttachment),
+        Boolean(reviewData.isSuperseded),
+        subId,
+        reviewData.subReviewerFirstName || null,
+        reviewData.subReviewerLastName || null,
+        reviewData.subReviewerEmail || null,
+        reviewData.sentimentScore !== null && reviewData.sentimentScore !== undefined ? reviewData.sentimentScore : null
     ];
 
     const result = await client.query(query, values);
@@ -69,10 +70,24 @@ async function batchCreateReviews(reviews) {
     
     for (const review of reviews) {
         valueStrings.push(`($${idx}, $${idx+1}, $${idx+2}, $${idx+3}, $${idx+4}, $${idx+5}, $${idx+6}, $${idx+7}, $${idx+8}, $${idx+9}, $${idx+10}, $${idx+11}, $${idx+12}, $${idx+13}, $${idx+14}, $${idx+15})`);
+        const subId = review.subReviewerPersonId ? parseInt(review.subReviewerPersonId, 10) || null : null;
         values.push(
-            review.paperId, review.programCommitteeMemberId, review.reviewNumber, review.version, review.reviewText,
-            review.scores, review.totalScore, review.reviewDate, review.reviewTime, review.hasAttachment, review.isSuperseded,
-            review.subReviewerPersonId, review.subReviewerFirstName, review.subReviewerLastName, review.subReviewerEmail, review.sentimentScore
+            review.paperId,
+            review.programCommitteeMemberId,
+            review.reviewNumber || 1,
+            review.version || 1,
+            review.reviewText || '',
+            review.scores || null,
+            review.totalScore !== null && review.totalScore !== undefined && !isNaN(review.totalScore) ? review.totalScore : null,
+            review.reviewDate || null,
+            review.reviewTime || null,
+            Boolean(review.hasAttachment),
+            Boolean(review.isSuperseded),
+            subId,
+            review.subReviewerFirstName || null,
+            review.subReviewerLastName || null,
+            review.subReviewerEmail || null,
+            review.sentimentScore !== null && review.sentimentScore !== undefined ? review.sentimentScore : null
         );
         idx += 16;
     }

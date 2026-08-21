@@ -37,7 +37,7 @@ async function getComparisonMetrics() {
 }
 
 async function deleteConference(id) {
-    await client.withTransaction(async () => {
+    return await client.withTransaction(async () => {
         // Since some FKs on review, assignment, etc. reference program_committee_member without CASCADE,
         // but DO have CASCADE on paper, deleting all papers first safely removes those dependent rows.
         await client.query(`DELETE FROM paper WHERE conference_id = $1`, [id]);
@@ -46,7 +46,8 @@ async function deleteConference(id) {
         await client.query(`DELETE FROM program_committee_member WHERE conference_id = $1`, [id]);
         
         // Finally delete the conference itself
-        await client.query(`DELETE FROM conference WHERE id = $1`, [id]);
+        const res = await client.query(`DELETE FROM conference WHERE id = $1 RETURNING id`, [id]);
+        return res.rows.length > 0;
     });
 }
 
@@ -63,4 +64,10 @@ async function updateConference(id, { name, shortName, year }) {
     return result.rows[0];
 }
 
-module.exports = { listConferences, getComparisonMetrics, deleteConference, updateConference };
+module.exports = {
+    listConferences,
+    getAllConferences: listConferences,
+    getComparisonMetrics,
+    deleteConference,
+    updateConference
+};
