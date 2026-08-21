@@ -5,7 +5,7 @@ const assignmentRepository = require("../../repositories/assignmentRepository");
 const paperRepository = require("../../repositories/paperRepository");
 const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
 
-async function importAssignmentsForSheet(workbook, sheet, conference, isSuperseded = false) {
+async function importAssignmentsForSheet(workbook, sheet, conference, _isSuperseded = false) {
     if (!sheet) return;
     const paperMap = await paperRepository.getIdMap(conference.id);
     const pcmMap = await programCommitteeRepository.getIdMap(conference.id);

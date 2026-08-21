@@ -1,6 +1,6 @@
-import { fetchDashboardData, fetchSettings, saveSettings, logError, importData, fetchPapers, fetchReviewers, fetchSubmissions, fetchConferences, fetchComparison, deleteConference, updateConference, uploadConference } from './api.js';
-import { escapeHtml, exportToCsv } from './utils.js';
-import { getScoreBadgeClass, getScoreBadgeColor, getBiasBadgeClass } from './renderers.js';
+import { fetchConferences, fetchComparison, deleteConference, updateConference } from './api.js';
+import { escapeHtml } from './utils.js';
+import { getBiasBadgeClass } from './renderers.js';
 
 function formatAdjScoreCell(p) {
     const avg = parseFloat(p.average_score);
@@ -307,7 +307,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             html += '</div>';
             drawerBody.innerHTML = html;
-        } catch (error) {
+        } catch {
             drawerBody.innerHTML = '<p class="text-danger">Failed to load paper details.</p>';
         }
     };
@@ -466,7 +466,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
             }
-        } catch (error) {
+        } catch {
             drawerBody.innerHTML = '<p class="text-danger">Failed to load reviewer details.</p>';
         }
     };
@@ -488,7 +488,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 await loadConferences();
                 await loadDashboardData();
             }
-        } catch (e) {
+        } catch {
             console.log("No existing data found or server offline");
         }
     }
@@ -598,7 +598,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         alert("Failed to reset data.");
                     }
-                } catch (e) {
+                } catch {
                     alert("Error resetting data.");
                 }
             }
@@ -1049,8 +1049,6 @@ document.addEventListener('DOMContentLoaded', () => {
         alerts.forEach(alert => {
             const card = document.createElement('div');
             card.className = `alert-card ${alert.type}`;
-            const idsJson = alert.affectedIds ? JSON.stringify(alert.affectedIds).replace(/"/g, '&quot;') : "[]";
-            const safeTitle = alert.title ? alert.title.replace(/'/g, "\\'") : '';
             card.innerHTML = `
                 <div class="alert-content">
                     <h3 style="font-family: 'Roboto Mono', monospace;">${escapeHtml(alert.title)}</h3>

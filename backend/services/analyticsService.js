@@ -1,6 +1,4 @@
 const analyticsRepository = require("../repositories/analyticsRepository");
-const Sentiment = require("sentiment");
-const sentiment = new Sentiment();
 
 // 1. System Health
 async function getConferenceHealth(conferenceId = null) {
@@ -279,7 +277,6 @@ async function getQualityScorecard(health, prefetched = null, conferenceId = nul
     const coiViolations = prefetched?.coiViolations || await analyticsRepository.getCOIViolations(cid);
     const missingMetareviews = prefetched?.missingMetareviews || await analyticsRepository.getMissingMetareviews(cid);
 
-    const totalPapers = parseInt(health?.total_papers) || 1;
     const totalReviewers = parseInt(health?.total_reviewers) || 1;
     const totalAssignments = parseInt(health?.total_assignments) || 1;
     const totalReviews = parseInt(health?.total_reviews) || 1;

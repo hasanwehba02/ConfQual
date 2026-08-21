@@ -15,7 +15,7 @@ function normalizeSheetName(name) {
     return String(name)
         .toLowerCase()
         .trim()
-        .replace(/[\s_\-]+/g, '');
+        .replace(/[\s_-]+/g, '');
 }
 
 function findWorksheet(workbook, candidateNames = []) {
