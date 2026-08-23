@@ -35,6 +35,67 @@ test('missing optional fields degrade gracefully', () => {
   assert.ok(!d.subject.includes('undefined'));
 });
 
+test('silent_debate draft references paper and spread', () => {
+  const d = buildEmailDraft('silent_debate', {
+    recipientName: 'Grace Hopper', recipientEmail: 'grace@example.com',
+    paperId: 7, paperTitle: 'Debated Systems', spread: 4, conferenceLabel: "CONF '26",
+  });
+  assert.ok(d.subject.includes('#7'));
+  assert.ok(d.body.includes('Grace Hopper'));
+  assert.ok(d.body.includes('Debated Systems'));
+  assert.ok(d.body.includes('4'));
+  assert.ok(!d.body.includes('undefined'));
+});
+
+test('expertise_mismatch draft lists topic gap without accusatory tone', () => {
+  const d = buildEmailDraft('expertise_mismatch', {
+    recipientName: 'Alan Turing', recipientEmail: 'alan@example.com',
+    paperId: 9, paperTitle: 'Morphogenesis',
+    paperTopics: 'Biology, Dynamical Systems', reviewerTopics: 'Databases',
+    conferenceLabel: "CONF '26",
+  });
+  assert.ok(d.subject.includes('#9'));
+  assert.ok(d.body.includes('Alan Turing'));
+  assert.ok(d.body.includes('Biology, Dynamical Systems'));
+  assert.ok(d.body.includes('Databases'));
+  const lower = d.body.toLowerCase();
+  assert.ok(lower.includes('reassign') || lower.includes('flag') || lower.includes('let us know'));
+});
+
+test('missing_metareview draft asks for a volunteer', () => {
+  const d = buildEmailDraft('missing_metareview', {
+    recipientName: 'Edsger Dijkstra', recipientEmail: 'edsger@example.com',
+    paperId: 12, paperTitle: 'Go-To Considered Harmful', scoreSpread: 3,
+    conferenceLabel: "CONF '26",
+  });
+  assert.ok(d.subject.includes('#12'));
+  assert.ok(d.body.includes('Edsger Dijkstra'));
+  const lower = d.body.toLowerCase();
+  assert.ok(lower.includes('volunteer') || lower.includes('willing'));
+  assert.ok(!d.body.includes('undefined'));
+});
+
+test('sentiment_mismatch draft diplomatically flags divergence', () => {
+  const d = buildEmailDraft('sentiment_mismatch', {
+    recipientName: 'Barbara Liskov', recipientEmail: 'barbara@example.com',
+    paperId: 15, paperTitle: 'Data Abstraction', totalScore: -1, sentimentScore: 14,
+    conferenceLabel: "CONF '26",
+  });
+  assert.ok(d.subject.includes('#15'));
+  assert.ok(d.body.includes('Barbara Liskov'));
+  assert.ok(d.body.includes('-1'));
+  assert.ok(d.body.includes('14'));
+  assert.ok(!d.body.includes('undefined'));
+});
+
+test('new kinds degrade gracefully on missing optional fields', () => {
+  for (const k of ['silent_debate', 'expertise_mismatch', 'missing_metareview', 'sentiment_mismatch']) {
+    const d = buildEmailDraft(k, { recipientName: 'X Y' });
+    assert.ok(!d.body.includes('undefined'), `${k} body has undefined`);
+    assert.ok(!d.subject.includes('undefined'), `${k} subject has undefined`);
+  }
+});
+
 test('unknown kind throws', () => {
   assert.throws(() => buildEmailDraft('nonsense', {}));
 });
