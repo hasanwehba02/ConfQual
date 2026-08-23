@@ -430,7 +430,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         const inc = includeTextCb && includeTextCb.checked ? '1' : '';
                         const a = document.createElement('a');
                         a.href = `/api/analytics/reviewers/${reviewerId}/report?includeReviewText=${inc}`;
+                        a.download = '';
                         a.rel = 'noopener';
+                        a.target = '_blank';
                         document.body.appendChild(a);
                         a.click();
                         a.remove();
