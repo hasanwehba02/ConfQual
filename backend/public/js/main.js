@@ -3,6 +3,7 @@ import { escapeHtml } from './utils.js';
 import { getBiasBadgeClass } from './renderers.js';
 import { createPreset, createPresetStore, encodePapersHash, parsePapersHash,
          resolveActiveConferenceId, sanitizePapersState, PAPERS_DEFAULT } from './viewState.mjs';
+import { buildEmailDraft } from './emailDrafts.mjs';
 
 function formatAdjScoreCell(p) {
     const avg = parseFloat(p.average_score);
@@ -67,6 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let debatesChartInstance = null;
     let decisionChartInstance = null;
     let scoreChartInstance = null;
+    let isCurrentAnonymized = false;
     let comparisonAcceptanceChart = null;
     let comparisonScoreChart = null;
     
@@ -360,7 +362,8 @@ document.addEventListener('DOMContentLoaded', () => {
         drawerBody.innerHTML = '<div class="spinner"></div>';
 
         try {
-            const res = await fetch(`/api/analytics/papers/${externalId}`);
+            const qs = activeConferenceId ? `?conferenceId=${activeConferenceId}` : '';
+            const res = await fetch(`/api/analytics/papers/${externalId}${qs}`);
             if (!res.ok) throw new Error("Failed to fetch");
             const paper = await res.json();
             
@@ -402,14 +405,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? `<span style="background: #e63946; color: white; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; font-weight: bold;">${mismatchCount} MISMATCHED REVIEW(S)</span>` 
                 : '';
 
+            const submittedReviewers = (paper.reviews || []).filter(r => r.reviewer_id && (r.first_name || r.last_name));
+            const showDraftPaperBtn = !isCurrentAnonymized && !(isAnonymizedCheckbox && isAnonymizedCheckbox.checked) && submittedReviewers.length > 0;
+            const draftPaperBtnHtml = showDraftPaperBtn ? `
+                <button id="paper-draft-email-btn" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
+                    <i class="ph ph-envelope-simple"></i> Draft Email
+                </button>
+            ` : '';
+
             let html = `
                 <h3 style="font-family: 'Inter', sans-serif; display: flex; align-items: center; justify-content: space-between;">
                     <span>${escapeHtml(paper.title)}</span>
                     ${mismatchBadgeHtml}
                 </h3>
-                <p style="font-family: 'Roboto Mono', monospace; font-size: 0.85rem; margin-bottom: 1.5rem; color: var(--text-muted);">
-                    <strong>PAPER TOPICS:</strong> ${escapeHtml(paper.topics) || 'None'}
-                </p>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem;">
+                    <p style="font-family: 'Roboto Mono', monospace; font-size: 0.85rem; margin: 0; color: var(--text-muted);">
+                        <strong>PAPER TOPICS:</strong> ${escapeHtml(paper.topics) || 'None'}
+                    </p>
+                    ${draftPaperBtnHtml}
+                </div>
                 
                 <h3>REVIEWS (${paper.reviews ? paper.reviews.length : 0})</h3>
                 <div class="detail-list">
@@ -455,6 +469,91 @@ document.addEventListener('DOMContentLoaded', () => {
             
             html += '</div>';
             drawerBody.innerHTML = html;
+
+            const paperDraftBtn = drawerBody.querySelector('#paper-draft-email-btn');
+            if (paperDraftBtn) {
+                paperDraftBtn.addEventListener('click', () => {
+                    const reviews = paper.reviews || [];
+                    const scores = reviews.map(r => r.total_score).filter(s => s != null && !isNaN(s));
+                    const scoreSpread = scores.length > 1 ? (Math.max(...scores) - Math.min(...scores)) : 0;
+                    const commentsCount = (paper.comments || []).length;
+                    const hasMetaReview = Boolean(paper.has_metareview);
+
+                    let initialReason = 'expertise_mismatch';
+                    if (scoreSpread > 2 && commentsCount === 0) {
+                        initialReason = 'silent_debate';
+                    } else if (!hasMetaReview) {
+                        initialReason = 'missing_metareview';
+                    } else if (scoreSpread > 2 && reviews.some(r => r.total_score <= 1)) {
+                        initialReason = 'sentiment_mismatch';
+                    }
+
+                    function renderPaperDraftView(reason, recipientIdx) {
+                        const r = submittedReviewers[recipientIdx] || submittedReviewers[0];
+                        const rEmail = r.email || (r.first_name ? `${r.first_name.toLowerCase()}.${(r.last_name || '').toLowerCase()}@example.com` : '');
+                        const base = {
+                            recipientName: `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Reviewer',
+                            recipientEmail: rEmail,
+                            paperId: paper.external_submission_id || paper.id,
+                            paperTitle: paper.title,
+                            conferenceLabel: currentConferenceLabel(),
+                        };
+                        let draftCtx = base;
+                        if (reason === 'silent_debate') draftCtx = { ...base, spread: scoreSpread };
+                        else if (reason === 'missing_metareview') draftCtx = { ...base, scoreSpread };
+                        else if (reason === 'expertise_mismatch') draftCtx = { ...base, paperTopics: paper.topics, reviewerTopics: r.topics };
+                        else if (reason === 'sentiment_mismatch') draftCtx = { ...base, totalScore: r.total_score, sentimentScore: null };
+                        else if (reason === 'custom') draftCtx = base;
+
+                        const draft = buildEmailDraft(reason, draftCtx);
+
+                        const reasonOptions = `
+                            <option value="silent_debate" ${reason === 'silent_debate' ? 'selected' : ''}>Discussion needed (silent debate)</option>
+                            <option value="missing_metareview" ${reason === 'missing_metareview' ? 'selected' : ''}>Metareview needed</option>
+                            <option value="sentiment_mismatch" ${reason === 'sentiment_mismatch' ? 'selected' : ''}>Review calibration check</option>
+                            <option value="expertise_mismatch" ${reason === 'expertise_mismatch' ? 'selected' : ''}>Topic alignment check</option>
+                            <option value="custom" ${reason === 'custom' ? 'selected' : ''}>Custom message</option>
+                        `;
+
+                        const recipientOptions = submittedReviewers.map((rec, i) =>
+                            `<option value="${i}" ${i === recipientIdx ? 'selected' : ''}>${escapeHtml(rec.first_name)} ${escapeHtml(rec.last_name)}${rec.email ? ` (${escapeHtml(rec.email)})` : ''}</option>`
+                        ).join('');
+
+                        drawerBody.innerHTML = `
+                            <div style="margin-bottom: 14px;">
+                                <button type="button" id="draft-back-to-paper-btn" class="btn btn-outline btn-sm">
+                                    <i class="ph ph-arrow-left"></i> Back to Paper
+                                </button>
+                            </div>
+                            <label style="display:block;font-size:12px;margin-bottom:4px;">Reason</label>
+                            <select id="drawer-draft-reason-select" style="width:100%;padding:6px;margin-bottom:12px;">${reasonOptions}</select>
+                            <label style="display:block;font-size:12px;margin-bottom:4px;">Recipient</label>
+                            <select id="drawer-draft-recipient-select" style="width:100%;padding:6px;margin-bottom:12px;">${recipientOptions}</select>
+                            <div id="drawer-draft-fields-container">
+                                ${draftFieldsHtml(draft)}
+                            </div>
+                        `;
+
+                        bindDraftCopyHandler();
+
+                        document.getElementById('draft-back-to-paper-btn')?.addEventListener('click', () => {
+                            window.openPaperModal(externalId);
+                        });
+
+                        document.getElementById('drawer-draft-reason-select')?.addEventListener('change', (e) => {
+                            const curRec = parseInt(document.getElementById('drawer-draft-recipient-select')?.value || '0', 10);
+                            renderPaperDraftView(e.target.value, curRec);
+                        });
+
+                        document.getElementById('drawer-draft-recipient-select')?.addEventListener('change', (e) => {
+                            const curReason = document.getElementById('drawer-draft-reason-select')?.value || initialReason;
+                            renderPaperDraftView(curReason, parseInt(e.target.value, 10));
+                        });
+                    }
+
+                    renderPaperDraftView(initialReason, 0);
+                });
+            }
         } catch {
             drawerBody.innerHTML = '<p class="text-danger">Failed to load paper details.</p>';
         }
@@ -489,6 +588,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <button id="export-pdf-btn" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
                             <i class="ph ph-file-pdf"></i> Export Reviewer Card
                         </button>
+                        ${!isCurrentAnonymized && !(isAnonymizedCheckbox && isAnonymizedCheckbox.checked) ? `<button id="reviewer-draft-email-btn" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.35rem;"><i class="ph ph-envelope-simple"></i> Draft Email</button>` : ''}
                     </div>
                 </div>
                 
@@ -591,6 +691,33 @@ document.addEventListener('DOMContentLoaded', () => {
                         exportBtn.disabled = false;
                         exportBtn.innerHTML = origHtml;
                     }
+                });
+            }
+
+            const reviewerDraftBtn = drawerBody.querySelector('#reviewer-draft-email-btn');
+            if (reviewerDraftBtn) {
+                reviewerDraftBtn.addEventListener('click', () => {
+                    const kind = (rev.avg_word_count != null && rev.avg_word_count < 60) ? 'low_effort' : 'reviewer_followup';
+                    const reviewerFullName = `${rev.first_name || ''} ${rev.last_name || ''}`.trim() || name || 'Reviewer';
+                    const draft = buildEmailDraft(kind, {
+                        recipientName: reviewerFullName,
+                        recipientEmail: rev.email || '',
+                        avgWordCount: rev.avg_word_count,
+                        conferenceLabel: currentConferenceLabel(),
+                    });
+
+                    drawerBody.innerHTML = `
+                        <div style="margin-bottom: 14px;">
+                            <button type="button" id="draft-back-to-reviewer-btn" class="btn btn-outline btn-sm">
+                                <i class="ph ph-arrow-left"></i> Back to Reviewer
+                            </button>
+                        </div>
+                        ${draftFieldsHtml(draft)}
+                    `;
+                    bindDraftCopyHandler();
+                    document.getElementById('draft-back-to-reviewer-btn')?.addEventListener('click', () => {
+                        window.openReviewerModal(reviewerId, name);
+                    });
                 });
             }
         } catch {
@@ -705,6 +832,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 
                 if (res.ok) {
+                    isCurrentAnonymized = isAnonymizedCheckbox.checked;
                     settingsDrawer.classList.remove('open');
                     settingsDrawer.classList.add('closed');
                     // Reload data to reflect new settings
@@ -909,6 +1037,11 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Conference Selector ---
+    function currentConferenceLabel() {
+        const c = loadedConferences.find(x => x.id == activeConferenceId);
+        return c ? [c.short_name || c.name, c.year].filter(Boolean).join(" '") : '';
+    }
+
     async function loadConferences() {
         try {
             const conferences = await fetchConferences();
@@ -1111,7 +1244,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch(`/api/analytics/dashboard${qs}`);
             const data = await res.json();
 
-            renderAlerts(data.alerts);
+            isCurrentAnonymized = !!data.is_anonymized;
+            renderAlerts(data.alerts, isCurrentAnonymized);
             
             allPapers = data.papers.items || data.papers;
             renderPapersTable(allPapers);
@@ -1171,10 +1305,10 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('geographic-breakdown').innerHTML = geoBreakdown;
     }
 
-    function renderAlerts(alerts) {
+    function renderAlerts(alerts, isAnonymized = false) {
         const container = document.getElementById('alerts-list');
         container.innerHTML = '';
-        
+
         if (alerts.length === 0) {
             container.innerHTML = '<div class="empty-alerts text-muted">No actions required.</div>';
             return;
@@ -1188,14 +1322,172 @@ document.addEventListener('DOMContentLoaded', () => {
                     <h3 style="font-family: 'Roboto Mono', monospace;">${escapeHtml(alert.title)}</h3>
                     <p>${escapeHtml(alert.message)}</p>
                 </div>
-                <button class="btn btn-outline btn-sm w-full">${escapeHtml(alert.action)}</button>
+                <div class="alert-actions">
+                    <button class="btn btn-outline btn-sm w-full">${escapeHtml(alert.action)}</button>
+                </div>
             `;
             const btn = card.querySelector('button');
             btn.addEventListener('click', () => {
                 applyFilterAndNavigate(alert.target, alert.filterKey, alert.affectedIds ? JSON.stringify(alert.affectedIds) : "[]", alert.title);
             });
+
+            if (alert.emailContext && alert.emailContext.kind === 'coi' && !isAnonymized) {
+                const mailBtn = document.createElement('button');
+                mailBtn.className = 'btn btn-outline btn-sm w-full';
+                mailBtn.innerHTML = '<i class="ph ph-envelope-simple"></i> Draft Email';
+                mailBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    openEmailDraftDrawer(alert);
+                });
+                card.querySelector('.alert-actions').appendChild(mailBtn);
+            }
+
             container.appendChild(card);
         });
+    }
+
+    function draftFieldsHtml(draft) {
+        const to = draft.to || '';
+        const subject = draft.subject || '';
+        const body = draft.body || '';
+        const longBody = body.length > 1800;
+        const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}`
+            + (longBody ? '' : `&body=${encodeURIComponent(body)}`);
+        return `
+            <label style="display:block;font-size:12px;margin-bottom:4px;">To</label>
+            <input id="email-draft-to" value="${escapeHtml(to)}" style="width:100%;padding:6px;margin-bottom:10px;">
+            <label style="display:block;font-size:12px;margin-bottom:4px;">Subject</label>
+            <input id="email-draft-subject" value="${escapeHtml(subject)}" style="width:100%;padding:6px;margin-bottom:10px;">
+            <label style="display:block;font-size:12px;margin-bottom:4px;">Body</label>
+            <textarea id="email-draft-body" rows="14" style="width:100%;padding:8px;font-family:inherit;">${escapeHtml(body)}</textarea>
+            ${longBody ? '<p class="text-muted" style="font-size:12px;">Body exceeds mailto length limits — "Open in Mail" prefills To/Subject only; paste the body from your clipboard.</p>' : ''}
+            <div style="display:flex;gap:8px;margin-top:12px;">
+                <button type="button" id="email-copy-btn" class="btn btn-outline" style="flex:1;">Copy to Clipboard</button>
+                <a id="email-mail-btn" href="${mailto}" class="btn btn-outline" style="flex:1;text-align:center;text-decoration:none;">Open in Mail <i class="ph ph-arrow-up-right"></i></a>
+            </div>`;
+    }
+
+    function bindDraftCopyHandler() {
+        function updateMailto() {
+            const to = document.getElementById('email-draft-to')?.value || '';
+            const subject = document.getElementById('email-draft-subject')?.value || '';
+            const body = document.getElementById('email-draft-body')?.value || '';
+            const mailBtn = document.getElementById('email-mail-btn');
+            if (mailBtn) {
+                const longBody = body.length > 1800;
+                mailBtn.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}`
+                    + (longBody ? '' : `&body=${encodeURIComponent(body)}`);
+            }
+        }
+
+        document.getElementById('email-draft-to')?.addEventListener('input', updateMailto);
+        document.getElementById('email-draft-subject')?.addEventListener('input', updateMailto);
+        document.getElementById('email-draft-body')?.addEventListener('input', updateMailto);
+
+        document.getElementById('email-copy-btn')?.addEventListener('click', async (e) => {
+            const subject = document.getElementById('email-draft-subject')?.value || '';
+            const body = document.getElementById('email-draft-body')?.value || '';
+            const text = subject ? (subject + '\n\n' + body) : body;
+            const btn = e.currentTarget;
+            try {
+                await navigator.clipboard.writeText(text);
+            } catch {
+                const ta = document.getElementById('email-draft-body');
+                if (ta) {
+                    ta.select();
+                    document.execCommand('copy');
+                }
+            }
+            btn.textContent = 'Copied ✓';
+            setTimeout(() => { btn.textContent = 'Copy to Clipboard'; }, 1500);
+        });
+    }
+
+    function renderEmailDraftInDrawer(alert, recipientIndex) {
+        const ctx = alert.emailContext;
+        const r = ctx.recipients[recipientIndex];
+        const draft = buildEmailDraft(ctx.kind, {
+            recipientName: r.name,
+            recipientEmail: r.email,
+            paperId: ctx.paperIds ? ctx.paperIds[0] : undefined,
+            paperTitle: ctx.paperTitle,
+            avgWordCount: ctx.avgWordCount,
+            conferenceLabel: currentConferenceLabel(),
+        });
+
+        const drawerBody = document.getElementById('detail-drawer-body');
+        const options = ctx.recipients.map((rec, i) =>
+            `<option value="${i}" ${i === recipientIndex ? 'selected' : ''}>${escapeHtml(rec.name)}</option>`).join('');
+        const omitted = ctx.omittedCount ? `<option disabled>… +${ctx.omittedCount} more not shown</option>` : '';
+
+        drawerBody.innerHTML = `
+            ${ctx.recipients.length > 1 || ctx.omittedCount ? `<label style="display:block;font-size:12px;margin-bottom:4px;">Recipient</label>
+            <select id="email-recipient-select" style="width:100%;padding:6px;margin-bottom:12px;">${options}${omitted}</select>` : ''}
+            ${draftFieldsHtml(draft)}`;
+
+        bindDraftCopyHandler();
+
+        document.getElementById('email-recipient-select')?.addEventListener('change', (e) => {
+            renderEmailDraftInDrawer(alert, parseInt(e.target.value, 10));
+        });
+    }
+
+    function paperKeyedDraftContext(kind, paper, r) {
+        const base = {
+            recipientName: r.name,
+            recipientEmail: r.email,
+            paperId: paper.id,
+            paperTitle: paper.title,
+            conferenceLabel: currentConferenceLabel(),
+        };
+        if (kind === 'silent_debate') return { ...base, spread: paper.spread };
+        if (kind === 'missing_metareview') return { ...base, scoreSpread: paper.scoreSpread };
+        if (kind === 'expertise_mismatch') return { ...base, paperTopics: r.paperTopics, reviewerTopics: r.reviewerTopics };
+        if (kind === 'sentiment_mismatch') return { ...base, totalScore: r.totalScore, sentimentScore: r.sentimentScore };
+        return base;
+    }
+
+    function renderPaperKeyedDraftInDrawer(alert, paperIndex, recipientIndex) {
+        const ctx = alert.emailContext;
+        const paper = ctx.papers[paperIndex];
+        if (!paper || paper.recipients.length === 0) return;
+        const rIdx = Math.min(recipientIndex, paper.recipients.length - 1);
+        const r = paper.recipients[rIdx];
+        const draft = buildEmailDraft(ctx.kind, paperKeyedDraftContext(ctx.kind, paper, r));
+
+        const drawerBody = document.getElementById('detail-drawer-body');
+        const paperOptions = ctx.papers.map((p, i) =>
+            `<option value="${i}" ${i === paperIndex ? 'selected' : ''}>#${p.id} — ${escapeHtml(p.title)}</option>`).join('');
+        const papersNote = ctx.omittedPaperCount ? `<option disabled>… +${ctx.omittedPaperCount} more not shown</option>` : '';
+        const recOptions = paper.recipients.map((rec, i) =>
+            `<option value="${i}" ${i === rIdx ? 'selected' : ''}>${escapeHtml(rec.name)}</option>`).join('');
+
+        drawerBody.innerHTML = `
+            ${ctx.papers.length > 1 || ctx.omittedPaperCount ? `<label style="display:block;font-size:12px;margin-bottom:4px;">Paper</label>
+            <select id="email-paper-select" style="width:100%;padding:6px;margin-bottom:12px;">${paperOptions}${papersNote}</select>` : ''}
+            ${paper.recipients.length > 1 ? `<label style="display:block;font-size:12px;margin-bottom:4px;">Recipient</label>
+            <select id="email-recipient-select" style="width:100%;padding:6px;margin-bottom:12px;">${recOptions}</select>` : ''}
+            ${draftFieldsHtml(draft)}`;
+
+        bindDraftCopyHandler();
+
+        document.getElementById('email-paper-select')?.addEventListener('change', (e) => {
+            renderPaperKeyedDraftInDrawer(alert, parseInt(e.target.value, 10), 0);
+        });
+        document.getElementById('email-recipient-select')?.addEventListener('change', (e) => {
+            renderPaperKeyedDraftInDrawer(alert, paperIndex, parseInt(e.target.value, 10));
+        });
+    }
+
+    function openEmailDraftDrawer(alert) {
+        detailDrawer.classList.add('open');
+        detailDrawer.classList.remove('closed');
+        document.getElementById('detail-drawer-title').textContent = `DRAFT EMAIL — ${alert.title.toUpperCase()}`;
+        if (Array.isArray(alert.emailContext.papers)) {
+            renderPaperKeyedDraftInDrawer(alert, 0, 0);
+        } else {
+            renderEmailDraftInDrawer(alert, 0);
+        }
     }
 
     let paperSearchDebounce;
