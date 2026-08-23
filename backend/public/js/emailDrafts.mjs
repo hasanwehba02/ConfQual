@@ -35,6 +35,18 @@ export function buildEmailDraft(kind, ctx = {}) {
     };
   }
 
+  if (kind === 'reviewer_followup') {
+    return {
+      to: ctx.recipientEmail || '',
+      subject: `Review follow-up and status check`,
+      body: `Dear ${name},\n\n`
+        + `Thank you for your service on the program committee. As we progress through the review cycle, `
+        + `we are reaching out to all reviewers to ensure everything is on track and to see if you need `
+        + `any assistance with your assigned papers or discussion threads.\n\n`
+        + `Please don't hesitate to reach out if you have questions or need support with any of your assignments.${SIGNOFF(label)}`,
+    };
+  }
+
   if (kind === 'silent_debate') {
     const paperRef = ctx.paperId != null
       ? `Paper #${ctx.paperId}${ctx.paperTitle ? ` ("${ctx.paperTitle}")` : ''}`

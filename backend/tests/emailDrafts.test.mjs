@@ -29,6 +29,18 @@ test('low_effort draft mentions word count', () => {
   assert.ok(!d.body.includes('undefined'));
 });
 
+test('reviewer_followup draft is polite check-in', () => {
+  const d = buildEmailDraft('reviewer_followup', {
+    recipientName: 'Tim Berners-Lee', recipientEmail: 'tim@example.com',
+    conferenceLabel: "CONF '26",
+  });
+  assert.equal(d.to, 'tim@example.com');
+  assert.ok(d.subject.toLowerCase().includes('follow-up'));
+  assert.ok(d.body.includes('Tim Berners-Lee'));
+  assert.ok(d.body.includes("CONF '26"));
+  assert.ok(!d.body.includes('undefined'));
+});
+
 test('missing optional fields degrade gracefully', () => {
   const d = buildEmailDraft('coi', { recipientName: 'X Y' });
   assert.ok(!d.body.includes('undefined'));
@@ -89,7 +101,7 @@ test('sentiment_mismatch draft diplomatically flags divergence', () => {
 });
 
 test('new kinds degrade gracefully on missing optional fields', () => {
-  for (const k of ['silent_debate', 'expertise_mismatch', 'missing_metareview', 'sentiment_mismatch']) {
+  for (const k of ['silent_debate', 'expertise_mismatch', 'missing_metareview', 'sentiment_mismatch', 'reviewer_followup']) {
     const d = buildEmailDraft(k, { recipientName: 'X Y' });
     assert.ok(!d.body.includes('undefined'), `${k} body has undefined`);
     assert.ok(!d.subject.includes('undefined'), `${k} subject has undefined`);

@@ -600,7 +600,11 @@ async function getPaperDetails(externalSubmissionId, conferenceId = null) {
                (SELECT STRING_AGG(t.name, ', ')
                 FROM paper_topic pt
                 JOIN topic t ON pt.topic_id = t.id
-                WHERE pt.paper_id = p.id) as topics
+                WHERE pt.paper_id = p.id) as topics,
+               EXISTS(
+                SELECT 1 FROM meta_review mr
+                WHERE mr.paper_id = p.id
+               ) as has_metareview
         FROM paper p
         WHERE p.external_submission_id = $1 AND p.is_deleted = false AND p.conference_id = $2
     `;
@@ -610,7 +614,7 @@ async function getPaperDetails(externalSubmissionId, conferenceId = null) {
     const paper = paperRes.rows[0];
 
     const reviewsQuery = `
-        SELECT r.id, pcm.id as reviewer_id, pcm.first_name, pcm.last_name, r.total_score, r.review_text,
+        SELECT r.id, pcm.id as reviewer_id, pcm.first_name, pcm.last_name, pcm.email, r.total_score, r.review_text,
                (SELECT STRING_AGG(t.name, ', ')
                 FROM program_committee_member_topic pcmt
                 JOIN topic t ON pcmt.topic_id = t.id
@@ -684,6 +688,17 @@ async function getReviewerDetails(reviewerId) {
     `;
     const bidsRes = await client.query(bidsQuery, [reviewer.id]);
     reviewer.bids = bidsRes.rows;
+
+    const reviewsWithText = (reviewer.assignments || []).filter(a => a.review_text && typeof a.review_text === "string");
+    if (reviewsWithText.length > 0) {
+        const totalWords = reviewsWithText.reduce((acc, a) => {
+            const words = a.review_text.trim().split(/\s+/).filter(Boolean).length;
+            return acc + words;
+        }, 0);
+        reviewer.avg_word_count = Math.round(totalWords / reviewsWithText.length);
+    } else {
+        reviewer.avg_word_count = null;
+    }
 
     return reviewer;
 }
