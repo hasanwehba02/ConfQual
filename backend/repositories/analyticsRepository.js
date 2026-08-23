@@ -43,8 +43,8 @@ function maskNames(rows, settings, idKey = 'id') {
         const masked = { ...row };
 
         if (masked.role === 'Sub-reviewer') {
-            if (masked.first_name !== undefined) masked.first_name = `subnom${personId}`;
-            if (masked.last_name !== undefined) masked.last_name = `cognom${personId}`;
+            if (isAnonymized && masked.first_name !== undefined) masked.first_name = `subnom${personId}`;
+            if (isAnonymized && masked.last_name !== undefined) masked.last_name = `cognom${personId}`;
             if (isAnonymized && masked.email !== undefined) masked.email = `subreviewer_${personId}@example.com`;
         } else if (isAnonymized) {
             if (masked.first_name !== undefined) masked.first_name = `${prefix}Reviewer_${id}`;
@@ -56,6 +56,7 @@ function maskNames(rows, settings, idKey = 'id') {
             if (masked.reviewer_first_name !== undefined) masked.reviewer_first_name = `${prefix}Reviewer_${id}`;
             if (masked.reviewer_last_name !== undefined) masked.reviewer_last_name = '';
             if (masked.reviewer_name !== undefined) masked.reviewer_name = `${prefix}Reviewer_${id} `;
+            if (masked.reviewer_email !== undefined) masked.reviewer_email = `${prefix}reviewer_${id}@example.com`;
         }
         
         // Handle sub-reviewer in review object
@@ -111,7 +112,7 @@ async function getConferenceHealth(conferenceId = null) {
 
 async function getReviewerQuality(options = {}) {
     const cid = await resolveConferenceId(options.conferenceId);
-    const settings = await getAnonymizationSettings(cid);
+    const settings = options.settings || await getAnonymizationSettings(cid);
 
     const values = [cid];
     let paramIdx = 2;
@@ -202,6 +203,7 @@ async function getReviewerQuality(options = {}) {
             pcm.first_name,
             pcm.last_name,
             pcm.role,
+            pcm.email,
             COUNT(DISTINCT r.id) as total_reviews_completed,
             ROUND(AVG(cardinality(regexp_split_to_array(trim(r.review_text), '\\s+'))), 0) as avg_word_count,
             ROUND(AVG(r.total_score), 2) as avg_score_given,
@@ -471,9 +473,9 @@ async function getPaperDebates(options = {}) {
     return result.rows;
 }
 
-async function getExpertiseMismatches(conferenceId = null) {
+async function getExpertiseMismatches(conferenceId = null, settingsArg = null) {
     const cid = await resolveConferenceId(conferenceId);
-    const settings = await getAnonymizationSettings(cid);
+    const settings = settingsArg || await getAnonymizationSettings(cid);
 
     const query = `
         SELECT 
@@ -483,6 +485,7 @@ async function getExpertiseMismatches(conferenceId = null) {
             pcm.id as reviewer_id,
             pcm.first_name as reviewer_first_name,
             pcm.last_name as reviewer_last_name,
+            pcm.email as reviewer_email,
             r.total_score,
             (SELECT STRING_AGG(t.name, ', ') FROM paper_topic pt JOIN topic t ON pt.topic_id = t.id WHERE pt.paper_id = p.id) as paper_topics,
             (SELECT STRING_AGG(t.name, ', ') FROM program_committee_member_topic pcmt JOIN topic t ON pcmt.topic_id = t.id WHERE pcmt.program_committee_member_id = pcm.id) as reviewer_topics
@@ -501,9 +504,9 @@ async function getExpertiseMismatches(conferenceId = null) {
     return maskNames(result.rows, settings, 'reviewer_id');
 }
 
-async function getCOIViolations(conferenceId = null) {
+async function getCOIViolations(conferenceId = null, settingsArg = null) {
     const cid = await resolveConferenceId(conferenceId);
-    const settings = await getAnonymizationSettings(cid);
+    const settings = settingsArg || await getAnonymizationSettings(cid);
 
     const query = `
         SELECT 
@@ -512,7 +515,8 @@ async function getCOIViolations(conferenceId = null) {
             p.title as paper_title,
             pcm.id as reviewer_id,
             pcm.first_name as reviewer_first_name,
-            pcm.last_name as reviewer_last_name
+            pcm.last_name as reviewer_last_name,
+            pcm.email as reviewer_email
         FROM assignment a
         JOIN conflict c ON a.paper_id = c.paper_id AND a.program_committee_member_id = c.program_committee_member_id
         JOIN paper p ON a.paper_id = p.id
@@ -522,23 +526,69 @@ async function getCOIViolations(conferenceId = null) {
     const result = await client.query(query, [cid]);
     return maskNames(result.rows, settings, 'reviewer_id');
 }
-
-async function getMissingMetareviews(conferenceId = null) {
+async function getMissingMetareviews(conferenceId = null, settingsArg = null) {
     const cid = await resolveConferenceId(conferenceId);
+    const settings = settingsArg || await getAnonymizationSettings(cid);
+
     const query = `
-        SELECT 
-            p.external_submission_id,
-            p.title,
-            (MAX(r.total_score) - MIN(r.total_score)) as score_spread
-        FROM paper p
-        JOIN review r ON p.id = r.paper_id AND r.is_superseded = false
-        LEFT JOIN meta_review mr ON p.id = mr.paper_id
-        WHERE mr.id IS NULL AND p.is_deleted = false AND p.conference_id = $1
-        GROUP BY p.id, p.external_submission_id, p.title
-        HAVING (MAX(r.total_score) - MIN(r.total_score)) > 2
+        WITH base AS (
+            SELECT p.id,
+                   p.external_submission_id,
+                   p.title,
+                   (MAX(r.total_score) - MIN(r.total_score)) as score_spread
+            FROM paper p
+            JOIN review r ON p.id = r.paper_id AND r.is_superseded = false
+            LEFT JOIN meta_review mr ON p.id = mr.paper_id
+            WHERE mr.id IS NULL AND p.is_deleted = false AND p.conference_id = $1
+            GROUP BY p.id, p.external_submission_id, p.title
+            HAVING (MAX(r.total_score) - MIN(r.total_score)) > 2
+        )
+        SELECT b.external_submission_id, b.title, b.score_spread,
+               pcm.id, pcm.first_name, pcm.last_name, pcm.email
+        FROM base b
+        JOIN (
+            SELECT DISTINCT r.paper_id, r.program_committee_member_id
+            FROM review r
+            WHERE r.is_superseded = false
+        ) rd ON rd.paper_id = b.id
+        JOIN program_committee_member pcm ON rd.program_committee_member_id = pcm.id
     `;
     const result = await client.query(query, [cid]);
-    return result.rows;
+    const masked = maskNames(result.rows, settings);
+    const byPaper = new Map();
+    for (const row of masked) {
+        if (!byPaper.has(row.external_submission_id)) {
+            byPaper.set(row.external_submission_id, {
+                external_submission_id: row.external_submission_id,
+                title: row.title,
+                score_spread: Number(row.score_spread),
+                reviewers: [],
+            });
+        }
+        byPaper.get(row.external_submission_id).reviewers.push({
+            id: row.id, first_name: row.first_name, last_name: row.last_name, email: row.email,
+        });
+    }
+    return [...byPaper.values()];
+}
+
+async function getReviewersForPapers(paperExternalIds, conferenceId = null, settingsArg = null) {
+    const cid = await resolveConferenceId(conferenceId);
+    const settings = settingsArg || await getAnonymizationSettings(cid);
+    const ids = (paperExternalIds || []).map(Number).filter(Number.isFinite);
+    if (ids.length === 0) return [];
+
+    const query = `
+        SELECT DISTINCT p.external_submission_id, p.title,
+               pcm.id as reviewer_id, pcm.first_name, pcm.last_name, pcm.email
+        FROM paper p
+        JOIN review r ON r.paper_id = p.id AND r.is_superseded = false
+        JOIN program_committee_member pcm ON r.program_committee_member_id = pcm.id
+        WHERE p.is_deleted = false AND p.conference_id = $1
+          AND p.external_submission_id = ANY($2::int[])
+    `;
+    const result = await client.query(query, [cid, ids]);
+    return maskNames(result.rows, settings, 'reviewer_id');
 }
 
 async function getPaperDetails(externalSubmissionId, conferenceId = null) {
@@ -550,7 +600,11 @@ async function getPaperDetails(externalSubmissionId, conferenceId = null) {
                (SELECT STRING_AGG(t.name, ', ')
                 FROM paper_topic pt
                 JOIN topic t ON pt.topic_id = t.id
-                WHERE pt.paper_id = p.id) as topics
+                WHERE pt.paper_id = p.id) as topics,
+               EXISTS(
+                SELECT 1 FROM meta_review mr
+                WHERE mr.paper_id = p.id
+               ) as has_metareview
         FROM paper p
         WHERE p.external_submission_id = $1 AND p.is_deleted = false AND p.conference_id = $2
     `;
@@ -560,7 +614,9 @@ async function getPaperDetails(externalSubmissionId, conferenceId = null) {
     const paper = paperRes.rows[0];
 
     const reviewsQuery = `
-        SELECT r.id, pcm.id as reviewer_id, pcm.first_name, pcm.last_name, r.total_score, r.review_text,
+        SELECT r.id, pcm.id as reviewer_id, pcm.first_name, pcm.last_name, pcm.role,
+               COALESCE(NULLIF(pcm.email, ''), CASE WHEN pcm.role = 'Sub-reviewer' THEN CONCAT('subreviewer_', pcm.id, '@example.com') ELSE CONCAT('reviewer_', pcm.id, '@example.com') END) as email,
+               r.total_score, r.review_text,
                (SELECT STRING_AGG(t.name, ', ')
                 FROM program_committee_member_topic pcmt
                 JOIN topic t ON pcmt.topic_id = t.id
@@ -573,7 +629,9 @@ async function getPaperDetails(externalSubmissionId, conferenceId = null) {
     paper.reviews = maskNames(reviewsRes.rows, settings, 'reviewer_id');
 
     const commentsQuery = `
-        SELECT c.id, pcm.id as reviewer_id, pcm.first_name, pcm.last_name, c.comment_text
+        SELECT c.id, pcm.id as reviewer_id, pcm.first_name, pcm.last_name, pcm.role,
+               COALESCE(NULLIF(pcm.email, ''), CASE WHEN pcm.role = 'Sub-reviewer' THEN CONCAT('subreviewer_', pcm.id, '@example.com') ELSE CONCAT('reviewer_', pcm.id, '@example.com') END) as email,
+               c.comment_text
         FROM comment c
         JOIN program_committee_member pcm ON c.program_committee_member_id = pcm.id
         WHERE c.paper_id = $1
@@ -634,6 +692,17 @@ async function getReviewerDetails(reviewerId) {
     `;
     const bidsRes = await client.query(bidsQuery, [reviewer.id]);
     reviewer.bids = bidsRes.rows;
+
+    const reviewsWithText = (reviewer.assignments || []).filter(a => a.review_text && typeof a.review_text === "string");
+    if (reviewsWithText.length > 0) {
+        const totalWords = reviewsWithText.reduce((acc, a) => {
+            const words = a.review_text.trim().split(/\s+/).filter(Boolean).length;
+            return acc + words;
+        }, 0);
+        reviewer.avg_word_count = Math.round(totalWords / reviewsWithText.length);
+    } else {
+        reviewer.avg_word_count = null;
+    }
 
     return reviewer;
 }
@@ -831,9 +900,9 @@ async function getTopReviewers(conferenceId = null) {
     return maskNames(result.rows, settings, 'id');
 }
 
-async function getSentimentMismatches(conferenceId = null) {
+async function getSentimentMismatches(conferenceId = null, settingsArg = null) {
     const cid = await resolveConferenceId(conferenceId);
-    const settings = await getAnonymizationSettings(cid);
+    const settings = settingsArg || await getAnonymizationSettings(cid);
     const query = `
         SELECT 
             r.id,
@@ -841,6 +910,7 @@ async function getSentimentMismatches(conferenceId = null) {
             p.title as paper_title,
             pcm.id as reviewer_id,
             pcm.first_name || ' ' || pcm.last_name as reviewer_name,
+            pcm.email as reviewer_email,
             r.total_score,
             r.sentiment_score
         FROM review r
@@ -873,5 +943,6 @@ module.exports = {
     getTopPapers,
     getTopReviewers,
     getSentimentMismatches,
+    getReviewersForPapers,
     getAnonymizationSettings
 };
