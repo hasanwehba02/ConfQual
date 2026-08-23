@@ -339,7 +339,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span>Include review text</span>
                         </label>
                         <button id="export-pdf-btn" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.35rem;">
-                            <i class="ph ph-file-pdf"></i> Export PDF
+                            <i class="ph ph-file-pdf"></i> Export Reviewer Card
                         </button>
                     </div>
                 </div>
@@ -428,35 +428,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     exportBtn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Exporting...';
                     try {
                         const inc = includeTextCb && includeTextCb.checked ? '1' : '';
-                        const reportRes = await fetch(`/api/analytics/reviewers/${reviewerId}/report?includeReviewText=${inc}`);
-                        if (!reportRes.ok) {
-                            throw new Error('Failed to generate PDF');
-                        }
-                        const blob = await reportRes.blob();
-                        const fallbackName = [rev.first_name, rev.last_name]
-                            .filter(Boolean)
-                            .map(s => String(s).trim())
-                            .filter(Boolean)
-                            .join("_")
-                            .replace(/\s+/g, "_")
-                            .replace(/[^a-zA-Z0-9_-]/g, "")
-                            .replace(/_+/g, "_");
-                        let filename = `${fallbackName || `Reviewer_${reviewerId}`}_report.pdf`;
-                        const disposition = reportRes.headers.get('Content-Disposition');
-                        if (disposition && disposition.includes('filename=')) {
-                            const match = disposition.match(/filename="?([^";]+)"?/);
-                            if (match && match[1]) {
-                                filename = match[1];
-                            }
-                        }
-                        const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
-                        a.href = url;
-                        a.download = filename;
+                        a.href = `/api/analytics/reviewers/${reviewerId}/report?includeReviewText=${inc}`;
+                        a.rel = 'noopener';
                         document.body.appendChild(a);
                         a.click();
                         a.remove();
-                        URL.revokeObjectURL(url);
                     } catch (err) {
                         console.error('Error exporting PDF report:', err);
                         alert('Failed to export PDF report. Please try again.');
