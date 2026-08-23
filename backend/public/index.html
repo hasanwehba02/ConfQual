@@ -104,7 +104,19 @@
                         <option value="borderline">Filter: Borderline (-0.5 to 0.5)</option>
                         <option value="to_discuss">Filter: To Discuss (Borderline OR Spread > 2)</option>
                     </select>
+                    <div style="position: relative;">
+                        <button type="button" id="save-preset-btn" class="btn btn-outline" style="padding: 5px 10px;" title="Save current filter and sort as a named view">
+                            Save view <i class="ph ph-bookmark-simple"></i>
+                        </button>
+                        <div id="save-preset-popover" class="hidden" style="position: absolute; top: 110%; left: 0; z-index: 50; background: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; gap: 6px;">
+                            <input type="text" id="preset-name-input" placeholder="View name..." maxlength="60" style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; width: 180px;">
+                            <button type="button" id="preset-save-confirm" class="btn btn-outline btn-sm">Save</button>
+                            <button type="button" id="preset-cancel" class="btn btn-outline btn-sm">Cancel</button>
+                        </div>
+                    </div>
                 </div>
+
+                <div id="paper-presets-row" class="hidden" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;"></div>
                 
                 <div id="paper-filter-banner" class="filter-banner hidden">
                     <div class="filter-info">
