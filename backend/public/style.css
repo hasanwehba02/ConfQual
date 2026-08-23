@@ -713,3 +713,47 @@ th, .metric-value, .brand {
     color: var(--text-muted);
     margin: 0;
 }
+
+/* Saved view preset chips */
+.preset-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #eef2f7;
+    border: 1px solid #d3dbe4;
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 13px;
+    cursor: default;
+}
+
+.preset-chip .preset-name {
+    cursor: pointer;
+    user-select: none;
+}
+
+.preset-chip .preset-name:hover {
+    text-decoration: underline;
+}
+
+.preset-chip .preset-delete {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 15px;
+    color: #888;
+    padding: 0 2px;
+    line-height: 1;
+}
+
+.preset-chip .preset-delete:hover {
+    color: #c0392b;
+}
+
+.preset-chip input.preset-rename {
+    font-size: 13px;
+    padding: 1px 4px;
+    border: 1px solid #9ab;
+    border-radius: 3px;
+    width: 140px;
+}
