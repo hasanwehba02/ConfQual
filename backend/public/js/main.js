@@ -1,6 +1,8 @@
 import { fetchConferences, fetchComparison, deleteConference, updateConference } from './api.js';
 import { escapeHtml } from './utils.js';
 import { getBiasBadgeClass } from './renderers.js';
+import { createPreset, createPresetStore, encodePapersHash, parsePapersHash,
+         resolveActiveConferenceId, sanitizePapersState, PAPERS_DEFAULT } from './viewState.mjs';
 
 function formatAdjScoreCell(p) {
     const avg = parseFloat(p.average_score);
@@ -73,6 +75,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let activePaperFilter = null;
     let activeReviewerFilter = null;
     let activeConferenceId = null; // null = most-recent
+    let loadedConferences = [];
+    const presetStore = createPresetStore(window.localStorage);
     
     // --- Global Filter Functions ---
     window.applyFilterAndNavigate = function(targetTabId, filterKey, idsJson, customTitle) {
@@ -130,6 +134,150 @@ document.addEventListener('DOMContentLoaded', () => {
             if (titleEl) titleEl.textContent = 'Reviewer Explorer';
         }
     };
+
+    // --- Papers View State (URL hash + presets) ---
+    function readPaperControls() {
+        const sortVal = document.getElementById('paper-sort')?.value || 'external_submission_id_desc';
+        const li = sortVal.lastIndexOf('_');
+        return {
+            sortBy: sortVal.substring(0, li),
+            sortOrder: sortVal.substring(li + 1).toUpperCase(),
+            filterMode: document.getElementById('paper-filter')?.value || 'all',
+            searchText: document.getElementById('paper-search')?.value || '',
+            conferenceId: activeConferenceId,
+        };
+    }
+
+    function writePapersHash() {
+        history.replaceState(null, '', encodePapersHash(readPaperControls()));
+    }
+
+    function activateTabViaClasses(targetId) {
+        tabBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-target') === targetId));
+        tabContents.forEach(c => c.classList.toggle('hidden', c.id !== targetId));
+    }
+
+    function applyHashToControls() {
+        const raw = parsePapersHash(location.hash);
+        if (!raw) return null;
+        const sortSelect = document.getElementById('paper-sort');
+        const filterSelect = document.getElementById('paper-filter');
+        const state = sanitizePapersState(raw, {
+            filterModes: Array.from(filterSelect.options).map(o => o.value),
+            sortFields: Array.from(sortSelect.options)
+                .map(o => o.value.substring(0, o.value.lastIndexOf('_'))),
+            conferenceIds: loadedConferences.map(c => c.id),
+        });
+        if (state.conferenceId != null) activeConferenceId = state.conferenceId;
+        const combined = `${state.sortBy}_${state.sortOrder.toLowerCase()}`;
+        if (Array.from(sortSelect.options).some(o => o.value === combined)) sortSelect.value = combined;
+        filterSelect.value = state.filterMode;
+        const searchInput = document.getElementById('paper-search');
+        if (searchInput) searchInput.value = state.searchText;
+        return state;
+    }
+
+    function renderPresetChips() {
+        const row = document.getElementById('paper-presets-row');
+        const saveBtn = document.getElementById('save-preset-btn');
+        if (!row || !saveBtn) return;
+        const confId = resolveActiveConferenceId(loadedConferences, activeConferenceId);
+        const presets = confId == null ? [] : presetStore.getPresets(confId);
+        saveBtn.disabled = confId == null;
+        row.innerHTML = '';
+        row.classList.toggle('hidden', presets.length === 0);
+        presets.forEach(p => {
+            const chip = document.createElement('span');
+            chip.className = 'preset-chip';
+            chip.innerHTML = `<span class="preset-name" title="Click to apply, double-click to rename">${escapeHtml(p.name)}</span><button type="button" class="preset-delete" title="Delete view">&times;</button>`;
+            const nameEl = chip.querySelector('.preset-name');
+            nameEl.addEventListener('click', () => applyPreset(p));
+            nameEl.addEventListener('dblclick', () => startRenamePreset(chip, p, nameEl, confId));
+            chip.querySelector('.preset-delete').addEventListener('click', () => {
+                presetStore.deletePreset(confId, p.id);
+                renderPresetChips();
+            });
+            row.appendChild(chip);
+        });
+    }
+
+    function applyPreset(p) {
+        const sortSelect = document.getElementById('paper-sort');
+        const combined = `${p.sortBy}_${p.sortOrder.toLowerCase()}`;
+        if (Array.from(sortSelect.options).some(o => o.value === combined)) sortSelect.value = combined;
+        document.getElementById('paper-filter').value = p.filterMode;
+        activePaperFilter = null;
+        document.getElementById('paper-filter-banner')?.classList.add('hidden');
+        const titleEl = document.querySelector('#tab-papers h2');
+        if (titleEl) titleEl.textContent = 'Paper Explorer';
+        window.fetchPapers();
+    }
+
+    function startRenamePreset(chip, preset, nameEl, confId) {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'preset-rename';
+        input.maxLength = 60;
+        input.value = preset.name;
+        nameEl.replaceWith(input);
+        input.focus();
+        input.select();
+        let done = false;
+        const commit = (save) => {
+            if (done) return;
+            done = true;
+            if (save && input.value.trim()) presetStore.renamePreset(confId, preset.id, input.value.trim());
+            renderPresetChips();
+        };
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') commit(true);
+            else if (e.key === 'Escape') commit(false);
+        });
+        input.addEventListener('blur', () => commit(true));
+    }
+
+    const savePresetBtn = document.getElementById('save-preset-btn');
+    const savePopover = document.getElementById('save-preset-popover');
+    const presetNameInput = document.getElementById('preset-name-input');
+
+    function closeSavePopover() {
+        savePopover?.classList.add('hidden');
+        if (presetNameInput) presetNameInput.value = '';
+    }
+
+    if (savePresetBtn && savePopover && presetNameInput) {
+        savePresetBtn.addEventListener('click', () => {
+            savePopover.classList.toggle('hidden');
+            if (!savePopover.classList.contains('hidden')) presetNameInput.focus();
+        });
+        const confirmSave = () => {
+            const name = presetNameInput.value.trim();
+            if (!name) { presetNameInput.focus(); return; }
+            const confId = resolveActiveConferenceId(loadedConferences, activeConferenceId);
+            if (confId == null) { closeSavePopover(); return; }
+            const { filterMode, sortBy, sortOrder } = readPaperControls();
+            const preset = createPreset({ name, filterMode, sortBy, sortOrder });
+            try {
+                presetStore.savePreset(confId, preset);
+                closeSavePopover();
+                renderPresetChips();
+            } catch (e) {
+                console.warn('Could not save preset (storage unavailable?):', e);
+                alert('Could not save this view — browser storage is full or blocked.');
+            }
+        };
+        document.getElementById('preset-save-confirm')?.addEventListener('click', confirmSave);
+        document.getElementById('preset-cancel')?.addEventListener('click', closeSavePopover);
+        presetNameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') confirmSave();
+            else if (e.key === 'Escape') closeSavePopover();
+        });
+        document.addEventListener('click', (e) => {
+            if (!savePopover.classList.contains('hidden')
+                && !savePopover.contains(e.target) && e.target !== savePresetBtn
+                && !savePresetBtn.contains(e.target)) closeSavePopover();
+        });
+    }
 
     window.exportTableToCSV = function(tbodyId, filename) {
         const tbody = document.getElementById(tbodyId);
@@ -465,7 +613,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 dashboardContent.classList.remove('hidden');
                 triageSidebar.classList.remove('hidden');
                 await loadConferences();
+                const restored = applyHashToControls();
                 await loadDashboardData();
+                if (restored && (restored.filterMode !== PAPERS_DEFAULT.filterMode
+                    || restored.sortBy !== PAPERS_DEFAULT.sortBy
+                    || restored.sortOrder !== PAPERS_DEFAULT.sortOrder
+                    || restored.searchText)) {
+                    activateTabViaClasses('tab-papers');
+                    await window.fetchPapers();
+                }
             }
         } catch {
             console.log("No existing data found or server offline");
@@ -705,12 +861,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Fetch specific datasets for sorting/filtering ---
     // Conference-aware fetch wrappers
     window.fetchPapers = async function() {
-        const sortVal = document.getElementById('paper-sort')?.value || 'external_submission_id_desc';
-        const lastUnderscore = sortVal.lastIndexOf('_');
-        const sortBy = sortVal.substring(0, lastUnderscore);
-        const sortOrder = sortVal.substring(lastUnderscore + 1).toUpperCase();
-        const filterMode = document.getElementById('paper-filter')?.value || 'all';
-        const cidParam = activeConferenceId ? `&conferenceId=${activeConferenceId}` : '';
+        const { sortBy, sortOrder, filterMode, searchText, conferenceId } = readPaperControls();
+        history.replaceState(null, '', encodePapersHash({ sortBy, sortOrder, filterMode, searchText, conferenceId }));
+        const cidParam = conferenceId ? `&conferenceId=${conferenceId}` : '';
         try {
             const res = await fetch(`/api/analytics/papers?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}&limit=2000${cidParam}`);
             const data = await res.json();
@@ -759,6 +912,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadConferences() {
         try {
             const conferences = await fetchConferences();
+            loadedConferences = conferences;
             const nameSpan = document.getElementById('conference-active-name');
             const wrapper = document.getElementById('conference-selector-wrapper');
             if (!nameSpan || !wrapper) return;
@@ -973,6 +1127,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             renderAwardsTab(data.systemAnalytics);
 
+            renderPresetChips();
         } catch (error) {
             console.error("Error loading dashboard data:", error);
         } finally {
@@ -1043,8 +1198,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    let paperSearchDebounce;
     window.handlePaperSearch = function() {
         if (allPapers) renderPapersTable(allPapers);
+        clearTimeout(paperSearchDebounce);
+        paperSearchDebounce = setTimeout(writePapersHash, 300);
     };
 
     window.handleReviewerSearch = function() {
