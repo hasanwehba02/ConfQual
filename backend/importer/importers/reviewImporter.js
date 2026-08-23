@@ -46,9 +46,17 @@ async function importReviewsForSheet(workbook, sheetName, conference, isSupersed
         }
 
         dto.isSuperseded = isSuperseded;
-        dto.sentimentScore = analyticsMath.analyzeReviewSentiment(dto.reviewText);
         dtos.push(dto);
     }
+
+    if (dtos.length > 0) {
+        const texts = dtos.map(d => d.reviewText || '');
+        const sentiments = await analyticsMath.batchAnalyzeReviewSentiment(texts);
+        for (let i = 0; i < dtos.length; i++) {
+            dtos[i].sentimentScore = sentiments[i];
+        }
+    }
+
     const chunkSize = 200;
     for (let i = 0; i < dtos.length; i += chunkSize) {
         const chunk = dtos.slice(i, i + chunkSize);
