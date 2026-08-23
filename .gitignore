@@ -5,8 +5,9 @@ excel/
 node_modules/
 .agents/
 skills-lock.json
-.neon/
 database/confqual_er_diagram_v1.png
 backend/server.log
 .worktrees/
 docs/
+.cache/
+backend/.cache/
