@@ -100,8 +100,8 @@ async function getPaperDebates(options = {}) {
 }
 
 // 4. Topic & Expertise Alignment
-async function getExpertiseMismatches(conferenceId = null) {
-    const rows = await analyticsRepository.getExpertiseMismatches(conferenceId);
+async function getExpertiseMismatches(conferenceId = null, settingsArg = null) {
+    const rows = await analyticsRepository.getExpertiseMismatches(conferenceId, settingsArg);
 
     const mismatches = [];
 
@@ -119,6 +119,7 @@ async function getExpertiseMismatches(conferenceId = null) {
                 paper_title: row.paper_title,
                 reviewer_id: row.reviewer_id,
                 reviewer_name: `${row.reviewer_first_name} ${row.reviewer_last_name}`,
+                reviewer_email: row.reviewer_email,
                 score: row.total_score,
                 paper_topics: row.paper_topics,
                 reviewer_topics: row.reviewer_topics,
@@ -134,12 +135,14 @@ async function getExpertiseMismatches(conferenceId = null) {
 }
 
 // 5. Intelligent Action Alerts
-async function getAlerts(prefetched = null, conferenceId = null) {
+async function getAlerts(prefetched = null, conferenceId = null, settingsArg = null) {
     const alerts = [];
     const cid = conferenceId;
+    const MAX_EMAIL_PAPERS = 10;
+    const settings = settingsArg || await analyticsRepository.getAnonymizationSettings(cid);
 
     // 1. Conflict of Interest Violations
-    const coiViolations = prefetched?.coiViolations || await analyticsRepository.getCOIViolations(cid);
+    const coiViolations = prefetched?.coiViolations || await analyticsRepository.getCOIViolations(cid, settings);
     coiViolations.forEach(coi => {
         alerts.push({
             severity: "CRITICAL",
@@ -168,6 +171,41 @@ async function getAlerts(prefetched = null, conferenceId = null) {
     const papers = prefetched?.papers || await getPaperDebates({ conferenceId: cid });
     const silentDebates = papers.filter(p => p.score_spread > 2.0 && parseInt(p.total_comments) === 0);
     if (silentDebates.length > 0) {
+        let debateContext = null;
+        const debateSlice = silentDebates.slice(0, MAX_EMAIL_PAPERS);
+        const spreadByPaper = new Map(silentDebates.map(p => [p.external_submission_id, Number(p.score_spread)]));
+        const reviewerRows = await analyticsRepository.getReviewersForPapers(
+            debateSlice.map(p => p.external_submission_id), cid, settings
+        );
+        const debateMap = new Map();
+        reviewerRows.forEach(r => {
+            if (!debateMap.has(r.external_submission_id)) {
+                debateMap.set(r.external_submission_id, {
+                    id: r.external_submission_id,
+                    title: r.title,
+                    spread: spreadByPaper.get(r.external_submission_id),
+                    recipients: [],
+                });
+            }
+            const paper = debateMap.get(r.external_submission_id);
+            if (!paper.recipients.some(x => x.id === r.reviewer_id)) {
+                paper.recipients.push({
+                    id: r.reviewer_id,
+                    name: `${r.first_name} ${r.last_name}`.trim(),
+                    email: r.email,
+                });
+            }
+        });
+        const debatePapers = debateSlice
+            .filter(p => debateMap.has(p.external_submission_id))
+            .map(p => debateMap.get(p.external_submission_id));
+        if (debatePapers.length > 0) {
+            debateContext = {
+                kind: 'silent_debate',
+                papers: debatePapers,
+                omittedPaperCount: Math.max(0, silentDebates.length - MAX_EMAIL_PAPERS),
+            };
+        }
         alerts.push({
             severity: "HIGH",
             category: "DISCUSSION",
@@ -177,13 +215,43 @@ async function getAlerts(prefetched = null, conferenceId = null) {
             affectedIds: silentDebates.map(p => p.external_submission_id),
             target: "tab-papers",
             filterKey: "paper",
-            customTitle: "Debated Papers with Zero Comments"
+            customTitle: "Debated Papers with Zero Comments",
+            emailContext: debateContext
         });
     }
 
     // 3. Expertise Mismatches
     const mismatches = prefetched?.mismatches || await getExpertiseMismatches(cid);
     if (mismatches.totalMismatches > 0) {
+        let expertiseContext = null;
+        const expertiseMap = new Map();
+        mismatches.details.forEach(m => {
+            if (!expertiseMap.has(m.external_submission_id)) {
+                expertiseMap.set(m.external_submission_id, {
+                    id: m.external_submission_id,
+                    title: m.paper_title,
+                    recipients: [],
+                });
+            }
+            const paper = expertiseMap.get(m.external_submission_id);
+            if (!paper.recipients.some(r => r.id === m.reviewer_id)) {
+                paper.recipients.push({
+                    id: m.reviewer_id,
+                    name: (m.reviewer_name || '').trim(),
+                    email: m.reviewer_email,
+                    paperTopics: m.paper_topics,
+                    reviewerTopics: m.reviewer_topics,
+                });
+            }
+        });
+        const expertisePapers = [...expertiseMap.values()].slice(0, MAX_EMAIL_PAPERS);
+        if (expertisePapers.length > 0) {
+            expertiseContext = {
+                kind: 'expertise_mismatch',
+                papers: expertisePapers,
+                omittedPaperCount: Math.max(0, expertiseMap.size - MAX_EMAIL_PAPERS),
+            };
+        }
         alerts.push({
             severity: "MEDIUM",
             category: "EXPERTISE",
@@ -193,13 +261,32 @@ async function getAlerts(prefetched = null, conferenceId = null) {
             affectedIds: [...new Set(mismatches.details.map(m => m.external_submission_id))],
             target: "tab-papers",
             filterKey: "paper",
-            customTitle: "Expertise Mismatches"
+            customTitle: "Expertise Mismatches",
+            emailContext: expertiseContext
         });
     }
 
     // 4. Missing Metareviews
-    const missingMetas = prefetched?.missingMetareviews || await analyticsRepository.getMissingMetareviews(cid);
+    const missingMetas = prefetched?.missingMetareviews || await analyticsRepository.getMissingMetareviews(cid, settings);
     if (missingMetas.length > 0) {
+        let metareviewContext = null;
+        const metaPapers = missingMetas.slice(0, MAX_EMAIL_PAPERS).map(m => ({
+            id: m.external_submission_id,
+            title: m.title,
+            scoreSpread: Number(m.score_spread),
+            recipients: (m.reviewers || []).map(rv => ({
+                id: rv.id,
+                name: `${rv.first_name} ${rv.last_name}`.trim(),
+                email: rv.email,
+            })),
+        }));
+        if (metaPapers.length > 0) {
+            metareviewContext = {
+                kind: 'missing_metareview',
+                papers: metaPapers,
+                omittedPaperCount: Math.max(0, missingMetas.length - MAX_EMAIL_PAPERS),
+            };
+        }
         alerts.push({
             severity: "MEDIUM",
             category: "PROCESS",
@@ -209,12 +296,13 @@ async function getAlerts(prefetched = null, conferenceId = null) {
             affectedIds: missingMetas.map(m => m.external_submission_id),
             target: "tab-papers",
             filterKey: "paper",
-            customTitle: "Missing Metareviews"
+            customTitle: "Missing Metareviews",
+            emailContext: metareviewContext
         });
     }
 
     // 5. Short / Low Effort Reviews
-    const reviewers = prefetched?.reviewers || await getReviewerQuality({ conferenceId: cid });
+    const reviewers = prefetched?.reviewers || await getReviewerQuality({ conferenceId: cid, settings });
     const lowEffortReviewers = reviewers.filter(r => parseInt(r.avg_word_count) < 60 && parseInt(r.total_reviews_completed) > 0);
     if (lowEffortReviewers.length > 0) {
         const MAX_EMAIL_RECIPIENTS = 10;
@@ -244,6 +332,35 @@ async function getAlerts(prefetched = null, conferenceId = null) {
     // 6. Sentiment Mismatches
     const sentimentMismatches = prefetched?.sentimentMismatches || await analyticsRepository.getSentimentMismatches(cid);
     if (sentimentMismatches.length > 0) {
+        let sentimentContext = null;
+        const sentimentMap = new Map();
+        sentimentMismatches.forEach(m => {
+            if (!sentimentMap.has(m.external_submission_id)) {
+                sentimentMap.set(m.external_submission_id, {
+                    id: m.external_submission_id,
+                    title: m.paper_title,
+                    recipients: [],
+                });
+            }
+            const paper = sentimentMap.get(m.external_submission_id);
+            if (!paper.recipients.some(r => r.id === m.reviewer_id)) {
+                paper.recipients.push({
+                    id: m.reviewer_id,
+                    name: (m.reviewer_name || '').trim(),
+                    email: m.reviewer_email,
+                    totalScore: Number(m.total_score),
+                    sentimentScore: Number(m.sentiment_score),
+                });
+            }
+        });
+        const sentimentPapers = [...sentimentMap.values()].slice(0, MAX_EMAIL_PAPERS);
+        if (sentimentPapers.length > 0) {
+            sentimentContext = {
+                kind: 'sentiment_mismatch',
+                papers: sentimentPapers,
+                omittedPaperCount: Math.max(0, sentimentMap.size - MAX_EMAIL_PAPERS),
+            };
+        }
         alerts.push({
             severity: "HIGH",
             category: "INTEGRITY",
@@ -253,7 +370,8 @@ async function getAlerts(prefetched = null, conferenceId = null) {
             affectedIds: [...new Set(sentimentMismatches.map(m => m.external_submission_id))],
             target: "tab-papers",
             filterKey: "paper",
-            customTitle: "Sentiment Mismatches"
+            customTitle: "Sentiment Mismatches",
+            emailContext: sentimentContext
         });
     }
 
@@ -554,16 +672,16 @@ async function getDashboardData(conferenceId = null) {
     const settings = await analyticsRepository.getAnonymizationSettings(cid);
     const health = await getConferenceHealth(cid);
     const papers = await getPaperDebates({ conferenceId: cid });
-    const reviewers = await getReviewerQuality({ conferenceId: cid });
+    const reviewers = await getReviewerQuality({ conferenceId: cid, settings });
     enrichReviewerBias(reviewers);
-    const mismatches = await getExpertiseMismatches(cid);
-    const coiViolations = await analyticsRepository.getCOIViolations(cid);
-    const missingMetareviews = await analyticsRepository.getMissingMetareviews(cid);
+    const mismatches = await getExpertiseMismatches(cid, settings);
+    const coiViolations = await analyticsRepository.getCOIViolations(cid, settings);
+    const missingMetareviews = await analyticsRepository.getMissingMetareviews(cid, settings);
     const topReviewers = await analyticsRepository.getTopReviewers(cid);
     const distributions = await analyticsRepository.getSystemDistributions(cid);
     const diversity = await analyticsRepository.getGeographicDiversity(cid);
     const submissions = await analyticsRepository.getSubmissions({ conferenceId: cid });
-    const sentimentMismatches = await analyticsRepository.getSentimentMismatches(cid);
+    const sentimentMismatches = await analyticsRepository.getSentimentMismatches(cid, settings);
 
     const prefetched = {
         health, papers, reviewers, mismatches, coiViolations, 
@@ -571,7 +689,7 @@ async function getDashboardData(conferenceId = null) {
         distributions, diversity, submissions, sentimentMismatches
     };
 
-    const alerts = await getAlerts(prefetched, cid);
+    const alerts = await getAlerts(prefetched, cid, settings);
     const systemAnalytics = await getSystemAnalytics(prefetched, cid);
     const qualityProfile = await getAcademicQualityProfile(prefetched, cid);
 
