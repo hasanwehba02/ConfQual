@@ -56,6 +56,7 @@ function maskNames(rows, settings, idKey = 'id') {
             if (masked.reviewer_first_name !== undefined) masked.reviewer_first_name = `${prefix}Reviewer_${id}`;
             if (masked.reviewer_last_name !== undefined) masked.reviewer_last_name = '';
             if (masked.reviewer_name !== undefined) masked.reviewer_name = `${prefix}Reviewer_${id} `;
+            if (masked.reviewer_email !== undefined) masked.reviewer_email = `${prefix}reviewer_${id}@example.com`;
         }
         
         // Handle sub-reviewer in review object
@@ -202,6 +203,7 @@ async function getReviewerQuality(options = {}) {
             pcm.first_name,
             pcm.last_name,
             pcm.role,
+            pcm.email,
             COUNT(DISTINCT r.id) as total_reviews_completed,
             ROUND(AVG(cardinality(regexp_split_to_array(trim(r.review_text), '\\s+'))), 0) as avg_word_count,
             ROUND(AVG(r.total_score), 2) as avg_score_given,
@@ -512,7 +514,8 @@ async function getCOIViolations(conferenceId = null) {
             p.title as paper_title,
             pcm.id as reviewer_id,
             pcm.first_name as reviewer_first_name,
-            pcm.last_name as reviewer_last_name
+            pcm.last_name as reviewer_last_name,
+            pcm.email as reviewer_email
         FROM assignment a
         JOIN conflict c ON a.paper_id = c.paper_id AND a.program_committee_member_id = c.program_committee_member_id
         JOIN paper p ON a.paper_id = p.id

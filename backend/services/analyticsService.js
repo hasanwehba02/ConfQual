@@ -150,7 +150,17 @@ async function getAlerts(prefetched = null, conferenceId = null) {
             affectedIds: [coi.external_submission_id],
             target: "tab-papers",
             filterKey: "paper",
-            customTitle: "COI Violations"
+            customTitle: "COI Violations",
+            emailContext: {
+                kind: 'coi',
+                recipients: [{
+                    id: coi.reviewer_id,
+                    name: `${coi.reviewer_first_name} ${coi.reviewer_last_name}`.trim(),
+                    email: coi.reviewer_email,
+                }],
+                paperIds: [coi.external_submission_id],
+                paperTitle: coi.paper_title,
+            }
         });
     });
 
@@ -207,6 +217,12 @@ async function getAlerts(prefetched = null, conferenceId = null) {
     const reviewers = prefetched?.reviewers || await getReviewerQuality({ conferenceId: cid });
     const lowEffortReviewers = reviewers.filter(r => parseInt(r.avg_word_count) < 60 && parseInt(r.total_reviews_completed) > 0);
     if (lowEffortReviewers.length > 0) {
+        const MAX_EMAIL_RECIPIENTS = 10;
+        const recipients = lowEffortReviewers.slice(0, MAX_EMAIL_RECIPIENTS).map(r => ({
+            id: r.id,
+            name: `${r.first_name} ${r.last_name}`.trim(),
+            email: r.email,
+        }));
         alerts.push({
             severity: "LOW",
             category: "QUALITY",
@@ -216,7 +232,12 @@ async function getAlerts(prefetched = null, conferenceId = null) {
             affectedIds: lowEffortReviewers.map(r => r.id),
             target: "tab-reviewers",
             filterKey: "reviewer",
-            customTitle: "Low Feedback Volume Reviewers"
+            customTitle: "Low Feedback Volume Reviewers",
+            emailContext: {
+                kind: 'low_effort',
+                recipients,
+                omittedCount: Math.max(0, lowEffortReviewers.length - MAX_EMAIL_RECIPIENTS),
+            }
         });
     }
 
@@ -530,6 +551,7 @@ async function updatePaperDecision(id, decision) {
 async function getDashboardData(conferenceId = null) {
     const cid = conferenceId;
     // 1. Fetch all base data ONCE
+    const settings = await analyticsRepository.getAnonymizationSettings(cid);
     const health = await getConferenceHealth(cid);
     const papers = await getPaperDebates({ conferenceId: cid });
     const reviewers = await getReviewerQuality({ conferenceId: cid });
@@ -556,6 +578,7 @@ async function getDashboardData(conferenceId = null) {
     return {
         conferenceId: health?.conferenceId,
         conferenceName: health?.conference_name,
+        is_anonymized: !!settings.is_anonymized,
         alerts,
         systemAnalytics,
         qualityProfile,
