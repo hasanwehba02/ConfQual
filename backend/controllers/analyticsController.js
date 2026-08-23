@@ -140,8 +140,9 @@ async function getReviewerReport(req, res) {
         const filename = reportService.buildReportFilename(data.reviewer, req.params.id);
 
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
         res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.setHeader("Cache-Control", "no-store");
         res.send(pdfBuffer);
     } catch (error) {
         if (error instanceof PdfTimeoutError || error.name === 'PdfTimeoutError') {
