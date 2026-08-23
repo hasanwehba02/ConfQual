@@ -362,7 +362,8 @@ document.addEventListener('DOMContentLoaded', () => {
         drawerBody.innerHTML = '<div class="spinner"></div>';
 
         try {
-            const res = await fetch(`/api/analytics/papers/${externalId}`);
+            const qs = activeConferenceId ? `?conferenceId=${activeConferenceId}` : '';
+            const res = await fetch(`/api/analytics/papers/${externalId}${qs}`);
             if (!res.ok) throw new Error("Failed to fetch");
             const paper = await res.json();
             
@@ -489,9 +490,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     function renderPaperDraftView(reason, recipientIdx) {
                         const r = submittedReviewers[recipientIdx] || submittedReviewers[0];
+                        const rEmail = r.email || (r.first_name ? `${r.first_name.toLowerCase()}.${(r.last_name || '').toLowerCase()}@example.com` : '');
                         const base = {
                             recipientName: `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Reviewer',
-                            recipientEmail: r.email || '',
+                            recipientEmail: rEmail,
                             paperId: paper.external_submission_id || paper.id,
                             paperTitle: paper.title,
                             conferenceLabel: currentConferenceLabel(),
@@ -501,6 +503,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         else if (reason === 'missing_metareview') draftCtx = { ...base, scoreSpread };
                         else if (reason === 'expertise_mismatch') draftCtx = { ...base, paperTopics: paper.topics, reviewerTopics: r.topics };
                         else if (reason === 'sentiment_mismatch') draftCtx = { ...base, totalScore: r.total_score, sentimentScore: null };
+                        else if (reason === 'custom') draftCtx = base;
 
                         const draft = buildEmailDraft(reason, draftCtx);
 
@@ -509,10 +512,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             <option value="missing_metareview" ${reason === 'missing_metareview' ? 'selected' : ''}>Metareview needed</option>
                             <option value="sentiment_mismatch" ${reason === 'sentiment_mismatch' ? 'selected' : ''}>Review calibration check</option>
                             <option value="expertise_mismatch" ${reason === 'expertise_mismatch' ? 'selected' : ''}>Topic alignment check</option>
+                            <option value="custom" ${reason === 'custom' ? 'selected' : ''}>Custom message</option>
                         `;
 
                         const recipientOptions = submittedReviewers.map((rec, i) =>
-                            `<option value="${i}" ${i === recipientIdx ? 'selected' : ''}>${escapeHtml(rec.first_name)} ${escapeHtml(rec.last_name)}</option>`
+                            `<option value="${i}" ${i === recipientIdx ? 'selected' : ''}>${escapeHtml(rec.first_name)} ${escapeHtml(rec.last_name)}${rec.email ? ` (${escapeHtml(rec.email)})` : ''}</option>`
                         ).join('');
 
                         drawerBody.innerHTML = `
@@ -1343,34 +1347,56 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function draftFieldsHtml(draft) {
-        const longBody = draft.body.length > 1800;
-        const mailto = `mailto:${encodeURIComponent(draft.to)}?subject=${encodeURIComponent(draft.subject)}`
-            + (longBody ? '' : `&body=${encodeURIComponent(draft.body)}`);
+        const to = draft.to || '';
+        const subject = draft.subject || '';
+        const body = draft.body || '';
+        const longBody = body.length > 1800;
+        const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}`
+            + (longBody ? '' : `&body=${encodeURIComponent(body)}`);
         return `
             <label style="display:block;font-size:12px;margin-bottom:4px;">To</label>
-            <input id="email-draft-to" readonly value="${escapeHtml(draft.to)}" style="width:100%;padding:6px;margin-bottom:10px;background:#f7f7f7;">
+            <input id="email-draft-to" value="${escapeHtml(to)}" style="width:100%;padding:6px;margin-bottom:10px;">
             <label style="display:block;font-size:12px;margin-bottom:4px;">Subject</label>
-            <input id="email-draft-subject" readonly value="${escapeHtml(draft.subject)}" style="width:100%;padding:6px;margin-bottom:10px;background:#f7f7f7;">
+            <input id="email-draft-subject" value="${escapeHtml(subject)}" style="width:100%;padding:6px;margin-bottom:10px;">
             <label style="display:block;font-size:12px;margin-bottom:4px;">Body</label>
-            <textarea id="email-draft-body" rows="14" style="width:100%;padding:8px;font-family:inherit;">${escapeHtml(draft.body)}</textarea>
+            <textarea id="email-draft-body" rows="14" style="width:100%;padding:8px;font-family:inherit;">${escapeHtml(body)}</textarea>
             ${longBody ? '<p class="text-muted" style="font-size:12px;">Body exceeds mailto length limits — "Open in Mail" prefills To/Subject only; paste the body from your clipboard.</p>' : ''}
             <div style="display:flex;gap:8px;margin-top:12px;">
                 <button type="button" id="email-copy-btn" class="btn btn-outline" style="flex:1;">Copy to Clipboard</button>
-                <a href="${mailto}" class="btn btn-outline" style="flex:1;text-align:center;text-decoration:none;">Open in Mail <i class="ph ph-arrow-up-right"></i></a>
+                <a id="email-mail-btn" href="${mailto}" class="btn btn-outline" style="flex:1;text-align:center;text-decoration:none;">Open in Mail <i class="ph ph-arrow-up-right"></i></a>
             </div>`;
     }
 
     function bindDraftCopyHandler() {
+        function updateMailto() {
+            const to = document.getElementById('email-draft-to')?.value || '';
+            const subject = document.getElementById('email-draft-subject')?.value || '';
+            const body = document.getElementById('email-draft-body')?.value || '';
+            const mailBtn = document.getElementById('email-mail-btn');
+            if (mailBtn) {
+                const longBody = body.length > 1800;
+                mailBtn.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}`
+                    + (longBody ? '' : `&body=${encodeURIComponent(body)}`);
+            }
+        }
+
+        document.getElementById('email-draft-to')?.addEventListener('input', updateMailto);
+        document.getElementById('email-draft-subject')?.addEventListener('input', updateMailto);
+        document.getElementById('email-draft-body')?.addEventListener('input', updateMailto);
+
         document.getElementById('email-copy-btn')?.addEventListener('click', async (e) => {
-            const text = document.getElementById('email-draft-subject').value + '\n\n'
-                + document.getElementById('email-draft-body').value;
+            const subject = document.getElementById('email-draft-subject')?.value || '';
+            const body = document.getElementById('email-draft-body')?.value || '';
+            const text = subject ? (subject + '\n\n' + body) : body;
             const btn = e.currentTarget;
             try {
                 await navigator.clipboard.writeText(text);
             } catch {
                 const ta = document.getElementById('email-draft-body');
-                ta.select();
-                document.execCommand('copy');
+                if (ta) {
+                    ta.select();
+                    document.execCommand('copy');
+                }
             }
             btn.textContent = 'Copied ✓';
             setTimeout(() => { btn.textContent = 'Copy to Clipboard'; }, 1500);

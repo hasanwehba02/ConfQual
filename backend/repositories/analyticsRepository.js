@@ -43,8 +43,8 @@ function maskNames(rows, settings, idKey = 'id') {
         const masked = { ...row };
 
         if (masked.role === 'Sub-reviewer') {
-            if (masked.first_name !== undefined) masked.first_name = `subnom${personId}`;
-            if (masked.last_name !== undefined) masked.last_name = `cognom${personId}`;
+            if (isAnonymized && masked.first_name !== undefined) masked.first_name = `subnom${personId}`;
+            if (isAnonymized && masked.last_name !== undefined) masked.last_name = `cognom${personId}`;
             if (isAnonymized && masked.email !== undefined) masked.email = `subreviewer_${personId}@example.com`;
         } else if (isAnonymized) {
             if (masked.first_name !== undefined) masked.first_name = `${prefix}Reviewer_${id}`;
@@ -614,7 +614,9 @@ async function getPaperDetails(externalSubmissionId, conferenceId = null) {
     const paper = paperRes.rows[0];
 
     const reviewsQuery = `
-        SELECT r.id, pcm.id as reviewer_id, pcm.first_name, pcm.last_name, pcm.email, r.total_score, r.review_text,
+        SELECT r.id, pcm.id as reviewer_id, pcm.first_name, pcm.last_name, pcm.role,
+               COALESCE(NULLIF(pcm.email, ''), CASE WHEN pcm.role = 'Sub-reviewer' THEN CONCAT('subreviewer_', pcm.id, '@example.com') ELSE CONCAT('reviewer_', pcm.id, '@example.com') END) as email,
+               r.total_score, r.review_text,
                (SELECT STRING_AGG(t.name, ', ')
                 FROM program_committee_member_topic pcmt
                 JOIN topic t ON pcmt.topic_id = t.id
@@ -627,7 +629,9 @@ async function getPaperDetails(externalSubmissionId, conferenceId = null) {
     paper.reviews = maskNames(reviewsRes.rows, settings, 'reviewer_id');
 
     const commentsQuery = `
-        SELECT c.id, pcm.id as reviewer_id, pcm.first_name, pcm.last_name, c.comment_text
+        SELECT c.id, pcm.id as reviewer_id, pcm.first_name, pcm.last_name, pcm.role,
+               COALESCE(NULLIF(pcm.email, ''), CASE WHEN pcm.role = 'Sub-reviewer' THEN CONCAT('subreviewer_', pcm.id, '@example.com') ELSE CONCAT('reviewer_', pcm.id, '@example.com') END) as email,
+               c.comment_text
         FROM comment c
         JOIN program_committee_member pcm ON c.program_committee_member_id = pcm.id
         WHERE c.paper_id = $1

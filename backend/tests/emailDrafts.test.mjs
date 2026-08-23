@@ -100,8 +100,23 @@ test('sentiment_mismatch draft diplomatically flags divergence', () => {
   assert.ok(!d.body.includes('undefined'));
 });
 
+test('custom draft is fully populated and degradation safe', () => {
+  const d = buildEmailDraft('custom', {
+    recipientName: 'Edsger Dijkstra',
+    recipientEmail: 'dijkstra@example.com',
+    paperId: 42,
+    paperTitle: 'Shortest Path Algorithms',
+    conferenceLabel: "CONF '26",
+  });
+  assert.equal(d.to, 'dijkstra@example.com');
+  assert.ok(d.subject.includes('#42'));
+  assert.ok(d.body.includes('Edsger Dijkstra'));
+  assert.ok(d.body.includes("CONF '26"));
+  assert.ok(!d.body.includes('undefined'));
+});
+
 test('new kinds degrade gracefully on missing optional fields', () => {
-  for (const k of ['silent_debate', 'expertise_mismatch', 'missing_metareview', 'sentiment_mismatch', 'reviewer_followup']) {
+  for (const k of ['silent_debate', 'expertise_mismatch', 'missing_metareview', 'sentiment_mismatch', 'reviewer_followup', 'custom']) {
     const d = buildEmailDraft(k, { recipientName: 'X Y' });
     assert.ok(!d.body.includes('undefined'), `${k} body has undefined`);
     assert.ok(!d.subject.includes('undefined'), `${k} subject has undefined`);

@@ -129,5 +129,20 @@ export function buildEmailDraft(kind, ctx = {}) {
     };
   }
 
+  if (kind === 'custom') {
+    const paperRef = ctx.paperId != null
+      ? `Paper #${ctx.paperId}${ctx.paperTitle ? ` ("${ctx.paperTitle}")` : ''}`
+      : null;
+    const subject = paperRef
+      ? `Regarding ${paperRef}`
+      : `Message from Conference Chairs`;
+    const regardingLine = paperRef ? `Regarding ${paperRef}:\n\n` : '';
+    return {
+      to: ctx.recipientEmail || '',
+      subject,
+      body: `Dear ${name},\n\n${regardingLine}[Please write your message here]${SIGNOFF(label)}`,
+    };
+  }
+
   throw new Error(`Unknown draft kind: ${kind}`);
 }
