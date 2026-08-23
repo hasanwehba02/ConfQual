@@ -1,7 +1,8 @@
 import { fetchConferences, fetchComparison, deleteConference, updateConference } from './api.js';
 import { escapeHtml } from './utils.js';
 import { getBiasBadgeClass } from './renderers.js';
-import { encodePapersHash, parsePapersHash, sanitizePapersState, PAPERS_DEFAULT } from './viewState.mjs';
+import { createPreset, createPresetStore, encodePapersHash, parsePapersHash,
+         resolveActiveConferenceId, sanitizePapersState, PAPERS_DEFAULT } from './viewState.mjs';
 
 function formatAdjScoreCell(p) {
     const avg = parseFloat(p.average_score);
