@@ -948,5 +948,6 @@ module.exports = {
     getTopReviewers,
     getSentimentMismatches,
     getReviewersForPapers,
-    getAnonymizationSettings
+    getAnonymizationSettings,
+    maskNames
 };

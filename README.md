@@ -1,127 +1,108 @@
-# ConfQual — Conference Quality Analytics Platform
+# ConfQual: Academic Conference Quality Analytics Platform
 
-A privacy-first, full-stack analytics platform for academic Program Chairs to evaluate review quality, reviewer calibration, expertise matching, and conference compliance with CORE/GII-GRIN-SCIE standards.
+ConfQual is a local-first analytics platform designed for academic Program Chairs and steering committees to evaluate peer-review quality, reviewer scoring calibration, topic expertise matching, and conference compliance with standards such as CORE and GII-GRIN-SCIE.
 
 ---
 
-## 🔒 100% Privacy & Zero Data Egress
+## Data Privacy Architecture
 
-ConfQual is designed specifically for confidential peer-review data:
-- **Zero External AI/LLM API Calls**: No data is ever sent to OpenAI, Anthropic, Gemini, or any cloud LLM provider.
-- **Embedded Local NLP**: Sentiment analysis runs **100% locally in-process** using a quantized DistilBERT neural network (via `@xenova/transformers` ONNX Runtime on CPU).
-- **Zero Telemetry / Trackers**: No third-party trackers, analytics, or external logging.
-- **Data Sovereignty**: All data remains exclusively within your local environment and your private PostgreSQL/Supabase database.
+ConfQual processes confidential peer-review data with strict privacy guarantees:
+
+- **Zero Cloud LLM Dependencies**: No text or metadata is transmitted to external AI APIs (OpenAI, Anthropic, Google, etc.).
+- **In-Process Local NLP**: Textual sentiment analysis is performed locally on the CPU using a quantized DistilBERT transformer model through `@xenova/transformers` and the ONNX runtime.
+- **No Third-Party Telemetry**: The application runs without tracking scripts, external log collectors, or third-party analytical beacons.
+- **Database-Level Anonymization Mode**: An optional anonymization toggle masks reviewer identities, author identities, and institutional affiliations directly within SQL queries before data reaches the presentation layer.
 
 ---
 
 ## Technology Stack
 
-| Layer | Technology |
-|---|---|
-| **Runtime** | Node.js 20+ & Express 5 |
-| **Database** | PostgreSQL (hosted on [Supabase](https://supabase.com/) or self-hosted PostgreSQL) |
-| **DB Driver** | `pg` (raw SQL, connection pooling, `AsyncLocalStorage` transaction context) |
-| **NLP Engine** | `@xenova/transformers` (Local quantized DistilBERT ONNX on CPU) |
-| **PDF Reporting** | `puppeteer` (Local headless PDF rendering) |
-| **Excel Ingestion** | `exceljs` & `multer` |
-| **Frontend** | Vanilla JS (Native ES Modules), Chart.js, Phosphor Icons |
+- **Backend Runtime**: Node.js 20+ and Express 5
+- **Database**: PostgreSQL 14+ (compatible with Supabase or self-hosted PostgreSQL)
+- **Database Access**: `pg` client with connection pooling and parameterization
+- **Natural Language Processing**: `@xenova/transformers` (local ONNX DistilBERT pipeline)
+- **Document Export**: Puppeteer (headless PDF rendering)
+- **Spreadsheet Parsing**: `exceljs` and `multer`
+- **Frontend**: Vanilla JavaScript (ES Modules), Chart.js, Phosphor Icons, CSS3
 
 ---
 
-## Core Features & Capabilities
+## Architecture & Analysis Modules
 
-### 1. Program Chair Overview & Dashboard
-- **Actionable Alerts Bar**: Real-time detection of high-risk conference anomalies with 1-click drill-down filtering and direct email draft actions.
-- **Quality Scorecard**: Comprehensive 4-dimension health score (0–100) with detailed deduction breakdowns:
-  - **Coverage**: Papers with <3 reviews (CORE standard baseline).
-  - **Integrity**: COI violations, expertise mismatches, and sentiment discrepancies.
-  - **Satisfaction**: Reviewer bidding satisfaction and assignment distribution.
-  - **Discussion**: Missing meta-reviews, unresolved debates, and low comment engagement.
-- **Key Metrics & Distributions**: Reviewer pool composition (Chairs vs PC vs Sub-reviewers), debate distribution, decision breakdown, and score histogram.
+### 1. Dashboard & Quality Scorecard
+- Aggregates conference-level metrics into a 4-dimension scorecard (0–100 scale):
+  - **Coverage**: Evaluates compliance with minimum review baselines (standard: at least 3 reviews per non-desk-rejected submission).
+  - **Integrity**: Tracks COI violations, topic expertise mismatches, and sentiment contradictions.
+  - **Satisfaction**: Computes reviewer bidding fulfillment rates and workload equity.
+  - **Discussion**: Identifies papers with high score variance lacking discussion comments or meta-reviews.
+- Provides an Action Center that flags urgent conference anomalies with direct filtering and contextual email actions.
 
-### 2. Deep-Learning Sentiment Analysis
-- Uses an embedded, quantized **DistilBERT** transformer model running on-device to classify review sentiment on a continuous scale (`-10.00` to `+10.00`).
-- Understands academic hedging, polite introductions (*"The paper is well written. However, the core theoretical claims are unsupported..."*), and nuanced criticism.
-- Flags **Sentiment Mismatches** when positive textual sentiment contradicts low numeric scores (or vice versa).
+### 2. Local Sentiment Analysis & Mismatch Detection
+- Preprocesses EasyChair review structures by isolating academic evaluation sections (`(OVERALL EVALUATION)`, `(DETAILED COMMENTS)`, `(COMMENTS TO AUTHORS)`) from summary text.
+- Scores textual sentiment on a continuous scale from `-10.00` (strongly critical) to `+10.00` (strongly positive).
+- Flags sentiment mismatches where numerical scores contradict the qualitative review text (such as low scores paired with high sentiment or high scores paired with severe criticism).
 
-### 3. Reviewer Calibration & Z-Score Normalization
-- **Calibration Index**: Computes how much a reviewer's scores deviate from their peers on the same papers ($score - peer\_average$).
-- **Z-Score Normalization**: Evaluates reviewer scoring bias across the conference scale:
-  - Calculates per-reviewer mean ($\mu$) and standard deviation ($\sigma$).
-  - Rescales individual scores onto the conference distribution: $normalized = \mu_{conf} + \left(\frac{score - \mu_{reviewer}}{\sigma_{reviewer}}\right) \times \sigma_{conf}$.
-  - Classifies reviewers into transparent bias profiles: **Calibrated**, **Lenient**, **Strict**, or **Extreme Outlier**.
+### 3. Reviewer Calibration & Bias Normalization
+- **Calibration Index**: Measures the difference between a reviewer's awarded score and the peer average for each submission ($score - \text{peer\_average}$).
+- **Z-Score Normalization**: Standardizes scores to account for individual reviewer harshness or leniency:
+  $$\text{Normalized Score} = \mu_{\text{conf}} + \left(\frac{\text{Score} - \mu_{\text{reviewer}}}{\sigma_{\text{reviewer}}}\right) \times \sigma_{\text{conf}}$$
+- Categorizes reviewers into transparent profiles based on deviations from the conference mean: Calibrated, Lenient, Strict, or Extreme Outlier.
 
-### 4. Interactive Email Drafting System
-- 1-Click contextual email drafting for program chairs from both **Paper Drawer** and **Reviewer Drawer**.
-- **Pre-Built Templates**:
-  - `silent_debate`: Alerts reviewers of large score spreads on a paper with no discussion.
-  - `expertise_mismatch`: Politely notifies reviewers when assigned outside their listed topics.
-  - `missing_metareview`: Solicits a meta-review from assigned reviewers when a paper lacks a synthesis.
-  - `sentiment_mismatch`: Diplomatically asks for clarification when review text and numerical scores diverge.
-  - `low_effort`: Inquires about brief/shallow reviews under minimum word counts.
-  - `custom`: Freely editable subject and body for chair-specific communications.
-- **Live Editing & Sync**: Fully editable `To` and `Subject` fields with real-time `mailto:` URL synchronization and fallback 1-click **Copy to Clipboard**.
+### 4. Contextual Email Drafting
+- Generates structured draft messages for Program Chairs to address specific conference issues:
+  - `silent_debate`: Alerts assigned reviewers to unresolved score spreads with no comments.
+  - `expertise_mismatch`: Contacts reviewers assigned outside their declared expertise topics.
+  - `missing_metareview`: Requests summary evaluations for completed reviews awaiting decision.
+  - `sentiment_mismatch`: Requests clarification when review text and numerical scores diverge.
+  - `low_effort`: Inquires about brief reviews below minimum word thresholds.
+  - `custom`: Direct chair-to-reviewer messaging.
+- Synchronizes subject and body fields to standard `mailto:` links with clipboard copy fallbacks.
 
-### 5. Reviewer Dossier PDF Export
-- Generates publication-ready PDF evaluation reports for individual reviewers (`/api/analytics/reviewer/:id/report.pdf`).
-- Includes review counts, word counts, bidding satisfaction, calibration sparklines, bias classification, and optional full review/comment excerpts.
-- Rendered in-process with headless Chrome via Puppeteer.
+### 5. Reviewer Dossier PDF Generation
+- Compiles individual reviewer dossiers into downloadable PDF documents via `/api/analytics/reviewer/:id/report.pdf`.
+- Summarizes review volume, word counts, bidding match percentages, calibration metrics, and optional review/comment excerpts.
 
-### 6. Paper Explorer
-- Multi-column sorting: Score Spread, Average Score, Normalized Score, Review Count, Comment Count.
-- Filter presets: High Variance, Low Variance, Unanimous Accept/Reject, Borderline, To Discuss, No Comments, Rejected, Desk Rejected, No Decision, and Zero-Activity.
-- Slide-out detail drawer with full review texts, sub-reviewer attributions, discussion comments, and mismatch badges.
-- Live decision editing toggle for chairs.
+### 6. Submissions & Reviewers Explorers
+- **Paper Explorer**: Sort submissions by score variance, raw average, normalized score, review count, and comment activity. Includes filter presets for borderline papers, unanimous decisions, and silent debates.
+- **Reviewer Explorer**: Review reviewer workloads, average grades, calibration indexes, and bidding match statistics.
+- **URL Deep-Linking & View Presets**: State is synced with the URL hash (`#tab=papers&conf=1&filter=borderline`) and can be saved as named presets in local storage.
 
-### 7. Reviewer Explorer
-- Comprehensive reviewer metrics: Completed reviews, average word count, average score given, peer average, calibration index, and bidding match %.
-- Interactive calibration sparklines and bias distribution tags.
-- Detail drawer displaying all paper assignments, individual review scores, declared bids, and direct email drafting.
+### 7. CORE / GII-GRIN-SCIE Compliance Profile
+- Computes acceptance selectivity rate thresholds (CORE A/A* $\le 25\%$, CORE B $\le 35\%$).
+- Evaluates review density against international conference baselines.
+- Calculates geographic diversity metrics across Program Committee members and authors.
+- Analyzes topic coverage gaps between submitted papers and available reviewer expertise.
 
-### 8. URL Deep-Linking & Saved View Presets
-- Full state synchronization with the URL hash (`#tab=papers&conf=1&filter=borderline&search=graph&sort=spread_desc`).
-- Save customized filter/sort combinations as named presets in local storage for quick access during PC meetings.
-
-### 9. CORE / GII-GRIN-SCIE Compliance Profile
-- **Selectivity Ranking**: Automatic classification (CORE A/A* $\le$ 25%, CORE B $\le$ 35%, Below CORE B > 35%).
-- **Review Density**: Percentage of papers satisfying the European baseline ($\ge$ 3 reviews).
-- **Internationalization**: Country diversity index and domestic vs. international PC member ratios.
-- **Thematic Competence**: Matrix of paper topic submissions versus reviewer expertise coverage, automatically flagging gap topics.
-- **Automated Statement**: Generates formal compliance text ready for conference auditing bodies.
-
-### 10. Multi-Conference Management & Data Ingestion
-- Upload and parse EasyChair `.xlsx` exports in a single database transaction:
-  - Conference metadata, PC members, submissions, authors, assignments, bids, conflicts, reviews, comments, and topics.
-  - Automatic sub-reviewer detection and mapping.
-- Multi-conference switcher with cross-conference comparison tables and cascading deletion.
+### 8. Data Ingestion & Multi-Conference Support
+- Parses EasyChair Excel exports (`.xlsx`) within a single database transaction:
+  - Conference metadata, PC members, submissions, authors, review assignments, bids, conflicts of interest, reviews, comments, and topics.
+  - Resolves sub-reviewers and maps them to parent PC assignments.
+- Supports switching between multiple conferences with comparative metrics and cascading deletion.
 
 ---
 
-## Setup & Installation
+## Getting Started
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) v20+
-- A [Supabase](https://supabase.com/) PostgreSQL database (or any self-hosted PostgreSQL 14+ instance)
+- Node.js 20 or higher
+- PostgreSQL 14+ or a Supabase PostgreSQL instance
 
-### 1. Environment Configuration
+### 1. Environment Setup
 Create a `.env` file in the `backend/` directory:
 
 ```env
-# Supabase / PostgreSQL Connection String
-DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres?sslmode=require
-
-# Optional fallback variables for local development
+DATABASE_URL=postgresql://postgres:[PASSWORD]@[HOST]:[PORT]/postgres?sslmode=require
 PORT=3000
 ```
 
-### 2. Database Schema Initialization
-Execute the SQL schema in your Supabase SQL Editor or via `psql`:
+### 2. Database Initialization
+Run the database schema migration using `psql` or your database management console:
 
 ```bash
 psql $DATABASE_URL -f database/confqual_schema.sql
 ```
 
-You can verify database connectivity and schema readiness at any time:
+Verify connection status:
 ```bash
 cd backend
 node test-db.js
@@ -133,20 +114,20 @@ cd backend
 npm install
 ```
 
-### 4. Run the Application
+### 4. Running the Application
 ```bash
-# Production mode
+# Start server in production mode
 npm start
 
-# Development mode with hot-reloading
+# Start server with file watching for development
 npm run dev
 ```
 
-Open your browser at `http://localhost:3000`.
+The application will be accessible at `http://localhost:3000`.
 
-### 5. Run the Test Suite
+### 5. Running Tests & Linting
 ```bash
-# Run unit & integration tests (59 tests)
+# Run unit and integration tests
 npm test
 
 # Run ESLint validation
@@ -155,57 +136,41 @@ npm run lint
 
 ---
 
-## Project Structure
+## Directory Structure
 
-```
+```text
 conference-quality-poc/
+├── .github/
+│   └── workflows/
+│       └── ci.yml               # GitHub Actions CI workflow
 ├── backend/
+│   ├── app.js                   # Express application configuration
+│   ├── server.js                # Server entry point
 │   ├── config/
-│   │   └── database.js               # PostgreSQL pool with AsyncLocalStorage transactions
+│   │   └── database.js          # PostgreSQL connection pool
 │   ├── controllers/
-│   │   ├── analyticsController.js     # Dashboard, papers, reviewers, compliance, PDF export
-│   │   └── settingsController.js      # Anonymization and decision-editing toggles
+│   │   └── analyticsController.js # HTTP request handlers
+│   ├── importer/
+│   │   ├── excelParser.js       # EasyChair XLSX ingestion
+│   │   └── importers/           # Entity-specific database importers
+│   ├── public/                  # Frontend single-page application
+│   │   ├── index.html           # Main user interface
+│   │   ├── style.css            # Stylesheet
+│   │   └── js/                  # Frontend ES modules
+│   ├── repositories/
+│   │   └── analyticsRepository.js # SQL queries and data access
+│   ├── routes/
+│   │   └── analyticsRoutes.js   # Express routing definitions
 │   ├── services/
-│   │   ├── analyticsService.js        # Core analytics, scorecard, alerts, and metrics logic
-│   │   ├── reviewerReportService.js   # PDF dossier generation and HTML report builder
-│   │   └── reviewService.js           # Review management during import
-│   ├── repositories/                  # Clean SQL query layer
-│   │   ├── analyticsRepository.js     # Aggregations, scorecard queries, paper/reviewer details
-│   │   ├── paperRepository.js
-│   │   ├── reviewRepository.js
-│   │   ├── programCommitteeRepository.js
-│   │   └── conferenceRepository.js
-│   ├── utils/
-│   │   ├── sentimentEngine.js         # Local Transformers.js (DistilBERT ONNX) engine
-│   │   ├── analyticsMath.js           # Normalization, calibration, bias classification
-│   │   ├── topicMatcher.js            # Exact & fuzzy topic mismatch detection
-│   │   └── bulkInsert.js              # Multi-row parameterized SQL batching
-│   ├── importer/                      # EasyChair Excel import pipeline
-│   │   ├── runImporter.js             # Atomic import orchestrator
-│   │   ├── workbookReader.js          # ExcelJS reader with AsyncLocalStorage context
-│   │   └── importers/                 # 11 sheet-specific importers
-│   ├── public/                        # Frontend Single-Page Application
-│   │   ├── index.html
-│   │   ├── style.css
-│   │   └── js/
-│   │       ├── main.js                # App orchestration & DOM event handling
-│   │       ├── api.js                 # REST client endpoints
-│   │       ├── emailDrafts.mjs        # 6 Email templates & formatting logic
-│   │       ├── urlState.mjs           # URL hash deep linking & parameter sanitation
-│   │       ├── presetStore.mjs        # LocalStorage filter preset management
-│   │       └── renderers.js           # Badges, sparklines, and scorecard charts
-│   ├── tests/                         # Node.js native test suite (59 unit/integration tests)
-│   │   ├── sentimentEngine.test.mjs
-│   │   ├── emailDrafts.test.mjs
-│   │   ├── reviewerReportService.test.mjs
-│   │   ├── urlState.test.mjs
-│   │   ├── presetStore.test.mjs
-│   │   └── topicMatcher.test.js
-│   ├── server.js                      # Express application entry point
-│   └── package.json
+│   │   ├── analyticsService.js  # Analytics and metric calculations
+│   │   └── reportService.js     # PDF report generation
+│   ├── tests/                   # Automated test suite
+│   └── utils/
+│       ├── analyticsMath.js     # Statistical and calibration calculations
+│       ├── decisionHelper.js    # EasyChair decision normalization
+│       └── sentimentEngine.js   # Local ONNX DistilBERT sentiment engine
 ├── database/
-│   ├── confqual_schema.sql            # Complete PostgreSQL schema (14 tables)
-│   └── migrations/                    # Multi-conference schema updates
+│   └── confqual_schema.sql      # PostgreSQL schema definition
 └── README.md
 ```
 
@@ -213,4 +178,4 @@ conference-quality-poc/
 
 ## License
 
-ISC License. Built for conference program chairs and academic review committees.
+ISC License.

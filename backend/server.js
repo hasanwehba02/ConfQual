@@ -1,23 +1,11 @@
-require("dotenv").config();
+require('dotenv').config();
 
-const express = require("express");
-const client = require("./config/database");
-const fs = require("fs");
-const path = require("path");
+const fs = require('fs');
+const path = require('path');
+const app = require('./app');
+const client = require('./config/database');
 
-const analyticsRoutes = require("./routes/analyticsRoutes");
-const settingsRoutes = require("./routes/settingsRoutes");
-
-const app = express();
 const PORT = process.env.PORT || 3000;
-
-// Middleware
-app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
-
-// Routes
-app.use("/api/analytics", analyticsRoutes);
-app.use("/api/settings", settingsRoutes);
 
 // --- Startup Migration ---
 async function runMigrations() {
@@ -35,7 +23,11 @@ async function runMigrations() {
     }
 }
 
-app.listen(PORT, async () => {
-    console.log(`Backend listening at http://localhost:${PORT}`);
-    await runMigrations();
-});
+if (require.main === module) {
+    app.listen(PORT, async () => {
+        console.log(`Backend listening at http://localhost:${PORT}`);
+        await runMigrations();
+    });
+}
+
+module.exports = { app, runMigrations };
