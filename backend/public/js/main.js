@@ -75,6 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeReviewerFilter = null;
     let activeConferenceId = null; // null = most-recent
     let loadedConferences = [];
+    const presetStore = createPresetStore(window.localStorage);
     
     // --- Global Filter Functions ---
     window.applyFilterAndNavigate = function(targetTabId, filterKey, idsJson, customTitle) {
@@ -173,6 +174,108 @@ document.addEventListener('DOMContentLoaded', () => {
         const searchInput = document.getElementById('paper-search');
         if (searchInput) searchInput.value = state.searchText;
         return state;
+    }
+
+    function renderPresetChips() {
+        const row = document.getElementById('paper-presets-row');
+        const saveBtn = document.getElementById('save-preset-btn');
+        if (!row || !saveBtn) return;
+        const confId = resolveActiveConferenceId(loadedConferences, activeConferenceId);
+        const presets = confId == null ? [] : presetStore.getPresets(confId);
+        saveBtn.disabled = confId == null;
+        row.innerHTML = '';
+        row.classList.toggle('hidden', presets.length === 0);
+        presets.forEach(p => {
+            const chip = document.createElement('span');
+            chip.className = 'preset-chip';
+            chip.innerHTML = `<span class="preset-name" title="Click to apply, double-click to rename">${escapeHtml(p.name)}</span><button type="button" class="preset-delete" title="Delete view">&times;</button>`;
+            const nameEl = chip.querySelector('.preset-name');
+            nameEl.addEventListener('click', () => applyPreset(p));
+            nameEl.addEventListener('dblclick', () => startRenamePreset(chip, p, nameEl, confId));
+            chip.querySelector('.preset-delete').addEventListener('click', () => {
+                presetStore.deletePreset(confId, p.id);
+                renderPresetChips();
+            });
+            row.appendChild(chip);
+        });
+    }
+
+    function applyPreset(p) {
+        const sortSelect = document.getElementById('paper-sort');
+        const combined = `${p.sortBy}_${p.sortOrder.toLowerCase()}`;
+        if (Array.from(sortSelect.options).some(o => o.value === combined)) sortSelect.value = combined;
+        document.getElementById('paper-filter').value = p.filterMode;
+        activePaperFilter = null;
+        document.getElementById('paper-filter-banner')?.classList.add('hidden');
+        const titleEl = document.querySelector('#tab-papers h2');
+        if (titleEl) titleEl.textContent = 'Paper Explorer';
+        window.fetchPapers();
+    }
+
+    function startRenamePreset(chip, preset, nameEl, confId) {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'preset-rename';
+        input.maxLength = 60;
+        input.value = preset.name;
+        nameEl.replaceWith(input);
+        input.focus();
+        input.select();
+        let done = false;
+        const commit = (save) => {
+            if (done) return;
+            done = true;
+            if (save && input.value.trim()) presetStore.renamePreset(confId, preset.id, input.value.trim());
+            renderPresetChips();
+        };
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') commit(true);
+            else if (e.key === 'Escape') commit(false);
+        });
+        input.addEventListener('blur', () => commit(true));
+    }
+
+    const savePresetBtn = document.getElementById('save-preset-btn');
+    const savePopover = document.getElementById('save-preset-popover');
+    const presetNameInput = document.getElementById('preset-name-input');
+
+    function closeSavePopover() {
+        savePopover?.classList.add('hidden');
+        if (presetNameInput) presetNameInput.value = '';
+    }
+
+    if (savePresetBtn && savePopover && presetNameInput) {
+        savePresetBtn.addEventListener('click', () => {
+            savePopover.classList.toggle('hidden');
+            if (!savePopover.classList.contains('hidden')) presetNameInput.focus();
+        });
+        const confirmSave = () => {
+            const name = presetNameInput.value.trim();
+            if (!name) { presetNameInput.focus(); return; }
+            const confId = resolveActiveConferenceId(loadedConferences, activeConferenceId);
+            if (confId == null) { closeSavePopover(); return; }
+            const { filterMode, sortBy, sortOrder } = readPaperControls();
+            const preset = createPreset({ name, filterMode, sortBy, sortOrder });
+            try {
+                presetStore.savePreset(confId, preset);
+                closeSavePopover();
+                renderPresetChips();
+            } catch (e) {
+                console.warn('Could not save preset (storage unavailable?):', e);
+                alert('Could not save this view — browser storage is full or blocked.');
+            }
+        };
+        document.getElementById('preset-save-confirm')?.addEventListener('click', confirmSave);
+        document.getElementById('preset-cancel')?.addEventListener('click', closeSavePopover);
+        presetNameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') confirmSave();
+            else if (e.key === 'Escape') closeSavePopover();
+        });
+        document.addEventListener('click', (e) => {
+            if (!savePopover.classList.contains('hidden')
+                && !savePopover.contains(e.target) && e.target !== savePresetBtn
+                && !savePresetBtn.contains(e.target)) closeSavePopover();
+        });
     }
 
     window.exportTableToCSV = function(tbodyId, filename) {
@@ -1023,6 +1126,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             renderAwardsTab(data.systemAnalytics);
 
+            renderPresetChips();
         } catch (error) {
             console.error("Error loading dashboard data:", error);
         } finally {
