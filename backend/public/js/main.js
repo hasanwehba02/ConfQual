@@ -1218,6 +1218,41 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function draftFieldsHtml(draft) {
+        const longBody = draft.body.length > 1800;
+        const mailto = `mailto:${encodeURIComponent(draft.to)}?subject=${encodeURIComponent(draft.subject)}`
+            + (longBody ? '' : `&body=${encodeURIComponent(draft.body)}`);
+        return `
+            <label style="display:block;font-size:12px;margin-bottom:4px;">To</label>
+            <input id="email-draft-to" readonly value="${escapeHtml(draft.to)}" style="width:100%;padding:6px;margin-bottom:10px;background:#f7f7f7;">
+            <label style="display:block;font-size:12px;margin-bottom:4px;">Subject</label>
+            <input id="email-draft-subject" readonly value="${escapeHtml(draft.subject)}" style="width:100%;padding:6px;margin-bottom:10px;background:#f7f7f7;">
+            <label style="display:block;font-size:12px;margin-bottom:4px;">Body</label>
+            <textarea id="email-draft-body" rows="14" style="width:100%;padding:8px;font-family:inherit;">${escapeHtml(draft.body)}</textarea>
+            ${longBody ? '<p class="text-muted" style="font-size:12px;">Body exceeds mailto length limits — "Open in Mail" prefills To/Subject only; paste the body from your clipboard.</p>' : ''}
+            <div style="display:flex;gap:8px;margin-top:12px;">
+                <button type="button" id="email-copy-btn" class="btn btn-outline" style="flex:1;">Copy to Clipboard</button>
+                <a href="${mailto}" class="btn btn-outline" style="flex:1;text-align:center;text-decoration:none;">Open in Mail <i class="ph ph-arrow-up-right"></i></a>
+            </div>`;
+    }
+
+    function bindDraftCopyHandler() {
+        document.getElementById('email-copy-btn')?.addEventListener('click', async (e) => {
+            const text = document.getElementById('email-draft-subject').value + '\n\n'
+                + document.getElementById('email-draft-body').value;
+            const btn = e.currentTarget;
+            try {
+                await navigator.clipboard.writeText(text);
+            } catch {
+                const ta = document.getElementById('email-draft-body');
+                ta.select();
+                document.execCommand('copy');
+            }
+            btn.textContent = 'Copied ✓';
+            setTimeout(() => { btn.textContent = 'Copy to Clipboard'; }, 1500);
+        });
+    }
+
     function renderEmailDraftInDrawer(alert, recipientIndex) {
         const ctx = alert.emailContext;
         const r = ctx.recipients[recipientIndex];
@@ -1234,42 +1269,63 @@ document.addEventListener('DOMContentLoaded', () => {
         const options = ctx.recipients.map((rec, i) =>
             `<option value="${i}" ${i === recipientIndex ? 'selected' : ''}>${escapeHtml(rec.name)}</option>`).join('');
         const omitted = ctx.omittedCount ? `<option disabled>… +${ctx.omittedCount} more not shown</option>` : '';
-        const longBody = draft.body.length > 1800;
-        const mailto = `mailto:${encodeURIComponent(draft.to)}?subject=${encodeURIComponent(draft.subject)}`
-            + (longBody ? '' : `&body=${encodeURIComponent(draft.body)}`);
 
         drawerBody.innerHTML = `
-            ${ctx.recipients.length > 1 ? `<label style="display:block;font-size:12px;margin-bottom:4px;">Recipient</label>
+            ${ctx.recipients.length > 1 || ctx.omittedCount ? `<label style="display:block;font-size:12px;margin-bottom:4px;">Recipient</label>
             <select id="email-recipient-select" style="width:100%;padding:6px;margin-bottom:12px;">${options}${omitted}</select>` : ''}
-            <label style="display:block;font-size:12px;margin-bottom:4px;">To</label>
-            <input id="email-draft-to" readonly value="${escapeHtml(draft.to)}" style="width:100%;padding:6px;margin-bottom:10px;background:#f7f7f7;">
-            <label style="display:block;font-size:12px;margin-bottom:4px;">Subject</label>
-            <input id="email-draft-subject" readonly value="${escapeHtml(draft.subject)}" style="width:100%;padding:6px;margin-bottom:10px;background:#f7f7f7;">
-            <label style="display:block;font-size:12px;margin-bottom:4px;">Body</label>
-            <textarea id="email-draft-body" rows="14" style="width:100%;padding:8px;font-family:inherit;">${escapeHtml(draft.body)}</textarea>
-            ${longBody ? '<p class="text-muted" style="font-size:12px;">Body exceeds mailto length limits — "Open in Mail" prefills To/Subject only; paste the body from your clipboard.</p>' : ''}
-            <div style="display:flex;gap:8px;margin-top:12px;">
-                <button type="button" id="email-copy-btn" class="btn btn-outline" style="flex:1;">Copy to Clipboard</button>
-                <a href="${mailto}" class="btn btn-outline" style="flex:1;text-align:center;text-decoration:none;">Open in Mail <i class="ph ph-arrow-up-right"></i></a>
-            </div>`;
+            ${draftFieldsHtml(draft)}`;
 
-        document.getElementById('email-copy-btn')?.addEventListener('click', async (e) => {
-            const text = document.getElementById('email-draft-subject').value + '\n\n'
-                + document.getElementById('email-draft-body').value;
-            const btn = e.currentTarget;
-            try {
-                await navigator.clipboard.writeText(text);
-            } catch {
-                const ta = document.getElementById('email-draft-body');
-                ta.select();
-                document.execCommand('copy');
-            }
-            btn.textContent = 'Copied ✓';
-            setTimeout(() => { btn.textContent = 'Copy to Clipboard'; }, 1500);
-        });
+        bindDraftCopyHandler();
 
         document.getElementById('email-recipient-select')?.addEventListener('change', (e) => {
             renderEmailDraftInDrawer(alert, parseInt(e.target.value, 10));
+        });
+    }
+
+    function paperKeyedDraftContext(kind, paper, r) {
+        const base = {
+            recipientName: r.name,
+            recipientEmail: r.email,
+            paperId: paper.id,
+            paperTitle: paper.title,
+            conferenceLabel: currentConferenceLabel(),
+        };
+        if (kind === 'silent_debate') return { ...base, spread: paper.spread };
+        if (kind === 'missing_metareview') return { ...base, scoreSpread: paper.scoreSpread };
+        if (kind === 'expertise_mismatch') return { ...base, paperTopics: r.paperTopics, reviewerTopics: r.reviewerTopics };
+        if (kind === 'sentiment_mismatch') return { ...base, totalScore: r.totalScore, sentimentScore: r.sentimentScore };
+        return base;
+    }
+
+    function renderPaperKeyedDraftInDrawer(alert, paperIndex, recipientIndex) {
+        const ctx = alert.emailContext;
+        const paper = ctx.papers[paperIndex];
+        if (!paper || paper.recipients.length === 0) return;
+        const rIdx = Math.min(recipientIndex, paper.recipients.length - 1);
+        const r = paper.recipients[rIdx];
+        const draft = buildEmailDraft(ctx.kind, paperKeyedDraftContext(ctx.kind, paper, r));
+
+        const drawerBody = document.getElementById('detail-drawer-body');
+        const paperOptions = ctx.papers.map((p, i) =>
+            `<option value="${i}" ${i === paperIndex ? 'selected' : ''}>#${p.id} — ${escapeHtml(p.title)}</option>`).join('');
+        const papersNote = ctx.omittedPaperCount ? `<option disabled>… +${ctx.omittedPaperCount} more not shown</option>` : '';
+        const recOptions = paper.recipients.map((rec, i) =>
+            `<option value="${i}" ${i === rIdx ? 'selected' : ''}>${escapeHtml(rec.name)}</option>`).join('');
+
+        drawerBody.innerHTML = `
+            ${ctx.papers.length > 1 || ctx.omittedPaperCount ? `<label style="display:block;font-size:12px;margin-bottom:4px;">Paper</label>
+            <select id="email-paper-select" style="width:100%;padding:6px;margin-bottom:12px;">${paperOptions}${papersNote}</select>` : ''}
+            ${paper.recipients.length > 1 ? `<label style="display:block;font-size:12px;margin-bottom:4px;">Recipient</label>
+            <select id="email-recipient-select" style="width:100%;padding:6px;margin-bottom:12px;">${recOptions}</select>` : ''}
+            ${draftFieldsHtml(draft)}`;
+
+        bindDraftCopyHandler();
+
+        document.getElementById('email-paper-select')?.addEventListener('change', (e) => {
+            renderPaperKeyedDraftInDrawer(alert, parseInt(e.target.value, 10), 0);
+        });
+        document.getElementById('email-recipient-select')?.addEventListener('change', (e) => {
+            renderPaperKeyedDraftInDrawer(alert, paperIndex, parseInt(e.target.value, 10));
         });
     }
 
@@ -1277,7 +1333,11 @@ document.addEventListener('DOMContentLoaded', () => {
         detailDrawer.classList.add('open');
         detailDrawer.classList.remove('closed');
         document.getElementById('detail-drawer-title').textContent = `DRAFT EMAIL — ${alert.title.toUpperCase()}`;
-        renderEmailDraftInDrawer(alert, 0);
+        if (Array.isArray(alert.emailContext.papers)) {
+            renderPaperKeyedDraftInDrawer(alert, 0, 0);
+        } else {
+            renderEmailDraftInDrawer(alert, 0);
+        }
     }
 
     let paperSearchDebounce;
