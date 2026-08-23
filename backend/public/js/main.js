@@ -3,6 +3,7 @@ import { escapeHtml } from './utils.js';
 import { getBiasBadgeClass } from './renderers.js';
 import { createPreset, createPresetStore, encodePapersHash, parsePapersHash,
          resolveActiveConferenceId, sanitizePapersState, PAPERS_DEFAULT } from './viewState.mjs';
+import { buildEmailDraft } from './emailDrafts.mjs';
 
 function formatAdjScoreCell(p) {
     const avg = parseFloat(p.average_score);
@@ -909,6 +910,11 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Conference Selector ---
+    function currentConferenceLabel() {
+        const c = loadedConferences.find(x => x.id == activeConferenceId);
+        return c ? [c.short_name || c.name, c.year].filter(Boolean).join(" '") : '';
+    }
+
     async function loadConferences() {
         try {
             const conferences = await fetchConferences();
@@ -1111,7 +1117,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch(`/api/analytics/dashboard${qs}`);
             const data = await res.json();
 
-            renderAlerts(data.alerts);
+            renderAlerts(data.alerts, !!data.is_anonymized);
             
             allPapers = data.papers.items || data.papers;
             renderPapersTable(allPapers);
@@ -1171,10 +1177,10 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('geographic-breakdown').innerHTML = geoBreakdown;
     }
 
-    function renderAlerts(alerts) {
+    function renderAlerts(alerts, isAnonymized = false) {
         const container = document.getElementById('alerts-list');
         container.innerHTML = '';
-        
+
         if (alerts.length === 0) {
             container.innerHTML = '<div class="empty-alerts text-muted">No actions required.</div>';
             return;
@@ -1188,14 +1194,90 @@ document.addEventListener('DOMContentLoaded', () => {
                     <h3 style="font-family: 'Roboto Mono', monospace;">${escapeHtml(alert.title)}</h3>
                     <p>${escapeHtml(alert.message)}</p>
                 </div>
-                <button class="btn btn-outline btn-sm w-full">${escapeHtml(alert.action)}</button>
+                <div class="alert-actions">
+                    <button class="btn btn-outline btn-sm w-full">${escapeHtml(alert.action)}</button>
+                </div>
             `;
             const btn = card.querySelector('button');
             btn.addEventListener('click', () => {
                 applyFilterAndNavigate(alert.target, alert.filterKey, alert.affectedIds ? JSON.stringify(alert.affectedIds) : "[]", alert.title);
             });
+
+            if (alert.emailContext && !isAnonymized) {
+                const mailBtn = document.createElement('button');
+                mailBtn.className = 'btn btn-outline btn-sm w-full';
+                mailBtn.innerHTML = '<i class="ph ph-envelope-simple"></i> Draft Email';
+                mailBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    openEmailDraftDrawer(alert);
+                });
+                card.querySelector('.alert-actions').appendChild(mailBtn);
+            }
+
             container.appendChild(card);
         });
+    }
+
+    function renderEmailDraftInDrawer(alert, recipientIndex) {
+        const ctx = alert.emailContext;
+        const r = ctx.recipients[recipientIndex];
+        const draft = buildEmailDraft(ctx.kind, {
+            recipientName: r.name,
+            recipientEmail: r.email,
+            paperId: ctx.paperIds ? ctx.paperIds[0] : undefined,
+            paperTitle: ctx.paperTitle,
+            avgWordCount: ctx.avgWordCount,
+            conferenceLabel: currentConferenceLabel(),
+        });
+
+        const drawerBody = document.getElementById('detail-drawer-body');
+        const options = ctx.recipients.map((rec, i) =>
+            `<option value="${i}" ${i === recipientIndex ? 'selected' : ''}>${escapeHtml(rec.name)}</option>`).join('');
+        const omitted = ctx.omittedCount ? `<option disabled>… +${ctx.omittedCount} more not shown</option>` : '';
+        const longBody = draft.body.length > 1800;
+        const mailto = `mailto:${encodeURIComponent(draft.to)}?subject=${encodeURIComponent(draft.subject)}`
+            + (longBody ? '' : `&body=${encodeURIComponent(draft.body)}`);
+
+        drawerBody.innerHTML = `
+            ${ctx.recipients.length > 1 ? `<label style="display:block;font-size:12px;margin-bottom:4px;">Recipient</label>
+            <select id="email-recipient-select" style="width:100%;padding:6px;margin-bottom:12px;">${options}${omitted}</select>` : ''}
+            <label style="display:block;font-size:12px;margin-bottom:4px;">To</label>
+            <input id="email-draft-to" readonly value="${escapeHtml(draft.to)}" style="width:100%;padding:6px;margin-bottom:10px;background:#f7f7f7;">
+            <label style="display:block;font-size:12px;margin-bottom:4px;">Subject</label>
+            <input id="email-draft-subject" readonly value="${escapeHtml(draft.subject)}" style="width:100%;padding:6px;margin-bottom:10px;background:#f7f7f7;">
+            <label style="display:block;font-size:12px;margin-bottom:4px;">Body</label>
+            <textarea id="email-draft-body" rows="14" style="width:100%;padding:8px;font-family:inherit;">${escapeHtml(draft.body)}</textarea>
+            ${longBody ? '<p class="text-muted" style="font-size:12px;">Body exceeds mailto length limits — "Open in Mail" prefills To/Subject only; paste the body from your clipboard.</p>' : ''}
+            <div style="display:flex;gap:8px;margin-top:12px;">
+                <button type="button" id="email-copy-btn" class="btn btn-outline" style="flex:1;">Copy to Clipboard</button>
+                <a href="${mailto}" class="btn btn-outline" style="flex:1;text-align:center;text-decoration:none;">Open in Mail <i class="ph ph-arrow-up-right"></i></a>
+            </div>`;
+
+        document.getElementById('email-copy-btn')?.addEventListener('click', async (e) => {
+            const text = document.getElementById('email-draft-subject').value + '\n\n'
+                + document.getElementById('email-draft-body').value;
+            const btn = e.currentTarget;
+            try {
+                await navigator.clipboard.writeText(text);
+            } catch {
+                const ta = document.getElementById('email-draft-body');
+                ta.select();
+                document.execCommand('copy');
+            }
+            btn.textContent = 'Copied ✓';
+            setTimeout(() => { btn.textContent = 'Copy to Clipboard'; }, 1500);
+        });
+
+        document.getElementById('email-recipient-select')?.addEventListener('change', (e) => {
+            renderEmailDraftInDrawer(alert, parseInt(e.target.value, 10));
+        });
+    }
+
+    function openEmailDraftDrawer(alert) {
+        detailDrawer.classList.add('open');
+        detailDrawer.classList.remove('closed');
+        document.getElementById('detail-drawer-title').textContent = `DRAFT EMAIL — ${alert.title.toUpperCase()}`;
+        renderEmailDraftInDrawer(alert, 0);
     }
 
     let paperSearchDebounce;
