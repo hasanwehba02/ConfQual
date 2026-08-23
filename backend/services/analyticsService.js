@@ -365,7 +365,7 @@ async function getAlerts(prefetched = null, conferenceId = null, settingsArg = n
             severity: "HIGH",
             category: "INTEGRITY",
             title: `${sentimentMismatches.length} Sentiment/Score Mismatches Detected`,
-            message: `Found reviews where the score is extremely low (<=1) but the review text is overwhelmingly positive (sentiment >= 10).`,
+            message: `Found reviews where the numerical score contradicts the review text sentiment (e.g. rejection with positive praise or strong accept with critical evaluation).`,
             action: "Check for miscalibrated scoring or sarcastic review text.",
             affectedIds: [...new Set(sentimentMismatches.map(m => m.external_submission_id))],
             target: "tab-papers",

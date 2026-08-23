@@ -916,7 +916,11 @@ async function getSentimentMismatches(conferenceId = null, settingsArg = null) {
         FROM review r
         JOIN paper p ON r.paper_id = p.id
         JOIN program_committee_member pcm ON r.program_committee_member_id = pcm.id
-        WHERE r.total_score <= 1 AND r.sentiment_score >= 10 AND r.is_superseded = false
+        WHERE (
+            (r.total_score < 0 AND r.sentiment_score >= 6.0) OR
+            (r.total_score > 1 AND r.sentiment_score <= -6.0)
+        )
+        AND r.is_superseded = false
         AND p.conference_id = $1
     `;
     const result = await client.query(query, [cid]);

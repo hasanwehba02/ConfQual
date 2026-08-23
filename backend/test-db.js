@@ -42,7 +42,7 @@ async function runDiagnostics() {
         } else {
             console.error("ERROR: The 'conference' table is missing!");
             console.error("   The database is empty. You need to run the schema script.");
-            console.error("   Please execute the SQL commands in 'database/confqual_schema.sql' in your Neon database.");
+            console.error("   Please execute the SQL commands in 'database/confqual_schema.sql' in your PostgreSQL / Supabase database.");
         }
     } catch (err) {
         console.error("ERROR: Failed to query the database tables.");
