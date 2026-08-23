@@ -1,6 +1,7 @@
 import { fetchConferences, fetchComparison, deleteConference, updateConference } from './api.js';
 import { escapeHtml } from './utils.js';
 import { getBiasBadgeClass } from './renderers.js';
+import { encodePapersHash, parsePapersHash, sanitizePapersState, PAPERS_DEFAULT } from './viewState.mjs';
 
 function formatAdjScoreCell(p) {
     const avg = parseFloat(p.average_score);
@@ -73,6 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let activePaperFilter = null;
     let activeReviewerFilter = null;
     let activeConferenceId = null; // null = most-recent
+    let loadedConferences = [];
     
     // --- Global Filter Functions ---
     window.applyFilterAndNavigate = function(targetTabId, filterKey, idsJson, customTitle) {
@@ -130,6 +132,48 @@ document.addEventListener('DOMContentLoaded', () => {
             if (titleEl) titleEl.textContent = 'Reviewer Explorer';
         }
     };
+
+    // --- Papers View State (URL hash + presets) ---
+    function readPaperControls() {
+        const sortVal = document.getElementById('paper-sort')?.value || 'external_submission_id_desc';
+        const li = sortVal.lastIndexOf('_');
+        return {
+            sortBy: sortVal.substring(0, li),
+            sortOrder: sortVal.substring(li + 1).toUpperCase(),
+            filterMode: document.getElementById('paper-filter')?.value || 'all',
+            searchText: document.getElementById('paper-search')?.value || '',
+            conferenceId: activeConferenceId,
+        };
+    }
+
+    function writePapersHash() {
+        history.replaceState(null, '', encodePapersHash(readPaperControls()));
+    }
+
+    function activateTabViaClasses(targetId) {
+        tabBtns.forEach(b => b.classList.toggle('active', b.getAttribute('data-target') === targetId));
+        tabContents.forEach(c => c.classList.toggle('hidden', c.id !== targetId));
+    }
+
+    function applyHashToControls() {
+        const raw = parsePapersHash(location.hash);
+        if (!raw) return null;
+        const sortSelect = document.getElementById('paper-sort');
+        const filterSelect = document.getElementById('paper-filter');
+        const state = sanitizePapersState(raw, {
+            filterModes: Array.from(filterSelect.options).map(o => o.value),
+            sortFields: Array.from(sortSelect.options)
+                .map(o => o.value.substring(0, o.value.lastIndexOf('_'))),
+            conferenceIds: loadedConferences.map(c => c.id),
+        });
+        if (state.conferenceId != null) activeConferenceId = state.conferenceId;
+        const combined = `${state.sortBy}_${state.sortOrder.toLowerCase()}`;
+        if (Array.from(sortSelect.options).some(o => o.value === combined)) sortSelect.value = combined;
+        filterSelect.value = state.filterMode;
+        const searchInput = document.getElementById('paper-search');
+        if (searchInput) searchInput.value = state.searchText;
+        return state;
+    }
 
     window.exportTableToCSV = function(tbodyId, filename) {
         const tbody = document.getElementById(tbodyId);
@@ -465,7 +509,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 dashboardContent.classList.remove('hidden');
                 triageSidebar.classList.remove('hidden');
                 await loadConferences();
+                const restored = applyHashToControls();
                 await loadDashboardData();
+                if (restored && (restored.filterMode !== PAPERS_DEFAULT.filterMode
+                    || restored.sortBy !== PAPERS_DEFAULT.sortBy
+                    || restored.sortOrder !== PAPERS_DEFAULT.sortOrder
+                    || restored.searchText)) {
+                    activateTabViaClasses('tab-papers');
+                    await window.fetchPapers();
+                }
             }
         } catch {
             console.log("No existing data found or server offline");
@@ -705,12 +757,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Fetch specific datasets for sorting/filtering ---
     // Conference-aware fetch wrappers
     window.fetchPapers = async function() {
-        const sortVal = document.getElementById('paper-sort')?.value || 'external_submission_id_desc';
-        const lastUnderscore = sortVal.lastIndexOf('_');
-        const sortBy = sortVal.substring(0, lastUnderscore);
-        const sortOrder = sortVal.substring(lastUnderscore + 1).toUpperCase();
-        const filterMode = document.getElementById('paper-filter')?.value || 'all';
-        const cidParam = activeConferenceId ? `&conferenceId=${activeConferenceId}` : '';
+        const { sortBy, sortOrder, filterMode, searchText, conferenceId } = readPaperControls();
+        history.replaceState(null, '', encodePapersHash({ sortBy, sortOrder, filterMode, searchText, conferenceId }));
+        const cidParam = conferenceId ? `&conferenceId=${conferenceId}` : '';
         try {
             const res = await fetch(`/api/analytics/papers?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}&limit=2000${cidParam}`);
             const data = await res.json();
@@ -759,6 +808,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadConferences() {
         try {
             const conferences = await fetchConferences();
+            loadedConferences = conferences;
             const nameSpan = document.getElementById('conference-active-name');
             const wrapper = document.getElementById('conference-selector-wrapper');
             if (!nameSpan || !wrapper) return;
@@ -1043,8 +1093,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    let paperSearchDebounce;
     window.handlePaperSearch = function() {
         if (allPapers) renderPapersTable(allPapers);
+        clearTimeout(paperSearchDebounce);
+        paperSearchDebounce = setTimeout(writePapersHash, 300);
     };
 
     window.handleReviewerSearch = function() {

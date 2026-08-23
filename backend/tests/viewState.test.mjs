@@ -69,3 +69,33 @@ test('resolveActiveConferenceId branches', () => {
   assert.equal(resolveActiveConferenceId([{ id: 7 }], 2), 2);
   assert.equal(resolveActiveConferenceId([], null), null);
 });
+
+test('preset store CRUD', () => {
+  const store = createPresetStore(new MemoryStorage());
+  const p = createPreset({ name: 'Meta review', filterMode: 'no_comments',
+    sortBy: 'total_comments', sortOrder: 'DESC' });
+  store.savePreset(5, p);
+  assert.deepEqual(store.getPresets(5)[0].name, 'Meta review');
+  store.renamePreset(5, p.id, 'Renamed');
+  assert.equal(store.getPresets(5)[0].name, 'Renamed');
+  store.deletePreset(5, p.id);
+  assert.deepEqual(store.getPresets(5), []);
+  assert.deepEqual(store.getPresets(99), []);
+});
+
+test('preset ids are unique', () => {
+  const a = createPreset({ name: 'a', filterMode: 'all', sortBy: 'external_submission_id', sortOrder: 'DESC' });
+  const b = createPreset({ name: 'b', filterMode: 'all', sortBy: 'external_submission_id', sortOrder: 'DESC' });
+  assert.notEqual(a.id, b.id);
+});
+
+test('corrupt storage returns empty list', () => {
+  const s = new MemoryStorage();
+  s.setItem('confqual:preset:v1:papers:5', '{not json');
+  assert.deepEqual(createPresetStore(s).getPresets(5), []);
+});
+
+test('rename missing preset returns null', () => {
+  const store = createPresetStore(new MemoryStorage());
+  assert.equal(store.renamePreset(1, 'nope', 'x'), null);
+});
