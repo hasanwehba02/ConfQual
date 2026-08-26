@@ -135,11 +135,11 @@
                                 <th>ID</th>
                                 <th>TITLE</th>
                                 <th>DECISION</th>
-                                <th>REVS</th>
+                                <th>REVIEWS</th>
                                 <th>AVG</th>
                                 <th style="width: 150px;">SPREAD</th>
                                 <th style="width: 100px;">ADJ. AVG</th>
-                                <th>CMTS</th>
+                                <th>COMMENTS</th>
                             </tr>
                         </thead>
                         <tbody id="papers-table-body"></tbody>
@@ -164,14 +164,14 @@
                     <select id="reviewer-sort" class="form-select" style="padding: 5px; border-radius: 4px; border: 1px solid #ccc;">
                         <option value="reviewer_id_asc">ID (Low to High)</option>
                         <option value="reviewer_id_desc">ID (High to Low)</option>
-                        <option value="avg_word_count_desc">Word Count (High to Low)</option>
-                        <option value="avg_word_count_asc">Word Count (Low to High)</option>
                         <option value="total_reviews_completed_desc">Reviews Done (Most to Least)</option>
                         <option value="total_reviews_completed_asc">Reviews Done (Least to Most)</option>
-                        <option value="avg_score_given_desc">Avg Score (High to Low)</option>
-                        <option value="avg_score_given_asc">Avg Score (Low to High)</option>
+                        <option value="avg_word_count_desc">Word Count (High to Low)</option>
+                        <option value="avg_word_count_asc">Word Count (Low to High)</option>
                         <option value="total_comments_desc">Comments (Most to Least)</option>
                         <option value="total_comments_asc">Comments (Least to Most)</option>
+                        <option value="avg_score_given_desc">Avg Score (High to Low)</option>
+                        <option value="avg_score_given_asc">Avg Score (Low to High)</option>
                         <option value="calibration_index_desc">Calibration (High to Low)</option>
                         <option value="calibration_index_asc">Calibration (Low to High)</option>
                     </select>
@@ -199,11 +199,11 @@
                                 <th>ROLE</th>
                                 <th>DONE</th>
                                 <th>W/C</th>
+                                <th>COMMENTS</th>
                                 <th>AVG</th>
                                 <th>MATCH %</th>
                                 <th style="width: 150px;">CALIBRATION</th>
                                 <th style="width: 100px;">BIAS</th>
-                                <th>CMTS</th>
                             </tr>
                         </thead>
                         <tbody id="reviewers-table-body"></tbody>
