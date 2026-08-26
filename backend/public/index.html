@@ -135,11 +135,11 @@
                                 <th>ID</th>
                                 <th>TITLE</th>
                                 <th>DECISION</th>
-                                <th>REVIEWS</th>
-                                <th>AVG</th>
-                                <th style="width: 150px;">SPREAD</th>
-                                <th style="width: 100px;">ADJ. AVG</th>
-                                <th>COMMENTS</th>
+                                <th data-tip="Total number of reviews submitted for this paper">REVIEWS</th>
+                                <th data-tip="Average of the original review scores (conference scale)">AVG</th>
+                                <th style="width: 150px;" data-tip="Difference between the highest and lowest review score. High spread (&gt;2) means reviewers disagreed strongly (a 'debate' paper)">SPREAD</th>
+                                <th style="width: 100px;" data-tip="Bias-corrected average: reviewer harshness/leniency is normalized away (z-score), so papers are comparable across reviewers">ADJ. AVG</th>
+                                <th data-tip="Number of comments written by reviewers on this paper">COMMENTS</th>
                             </tr>
                         </thead>
                         <tbody id="papers-table-body"></tbody>
@@ -197,13 +197,13 @@
                                 <th>ID</th>
                                 <th>NAME</th>
                                 <th>ROLE</th>
-                                <th>DONE</th>
-                                <th>W/C</th>
-                                <th>COMMENTS</th>
-                                <th>AVG</th>
-                                <th>MATCH %</th>
-                                <th style="width: 150px;">CALIBRATION</th>
-                                <th style="width: 100px;">BIAS</th>
+                                <th data-tip="Whether this reviewer has completed any reviews. Green tick = active, red cross = no reviews yet">DONE</th>
+                                <th data-tip="Average number of words per review written by this reviewer">W/C</th>
+                                <th data-tip="Total comments left across all reviewed papers">COMMENTS</th>
+                                <th data-tip="Average score this reviewer gives, relative to the conference scale">AVG</th>
+                                <th data-tip="Percentage of assigned papers where the reviewer's bid was 'yes' or 'maybe' — how well assignments matched their preferences">MATCH %</th>
+                                <th style="width: 150px;" data-tip="Calibration index: average difference between a reviewer's score and the score other reviewers gave the same paper. Positive = generous, negative = stricter than peers">CALIBRATION</th>
+                                <th style="width: 100px;" data-tip="Bias classification from the calibration index: calibrated (within 0.5), lenient/strict (0.5–1.5), extreme (beyond 1.5)">BIAS</th>
                             </tr>
                         </thead>
                         <tbody id="reviewers-table-body"></tbody>
