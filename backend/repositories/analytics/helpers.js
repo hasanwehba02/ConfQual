@@ -100,7 +100,8 @@ const ALLOWED_SORT_COLUMNS = new Set([
     'id', 'external_submission_id', 'title', 'total_reviews', 'average_score',
     'score_spread', 'total_comments', 'reviewer_id', 'first_name', 'last_name',
     'total_reviews_completed', 'avg_word_count', 'avg_score_given', 'total_comments',
-    'calibration_index', 'peers_avg', 'review_date', 'total_score', 'adjusted_score'
+    'calibration_index', 'peers_avg', 'review_date', 'total_score', 'adjusted_score',
+    'sub_reviewer_count', 'missed_reviews'
 ]);
 
 function buildOrderBy(sortBy, sortOrder, defaultOrder) {

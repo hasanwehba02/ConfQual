@@ -15,6 +15,12 @@ async function getReviewerQuality(options = {}) {
         filterClause = `AND COALESCE(rc.total_comments, 0) > 0`;
     } else if (options.filterMode === 'high_variance') {
         filterClause = `AND ABS(rcal.calibration_index) > 1.5`;
+    } else if (options.filterMode === 'missed_assignments') {
+        filterClause = `AND COALESCE(ast.missed_reviews, 0) > 0`;
+    } else if (options.filterMode === 'has_subreviews') {
+        filterClause = `AND COALESCE(sc.sub_reviewer_count, 0) > 0`;
+    } else if (options.filterMode === 'no_subreviews') {
+        filterClause = `AND pcm.role <> 'Sub-reviewer' AND COALESCE(sc.sub_reviewer_count, 0) = 0`;
     }
 
     const { clause: orderClause } = buildOrderBy(options.sortBy, options.sortOrder, 'avg_word_count DESC NULLS LAST');
@@ -98,6 +104,28 @@ async function getReviewerQuality(options = {}) {
             JOIN program_committee_member parent ON parent.id = r.program_committee_member_id
             WHERE r.sub_reviewer_person_id IS NOT NULL AND r.is_superseded = false
             ORDER BY r.sub_reviewer_person_id, parent.id
+        ),
+        SubCounts AS (
+            SELECT x.parent_pcm_id, COUNT(*) AS sub_reviewer_count
+            FROM (
+                SELECT DISTINCT r.sub_reviewer_person_id, r.program_committee_member_id AS parent_pcm_id
+                FROM review r
+                JOIN paper p ON p.id = r.paper_id AND p.conference_id = $1
+                WHERE r.sub_reviewer_person_id IS NOT NULL AND r.is_superseded = false
+            ) x
+            GROUP BY x.parent_pcm_id
+        ),
+        AssignStats AS (
+            SELECT a.program_committee_member_id,
+                   COUNT(DISTINCT a.paper_id) AS total_assigned,
+                   COUNT(DISTINCT rv.paper_id) AS total_delivered,
+                   GREATEST(COUNT(DISTINCT a.paper_id) - COUNT(DISTINCT rv.paper_id), 0) AS missed_reviews
+            FROM assignment a
+            JOIN paper p ON p.id = a.paper_id AND p.conference_id = $1
+            LEFT JOIN review rv ON rv.paper_id = a.paper_id
+                AND rv.program_committee_member_id = a.program_committee_member_id
+                AND rv.is_superseded = false
+            GROUP BY a.program_committee_member_id
         )
         SELECT
             COUNT(*) OVER() as full_count,
@@ -120,18 +148,24 @@ async function getReviewerQuality(options = {}) {
             srp.parent_pcm_id,
             srp.parent_reviewer_id,
             srp.parent_first_name,
-            srp.parent_last_name
+            srp.parent_last_name,
+            COALESCE(sc.sub_reviewer_count, 0) AS sub_reviewer_count,
+            COALESCE(ast.total_assigned, 0) AS total_assigned,
+            COALESCE(ast.missed_reviews, 0) AS missed_reviews
         FROM program_committee_member pcm
         LEFT JOIN review r ON (pcm.id = r.program_committee_member_id OR pcm.external_person_id = r.sub_reviewer_person_id) AND r.is_superseded = false
         LEFT JOIN ReviewerComments rc ON pcm.id = rc.program_committee_member_id
         LEFT JOIN ReviewerBidding rb ON pcm.id = rb.program_committee_member_id
         LEFT JOIN ReviewerCalibration rcal ON pcm.id = rcal.program_committee_member_id
         LEFT JOIN SubReviewerParent srp ON srp.sub_reviewer_person_id = pcm.external_person_id
+        LEFT JOIN SubCounts sc ON sc.parent_pcm_id = pcm.id
+        LEFT JOIN AssignStats ast ON ast.program_committee_member_id = pcm.id
         CROSS JOIN ConferenceStats cs
         WHERE pcm.conference_id = $1
         ${filterClause}
         GROUP BY pcm.id, pcm.external_person_id, pcm.first_name, pcm.last_name, pcm.role, rc.total_comments, rb.bidding_match_percentage, rcal.peers_avg, rcal.calibration_index,
-                 srp.parent_pcm_id, srp.parent_reviewer_id, srp.parent_first_name, srp.parent_last_name
+                 srp.parent_pcm_id, srp.parent_reviewer_id, srp.parent_first_name, srp.parent_last_name,
+                 sc.sub_reviewer_count, ast.total_assigned, ast.missed_reviews
         ${orderClause}
         ${limitClause} ${offsetClause}
     `;

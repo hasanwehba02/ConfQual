@@ -179,7 +179,10 @@
                         <option value="all">Filter: All Reviewers</option>
                         <option value="no_comments">Filter: No Comments</option>
                         <option value="has_comments">Filter: Has Comments</option>
-                        <option value="high_variance">Filter: High Calibration Variance</option>
+                        <option value="high_variance" title="Reviewers whose average score deviates more than 1.5 points from the scores other reviewers gave the same papers">Filter: High Calibration Variance (|deviation| &gt; 1.5)</option>
+                        <option value="missed_assignments">Filter: Missed Assignments</option>
+                        <option value="has_subreviews">Filter: PC Members With Sub-reviewers</option>
+                        <option value="no_subreviews">Filter: PC Members Without Sub-reviewers</option>
                     </select>
                 </div>
                 
@@ -197,7 +200,9 @@
                                 <th>ID</th>
                                 <th>NAME</th>
                                 <th>ROLE</th>
+                                <th data-tip="Number of sub-reviewers acting on behalf of this PC member">SUBS</th>
                                 <th data-tip="Whether this reviewer has completed any reviews. Green tick = active, red cross = no reviews yet">DONE</th>
+                                <th data-tip="Assigned papers this reviewer never delivered a review for">MISSED</th>
                                 <th data-tip="Average number of words per review written by this reviewer">W/C</th>
                                 <th data-tip="Total comments left across all reviewed papers">COMMENTS</th>
                                 <th data-tip="Average score this reviewer gives, relative to the conference scale">AVG</th>

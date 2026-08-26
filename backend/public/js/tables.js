@@ -135,9 +135,6 @@ export function renderReviewersTable(reviewers) {
             calClass = 'warning';
         }
 
-        const bm = parseFloat(r.bidding_match_percentage);
-        const bmHtml = bm < 50 ? `<strong class="text-danger">${bm}%</strong>` : `${bm}%`;
-
         const warningHtml = parseInt(r.total_reviews_completed) === 0 ? '<span data-tip="0 reviews completed" style="cursor: help; margin-left: 6px; font-size: 0.95em;">⚠️</span>' : '';
 
         const doneCount = parseInt(r.total_reviews_completed) || 0;
@@ -145,8 +142,37 @@ export function renderReviewersTable(reviewers) {
             ? `<span style="color: var(--success, #16a34a); font-size: 1.05em;" data-tip="${doneCount} review${doneCount === 1 ? '' : 's'} completed">✔</span>`
             : `<span style="color: var(--danger, #dc2626); font-size: 1.05em;" data-tip="No reviews completed">✘</span>`;
 
+        const bm = parseFloat(r.bidding_match_percentage);
+        const bmHtml = isNaN(bm)
+            ? '<span class="text-muted" data-tip="No bids recorded for this reviewer">-</span>'
+            : (bm < 50 ? `<strong class="text-danger">${bm}%</strong>` : `${bm}%`);
+
+        const calHtml = r.calibration_index === null || r.calibration_index === undefined
+            ? '<span class="text-muted" data-tip="Calibration needs at least 2 completed reviews to compute">-</span>'
+            : `
+                <div class="sparkline-container">
+                    <span style="font-family: 'Roboto Mono', monospace; width: 45px; display: inline-block;">${textDisplay}</span>
+                    <div style="flex: 1; background: #eee;">
+                        <div class="sparkline-bar ${calClass}" style="width: ${calWidth}%"></div>
+                    </div>
+                </div>
+            `;
+
+        const biasHtml = r.bias_label
+            ? formatBiasCell(r)
+            : `<span class="text-muted" data-tip="${doneCount < 3 ? 'Bias needs at least 3 completed reviews to compute' : 'No bias classification available'}">-</span>`;
+
+        const isSub = r.role === 'Sub-reviewer';
+        const subsCell = isSub ? '-' : (parseInt(r.sub_reviewer_count) > 0 ? escapeHtml(r.sub_reviewer_count) : '0');
+        const missedCount = parseInt(r.missed_reviews) || 0;
+        const missedCell = isSub
+            ? '-'
+            : (missedCount > 0
+                ? `<strong style="color: var(--danger, #dc2626);" data-tip="${missedCount} assigned paper${missedCount === 1 ? '' : 's'} without a delivered review">${missedCount}</strong>`
+                : '0');
+
         let roleHtml = `<span class="badge bg-neutral">${escapeHtml(r.role)}</span>`;
-        if (r.role === 'Sub-reviewer' && (r.parent_first_name || r.parent_name)) {
+        if (isSub && (r.parent_first_name || r.parent_name)) {
             const parentName = r.parent_name || [r.parent_first_name, r.parent_last_name].filter(Boolean).join(' ');
             roleHtml = `<span class="badge bg-neutral" data-tip="Acting as sub-reviewer for ${escapeHtml(parentName)}">${escapeHtml(r.role)}</span>`;
         }
@@ -157,20 +183,15 @@ export function renderReviewersTable(reviewers) {
             <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.reviewer_id) || '-'} ${warningHtml}</td>
             <td style="font-weight: bold;">${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</td>
             <td>${roleHtml}</td>
+            <td class="text-center" style="font-family: 'Roboto Mono', monospace;">${subsCell}</td>
             <td class="text-center" style="font-family: 'Roboto Mono', monospace;">${doneHtml}</td>
+            <td class="text-center" style="font-family: 'Roboto Mono', monospace;">${missedCell}</td>
             <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.avg_word_count) || '0'}</td>
             <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.total_comments) || '0'}</td>
             <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.avg_score_given) || '-'}</td>
             <td style="font-family: 'Roboto Mono', monospace;">${bmHtml}</td>
-            <td>
-                <div class="sparkline-container">
-                    <span style="font-family: 'Roboto Mono', monospace; width: 45px; display: inline-block;">${textDisplay}</span>
-                    <div style="flex: 1; background: #eee;">
-                        <div class="sparkline-bar ${calClass}" style="width: ${calWidth}%"></div>
-                    </div>
-                </div>
-            </td>
-            <td class="text-center">${formatBiasCell(r)}</td>
+            <td>${calHtml}</td>
+            <td class="text-center">${biasHtml}</td>
         `;
         tbody.appendChild(tr);
     });
