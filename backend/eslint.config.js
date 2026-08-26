@@ -26,7 +26,8 @@ const browserGlobals = {
     Chart: "readonly",
     XLSX: "readonly",
     Blob: "readonly",
-    URL: "readonly"
+    URL: "readonly",
+    Element: "readonly"
 };
 
 module.exports = [

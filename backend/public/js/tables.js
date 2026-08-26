@@ -11,7 +11,7 @@ function formatAdjScoreCell(p) {
     const adj = p.adjusted_score !== null && p.adjusted_score !== undefined ? parseFloat(p.adjusted_score) : null;
     if (adj === null) return '<span class="text-muted">-</span>';
     if (!isNaN(avg) && Math.abs(adj - avg) >= 0.5) {
-        return `<strong style="color: #f59e0b;" title="Bias-corrected average (z-score normalized per reviewer)">${adj.toFixed(2)}</strong>`;
+        return `<strong style="color: #f59e0b;" data-tip="Bias-corrected average (z-score normalized per reviewer)">${adj.toFixed(2)}</strong>`;
     }
     return adj.toFixed(2);
 }
@@ -68,7 +68,7 @@ export async function renderPapersTable(papers) {
                 ${escapeHtml(p.external_submission_id)}
                 ${p.total_reviews < 3 ? '<span style="color: red; margin-left: 6px; font-size: 0.9em;">⚠️ Less than 3 reviews</span>' : ''}
             </td>
-            <td title="${escapeHtml(p.title || '')}">${truncateTitle(p.title)}</td>
+            <td data-tip="${escapeHtml(p.title || '')}">${truncateTitle(p.title)}</td>
             <td>
                 <select class="form-select" style="padding: 2px 5px; border-radius: 4px; font-size: 0.75rem; border: 1px solid #ccc;" ${selectDisabled}>
                     <option value="Accept" ${currentDec === 'accept' ? 'selected' : ''}>Accept</option>
@@ -142,8 +142,8 @@ export function renderReviewersTable(reviewers) {
 
         const doneCount = parseInt(r.total_reviews_completed) || 0;
         const doneHtml = doneCount > 0
-            ? `<span style="color: var(--success, #16a34a); font-size: 1.05em;" title="${doneCount} review${doneCount === 1 ? '' : 's'} completed">✔</span>`
-            : `<span style="color: var(--danger, #dc2626); font-size: 1.05em;" title="No reviews completed">✘</span>`;
+            ? `<span style="color: var(--success, #16a34a); font-size: 1.05em;" data-tip="${doneCount} review${doneCount === 1 ? '' : 's'} completed">✔</span>`
+            : `<span style="color: var(--danger, #dc2626); font-size: 1.05em;" data-tip="No reviews completed">✘</span>`;
 
         const tr = document.createElement('tr');
         tr.addEventListener('click', () => window.openReviewerModal(r.id, `${r.first_name} ${r.last_name}`));
@@ -184,7 +184,7 @@ export function renderSubmissionsTable(submissions) {
         const dateStr = sub.review_date ? new Date(sub.review_date).toLocaleDateString() : '-';
         const timeStr = sub.review_time ? sub.review_time : '-';
         const supersededStyle = sub.is_superseded ? ' style="color: var(--text-muted); font-style: italic;"' : '';
-        const supersededTag = sub.is_superseded ? ' <span class="badge bg-neutral" title="This review was replaced by a newer version">superseded</span>' : '';
+        const supersededTag = sub.is_superseded ? ' <span class="badge bg-neutral" data-tip="This review was replaced by a newer version">superseded</span>' : '';
 
         tr.innerHTML = `
             <td${supersededStyle} style="font-family: 'Roboto Mono', monospace;">#${escapeHtml(sub.id)}${supersededTag}</td>
