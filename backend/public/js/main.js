@@ -11,6 +11,7 @@ import './conferences.js';
 import './comparisonView.js';
 import './dashboardView.js';
 import './projector.js';
+import './tooltip.js';
 
 import { wireDetailDrawerClose } from './drawers.js';
 import { wireSavePresetPopover } from './papersView.js';
