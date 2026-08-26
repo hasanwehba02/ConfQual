@@ -4,6 +4,7 @@ const SHOW_DELAY_MS = 120;
 
 let tipEl = null;
 let showTimer = null;
+let currentTarget = null;
 
 function ensureTip() {
     if (!tipEl) {
@@ -32,9 +33,19 @@ function ensureTip() {
 
 function positionTip(x, y, text) {
     const el = ensureTip();
-    el.textContent = text;
-    el.style.opacity = '0';
-    // Measure after content set
+    if (text !== undefined && el.textContent !== text) {
+        el.textContent = text;
+        // Measure after content set; temporarily invisible only when content changed
+        const prevOpacity = el.style.opacity;
+        el.style.opacity = '0';
+        placeAt(el, x, y);
+        el.style.opacity = prevOpacity;
+    } else {
+        placeAt(el, x, y);
+    }
+}
+
+function placeAt(el, x, y) {
     const pad = 12;
     let left = x + pad;
     let top = y + pad;
@@ -49,12 +60,21 @@ function findTipTarget(target) {
     return target instanceof Element ? target.closest('[data-tip]') : null;
 }
 
+function hideTip() {
+    clearTimeout(showTimer);
+    currentTarget = null;
+    if (tipEl) tipEl.style.opacity = '0';
+}
+
 document.addEventListener('mouseover', (e) => {
     const target = findTipTarget(e.target);
     if (!target) return;
+    // Same target already pending/visible: don't restart the delay
+    if (target === currentTarget) return;
     clearTimeout(showTimer);
     const text = target.getAttribute('data-tip');
     if (!text) return;
+    currentTarget = target;
     showTimer = setTimeout(() => {
         positionTip(e.clientX, e.clientY, text);
         ensureTip().style.opacity = '1';
@@ -62,11 +82,12 @@ document.addEventListener('mouseover', (e) => {
 });
 
 document.addEventListener('mouseout', (e) => {
-    if (findTipTarget(e.target)) {
-        clearTimeout(showTimer);
-        const el = ensureTip();
-        el.style.opacity = '0';
-    }
+    const target = findTipTarget(e.target);
+    if (!target) return;
+    // Ignore micro mouseouts that stay inside the same data-tip element
+    if (e.relatedTarget && target.contains(e.relatedTarget)) return;
+    if (findTipTarget(e.relatedTarget) === target) return;
+    hideTip();
 });
 
 document.addEventListener('mousemove', (e) => {
