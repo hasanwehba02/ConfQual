@@ -13,4 +13,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/settings', settingsRoutes);
 
+// Central error handler (must be last)
+const { errorHandler } = require('./middleware/errorHandler');
+app.use(errorHandler);
+
 module.exports = app;
