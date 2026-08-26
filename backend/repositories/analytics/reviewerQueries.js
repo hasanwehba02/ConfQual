@@ -86,8 +86,20 @@ async function getReviewerQuality(options = {}) {
             FROM review r
             JOIN paper p ON r.paper_id = p.id
             WHERE r.is_superseded = false AND p.is_deleted = false AND p.conference_id = $1
+        ),
+        SubReviewerParent AS (
+            SELECT DISTINCT ON (r.sub_reviewer_person_id)
+                r.sub_reviewer_person_id,
+                parent.id AS parent_pcm_id,
+                parent.external_person_id AS parent_reviewer_id,
+                parent.first_name AS parent_first_name,
+                parent.last_name AS parent_last_name
+            FROM review r
+            JOIN program_committee_member parent ON parent.id = r.program_committee_member_id
+            WHERE r.sub_reviewer_person_id IS NOT NULL AND r.is_superseded = false
+            ORDER BY r.sub_reviewer_person_id, parent.id
         )
-        SELECT 
+        SELECT
             COUNT(*) OVER() as full_count,
             pcm.id,
             pcm.external_person_id as reviewer_id,
@@ -104,16 +116,22 @@ async function getReviewerQuality(options = {}) {
             rb.bidding_match_percentage,
             rcal.calibration_index,
             MAX(cs.conf_mean) AS conf_mean,
-            MAX(cs.conf_std) AS conf_std
+            MAX(cs.conf_std) AS conf_std,
+            srp.parent_pcm_id,
+            srp.parent_reviewer_id,
+            srp.parent_first_name,
+            srp.parent_last_name
         FROM program_committee_member pcm
         LEFT JOIN review r ON (pcm.id = r.program_committee_member_id OR pcm.external_person_id = r.sub_reviewer_person_id) AND r.is_superseded = false
         LEFT JOIN ReviewerComments rc ON pcm.id = rc.program_committee_member_id
         LEFT JOIN ReviewerBidding rb ON pcm.id = rb.program_committee_member_id
         LEFT JOIN ReviewerCalibration rcal ON pcm.id = rcal.program_committee_member_id
+        LEFT JOIN SubReviewerParent srp ON srp.sub_reviewer_person_id = pcm.external_person_id
         CROSS JOIN ConferenceStats cs
         WHERE pcm.conference_id = $1
         ${filterClause}
-        GROUP BY pcm.id, pcm.external_person_id, pcm.first_name, pcm.last_name, pcm.role, rc.total_comments, rb.bidding_match_percentage, rcal.peers_avg, rcal.calibration_index
+        GROUP BY pcm.id, pcm.external_person_id, pcm.first_name, pcm.last_name, pcm.role, rc.total_comments, rb.bidding_match_percentage, rcal.peers_avg, rcal.calibration_index,
+                 srp.parent_pcm_id, srp.parent_reviewer_id, srp.parent_first_name, srp.parent_last_name
         ${orderClause}
         ${limitClause} ${offsetClause}
     `;

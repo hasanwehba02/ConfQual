@@ -66,7 +66,7 @@ export async function renderPapersTable(papers) {
         tr.innerHTML = `
             <td style="font-family: 'Roboto Mono', monospace; display: flex; align-items: center;">
                 ${escapeHtml(p.external_submission_id)}
-                ${p.total_reviews < 3 ? '<span style="color: red; margin-left: 6px; font-size: 0.9em;">⚠️ Less than 3 reviews</span>' : ''}
+                ${p.total_reviews < 3 ? '<span data-tip="Less than 3 reviews — scores may be unreliable" style="cursor: help; margin-left: 6px; font-size: 0.95em;">⚠️</span>' : ''}
             </td>
             <td data-tip="${escapeHtml(p.title || '')}">${truncateTitle(p.title)}</td>
             <td>
@@ -138,19 +138,25 @@ export function renderReviewersTable(reviewers) {
         const bm = parseFloat(r.bidding_match_percentage);
         const bmHtml = bm < 50 ? `<strong class="text-danger">${bm}%</strong>` : `${bm}%`;
 
-        const warningHtml = parseInt(r.total_reviews_completed) === 0 ? '<span style="color: red; margin-left: 6px; font-size: 0.9em;">⚠️ 0 reviews completed</span>' : '';
+        const warningHtml = parseInt(r.total_reviews_completed) === 0 ? '<span data-tip="0 reviews completed" style="cursor: help; margin-left: 6px; font-size: 0.95em;">⚠️</span>' : '';
 
         const doneCount = parseInt(r.total_reviews_completed) || 0;
         const doneHtml = doneCount > 0
             ? `<span style="color: var(--success, #16a34a); font-size: 1.05em;" data-tip="${doneCount} review${doneCount === 1 ? '' : 's'} completed">✔</span>`
             : `<span style="color: var(--danger, #dc2626); font-size: 1.05em;" data-tip="No reviews completed">✘</span>`;
 
+        let roleHtml = `<span class="badge bg-neutral">${escapeHtml(r.role)}</span>`;
+        if (r.role === 'Sub-reviewer' && (r.parent_first_name || r.parent_name)) {
+            const parentName = r.parent_name || [r.parent_first_name, r.parent_last_name].filter(Boolean).join(' ');
+            roleHtml = `<span class="badge bg-neutral" data-tip="Acting as sub-reviewer for ${escapeHtml(parentName)}">${escapeHtml(r.role)}</span>`;
+        }
+
         const tr = document.createElement('tr');
         tr.addEventListener('click', () => window.openReviewerModal(r.id, `${r.first_name} ${r.last_name}`));
         tr.innerHTML = `
             <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.reviewer_id) || '-'} ${warningHtml}</td>
             <td style="font-weight: bold;">${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</td>
-            <td><span class="badge bg-neutral">${escapeHtml(r.role)}</span></td>
+            <td>${roleHtml}</td>
             <td class="text-center" style="font-family: 'Roboto Mono', monospace;">${doneHtml}</td>
             <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.avg_word_count) || '0'}</td>
             <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.total_comments) || '0'}</td>

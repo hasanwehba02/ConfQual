@@ -56,6 +56,15 @@ function maskNames(rows, settings, idKey = 'id') {
                 masked.last_name = isAnonymized ? `cognom${personId}` : shortenSubName(masked.last_name);
             }
             if (isAnonymized && masked.email !== undefined) masked.email = `subreviewer_${personId}@example.com`;
+            if (masked.parent_first_name !== undefined) {
+                const parentRef = isAnonymized
+                    ? `${prefix}Reviewer_${masked.parent_reviewer_id ?? masked.parent_pcm_id ?? ''}`
+                    : [masked.parent_first_name, masked.parent_last_name].filter(Boolean).join(' ');
+                masked.parent_name = parentRef;
+                delete masked.parent_first_name;
+                delete masked.parent_last_name;
+                delete masked.parent_reviewer_id;
+            }
         } else if (isAnonymized) {
             if (masked.first_name !== undefined) masked.first_name = `${prefix}Reviewer_${id}`;
             if (masked.last_name !== undefined) masked.last_name = '';

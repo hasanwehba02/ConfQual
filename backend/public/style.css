@@ -764,3 +764,8 @@ th, .metric-value, .brand {
     gap: 6px;
     min-width: 190px;
 }
+
+/* Fast tooltip targets */
+[data-tip] {
+    cursor: help;
+}
