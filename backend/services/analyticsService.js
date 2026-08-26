@@ -1,4 +1,5 @@
 const analyticsRepository = require("../repositories/analyticsRepository");
+const { deriveBiasLabel } = require("../utils/scoreNormalization");
 
 // 1. System Health
 async function getConferenceHealth(conferenceId = null) {
@@ -48,6 +49,16 @@ function enrichReviewerBias(reviewers) {
 
         reviewer.bias_category = biasCategory;
         reviewer.is_reliable = isReliable;
+
+        // Canonical bias label shared with the PDF report vocabulary:
+        // 'calibrated' | 'lenient' | 'strict' | 'extreme' | null (< 3 reviews)
+        const avgScoreGiven = reviewer.avg_score_given !== null && reviewer.avg_score_given !== undefined
+            ? parseFloat(reviewer.avg_score_given)
+            : null;
+        const peersAvg = reviewer.conf_mean !== null && reviewer.conf_mean !== undefined
+            ? parseFloat(reviewer.conf_mean)
+            : null;
+        reviewer.bias_label = deriveBiasLabel(avgScoreGiven, peersAvg, totalReviews);
     });
 
     return reviewers;
@@ -709,6 +720,7 @@ async function getDashboardData(conferenceId = null) {
 module.exports = {
     getConferenceHealth,
     getReviewerQuality,
+    enrichReviewerBias,
     getPaperDebates,
     getExpertiseMismatches,
     getAlerts,
