@@ -2,7 +2,7 @@ import { fetchComparison } from './api.js';
 import { escapeHtml } from './utils.js';
 import { renderComparisonCharts } from './charts.js';
 
-window.loadComparisonTab = async function() {
+export async function loadComparisonTab() {
     const tbody = document.getElementById('comparison-table-body');
     if (!tbody) return;
     tbody.innerHTML = '<tr><td colspan="11" class="text-muted" style="text-align:center;padding:2rem"><div class="spinner" style="margin:auto"></div></td></tr>';
@@ -44,3 +44,5 @@ window.loadComparisonTab = async function() {
         console.error(e);
     }
 };
+
+window.loadComparisonTab = loadComparisonTab;
