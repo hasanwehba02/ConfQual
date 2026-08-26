@@ -11,7 +11,7 @@ export function switchToTab(targetId) {
     if (targetDiv) targetDiv.classList.remove('hidden');
 }
 
-window.applyFilterAndNavigate = function(targetTabId, filterKey, idsJson, customTitle) {
+export function applyFilterAndNavigate(targetTabId, filterKey, idsJson, customTitle) {
     const ids = JSON.parse(idsJson).map(id => parseInt(id, 10));
 
     switchToTab(targetTabId);
@@ -43,7 +43,7 @@ window.applyFilterAndNavigate = function(targetTabId, filterKey, idsJson, custom
     }
 };
 
-window.clearFilters = function(type) {
+export function clearFilters(type) {
     if (type === 'paper') {
         state.activePaperFilter = null;
         window.renderPapersTable(state.allPapers);
@@ -59,4 +59,8 @@ window.clearFilters = function(type) {
         const titleEl = document.querySelector('#tab-reviewers h2');
         if (titleEl) titleEl.textContent = 'Reviewer Explorer';
     }
-};
+}
+
+// Generated onclick strings in rendered tables dispatch via window
+window.applyFilterAndNavigate = applyFilterAndNavigate;
+window.clearFilters = clearFilters;
