@@ -769,3 +769,50 @@ th, .metric-value, .brand {
 [data-tip] {
     cursor: help;
 }
+
+/* Multi-select filter menus */
+.multiselect {
+    position: relative;
+    display: inline-block;
+    min-width: 200px;
+}
+.multiselect-toggle {
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    background: white;
+}
+.multiselect-toggle.active-filter {
+    border-color: var(--primary, #2563eb);
+    color: var(--primary, #2563eb);
+    font-weight: 600;
+}
+.multiselect-list {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 50;
+    min-width: 260px;
+    max-height: 320px;
+    overflow-y: auto;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    padding: 6px;
+}
+.multiselect-list label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.82rem;
+}
+.multiselect-list label:hover {
+    background: #f1f5f9;
+}

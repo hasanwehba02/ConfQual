@@ -1,7 +1,11 @@
 import { clearFilters } from './filters.js';
 import { loadComparisonTab } from './comparisonView.js';
+import { wireFilterMenu } from './filterMenu.js';
 
 export function wireEvents() {
+    wireFilterMenu('paper-filter', () => window.fetchPapers());
+    wireFilterMenu('reviewer-filter', () => window.fetchReviewers());
+    wireFilterMenu('submission-filter', () => window.fetchSubmissions());
     const tabBtns = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');
     const uploadBtn = document.getElementById('upload-btn');
@@ -62,16 +66,13 @@ export function wireEvents() {
 
     document.getElementById('paper-search')?.addEventListener('keyup', () => window.handlePaperSearch());
     document.getElementById('paper-sort')?.addEventListener('change', () => window.fetchPapers());
-    document.getElementById('paper-filter')?.addEventListener('change', () => window.fetchPapers());
     document.getElementById('paper-clear-filter')?.addEventListener('click', () => window.clearFilters('paper'));
 
     document.getElementById('reviewer-search')?.addEventListener('keyup', () => window.handleReviewerSearch());
     document.getElementById('reviewer-sort')?.addEventListener('change', () => window.fetchReviewers());
-    document.getElementById('reviewer-filter')?.addEventListener('change', () => window.fetchReviewers());
     document.getElementById('reviewer-clear-filter')?.addEventListener('click', () => window.clearFilters('reviewer'));
 
     document.getElementById('submission-sort')?.addEventListener('change', () => window.fetchSubmissions());
-    document.getElementById('submission-filter')?.addEventListener('change', () => window.fetchSubmissions());
 }
 
 // Re-exported so main.js can reference the shared helper without duplicating imports.

@@ -94,19 +94,21 @@
                         <option value="total_comments_desc">Comments (Most to Least)</option>
                         <option value="total_comments_asc">Comments (Least to Most)</option>
                     </select>
-                    <select id="paper-filter" class="form-select" style="padding: 5px; border-radius: 4px; border: 1px solid #ccc;">
-                        <option value="all">Filter: All Papers</option>
-                        <option value="no_comments">Filter: No Comments</option>
-                        <option value="high_variance">Filter: High Spread (>2)</option>
-                        <option value="low_variance">Filter: Unanimous Agreement (Spread = 0)</option>
-                        <option value="unanimous_reject">Filter: Unanimous Rejects (Avg <= -1.5)</option>
-                        <option value="unanimous_accept">Filter: Unanimous Accepts (Avg >= 1.5)</option>
-                        <option value="rejected">Filter: All Rejected Papers</option>
-                        <option value="desk_rejected">Filter: Desk Rejected Papers</option>
-                        <option value="no_decision">Filter: No Decision Papers</option>
-                        <option value="borderline">Filter: Borderline (-0.5 to 0.5)</option>
-                        <option value="to_discuss">Filter: To Discuss (Borderline OR Spread > 2)</option>
-                    </select>
+                    <div class="multiselect" id="paper-filter">
+                        <button type="button" class="form-select multiselect-toggle" data-all-label="Filter: All Papers">Filter: All Papers</button>
+                        <div class="multiselect-list hidden">
+                            <label><input type="checkbox" value="no_comments"> No Comments</label>
+                            <label><input type="checkbox" value="high_variance" title="Review score spread greater than 2 points — reviewers strongly disagreed">High Spread (&gt;2)</label>
+                            <label><input type="checkbox" value="low_variance" title="All reviewers gave exactly the same score">Unanimous Agreement (Spread = 0)</label>
+                            <label><input type="checkbox" value="unanimous_reject" title="Average score at most -1.5 — all reviewers lean reject">Unanimous Rejects (Avg &lt;= -1.5)</label>
+                            <label><input type="checkbox" value="unanimous_accept" title="Average score at least 1.5 — all reviewers lean accept">Unanimous Accepts (Avg &gt;= 1.5)</label>
+                            <label><input type="checkbox" value="rejected">Rejected Papers</label>
+                            <label><input type="checkbox" value="desk_rejected">Desk Rejected Papers</label>
+                            <label><input type="checkbox" value="no_decision">No Decision Papers</label>
+                            <label><input type="checkbox" value="borderline" title="Average score between -0.5 and 0.5 — could go either way">Borderline (-0.5 to 0.5)</label>
+                            <label><input type="checkbox" value="to_discuss" title="Borderline papers OR papers with spread > 2 that likely need a discussion">To Discuss</label>
+                        </div>
+                    </div>
                     <div style="position: relative;">
                         <button type="button" id="save-preset-btn" class="btn btn-outline" style="padding: 5px 10px;" title="Save current filter and sort as a named view">
                             Save view <i class="ph ph-bookmark-simple"></i>
@@ -175,15 +177,17 @@
                         <option value="calibration_index_desc">Calibration (High to Low)</option>
                         <option value="calibration_index_asc">Calibration (Low to High)</option>
                     </select>
-                    <select id="reviewer-filter" class="form-select" style="padding: 5px; border-radius: 4px; border: 1px solid #ccc; margin-left: 10px;">
-                        <option value="all">Filter: All Reviewers</option>
-                        <option value="no_comments">Filter: No Comments</option>
-                        <option value="has_comments">Filter: Has Comments</option>
-                        <option value="high_variance" title="Reviewers whose average score deviates more than 1.5 points from the scores other reviewers gave the same papers">Filter: High Calibration Variance (|deviation| &gt; 1.5)</option>
-                        <option value="missed_assignments">Filter: Missed Assignments</option>
-                        <option value="has_subreviews">Filter: PC Members With Sub-reviewers</option>
-                        <option value="no_subreviews">Filter: PC Members Without Sub-reviewers</option>
-                    </select>
+                    <div class="multiselect" id="reviewer-filter">
+                        <button type="button" class="form-select multiselect-toggle" data-all-label="Filter: All Reviewers">Filter: All Reviewers</button>
+                        <div class="multiselect-list hidden">
+                            <label><input type="checkbox" value="no_comments"> No Comments</label>
+                            <label><input type="checkbox" value="has_comments"> Has Comments</label>
+                            <label><input type="checkbox" value="high_variance" title="Reviewers whose average score deviates more than 1.5 points from the scores other reviewers gave the same papers">High Calibration Variance (|deviation| &gt; 1.5)</label>
+                            <label><input type="checkbox" value="missed_assignments"> Missed Assignments</label>
+                            <label><input type="checkbox" value="has_subreviews"> PC Members With Sub-reviewers</label>
+                            <label><input type="checkbox" value="no_subreviews"> PC Members Without Sub-reviewers</label>
+                        </div>
+                    </div>
                 </div>
                 
                 <div id="reviewer-filter-banner" class="filter-banner hidden">
@@ -237,11 +241,13 @@
                         <option value="total_score_desc">Score (High to Low)</option>
                         <option value="total_score_asc">Score (Low to High)</option>
                     </select>
-                    <select id="submission-filter" class="form-select" style="padding: 5px; border-radius: 4px; border: 1px solid #ccc;">
-                        <option value="all">Filter: All Submissions</option>
-                        <option value="high_score">Filter: High Scores (>= 2)</option>
-                        <option value="low_score">Filter: Low Scores (<= -2)</option>
-                    </select>
+                    <div class="multiselect" id="submission-filter">
+                        <button type="button" class="form-select multiselect-toggle" data-all-label="Filter: All Submissions">Filter: All Submissions</button>
+                        <div class="multiselect-list hidden">
+                            <label><input type="checkbox" value="high_score"> High Scores (&gt;= 2)</label>
+                            <label><input type="checkbox" value="low_score"> Low Scores (&lt;= -2)</label>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="table-container">

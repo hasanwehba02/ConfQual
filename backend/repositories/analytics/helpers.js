@@ -116,9 +116,18 @@ function buildOrderBy(sortBy, sortOrder, defaultOrder) {
     return { clause: `ORDER BY ${defaultOrder}`, param: null };
 }
 
+// Normalize options.filterMode into an array of selected modes.
+// Express gives a repeated query param (?filterMode=a&filterMode=b) as an array.
+function getFilterModes(options) {
+    const raw = options.filterMode;
+    const modes = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+    return modes.filter((m) => m && m !== 'all');
+}
+
 module.exports = {
     resolveConferenceId,
     getAnonymizationSettings,
     maskNames,
-    buildOrderBy
+    buildOrderBy,
+    getFilterModes
 };
