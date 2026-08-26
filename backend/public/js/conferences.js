@@ -2,6 +2,8 @@ import { fetchConferences, deleteConference, updateConference } from './api.js';
 import { state } from './state.js';
 import { switchToTab } from './filters.js';
 
+const ACTIVE_CONF_STORAGE_KEY = 'confqual.activeConferenceId';
+
 export function currentConferenceLabel() {
     const c = state.loadedConferences.find(x => x.id == state.activeConferenceId);
     return c ? [c.short_name || c.name, c.year].filter(Boolean).join(" '") : '';
@@ -21,10 +23,18 @@ export async function loadConferences() {
             return;
         }
 
-        // Set to current active or default to first (most recent)
+        // Restore last selection from a previous session, else default to most recent
+        if (!state.activeConferenceId) {
+            const stored = window.localStorage.getItem(ACTIVE_CONF_STORAGE_KEY);
+            if (stored && conferences.find(c => c.id == stored)) {
+                state.activeConferenceId = isNaN(Number(stored)) ? stored : Number(stored);
+            }
+        }
+
         if (!state.activeConferenceId || !conferences.find(c => c.id == state.activeConferenceId)) {
             state.activeConferenceId = conferences[0].id;
         }
+        window.localStorage.setItem(ACTIVE_CONF_STORAGE_KEY, String(state.activeConferenceId));
 
         const activeConf = conferences.find(c => c.id == state.activeConferenceId);
         if (activeConf) {
@@ -39,6 +49,7 @@ export async function loadConferences() {
 
 window.selectConference = async function(id) {
     state.activeConferenceId = id;
+    window.localStorage.setItem(ACTIVE_CONF_STORAGE_KEY, String(id));
     await loadConferences(); // Refresh the top bar label
     // Switch to analytics view
     switchToTab('tab-analytics');
@@ -97,6 +108,7 @@ export function wireEditConferenceDrawer() {
             await loadConferences();
             if (String(state.activeConferenceId) === String(id)) {
                 state.activeConferenceId = null;
+                window.localStorage.removeItem(ACTIVE_CONF_STORAGE_KEY);
             }
             await window.loadDashboardData();
             window.loadComparisonTab();
