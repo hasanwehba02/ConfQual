@@ -47,6 +47,20 @@ export function wireFilterMenu(menuId, onChange) {
     const btn = menu.querySelector('.multiselect-toggle');
     const list = menu.querySelector('.multiselect-list');
 
+    // "Clear all" action row at the top of the list
+    if (list && !list.querySelector('.multiselect-clear')) {
+        const clearRow = document.createElement('div');
+        clearRow.className = 'multiselect-clear';
+        clearRow.textContent = '✕ Clear all';
+        clearRow.addEventListener('click', (e) => {
+            e.stopPropagation();
+            menu.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+            updateLabel(menuId);
+            if (typeof onChange === 'function') onChange(getSelectedFilters(menuId));
+        });
+        list.prepend(clearRow);
+    }
+
     btn?.addEventListener('click', (e) => {
         e.stopPropagation();
         document.querySelectorAll('.multiselect-list').forEach(el => {

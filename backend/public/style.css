@@ -816,3 +816,16 @@ th, .metric-value, .brand {
 .multiselect-list label:hover {
     background: #f1f5f9;
 }
+
+.multiselect-clear {
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--danger, #dc2626);
+    cursor: pointer;
+}
+.multiselect-clear:hover {
+    background: #fef2f2;
+}
