@@ -77,8 +77,9 @@ async function getReviewerQuality(options = {}) {
                     ELSE NULL
                 END as bidding_match_percentage
             FROM assignment a
-            LEFT JOIN bid b ON a.paper_id = b.paper_id 
-                AND a.program_committee_member_id = b.program_committee_member_id 
+            JOIN paper abp ON abp.id = a.paper_id AND abp.conference_id = $1
+            LEFT JOIN bid b ON a.paper_id = b.paper_id
+                AND a.program_committee_member_id = b.program_committee_member_id
                 AND LOWER(b.bid) IN ('yes', 'maybe')
             GROUP BY a.program_committee_member_id
         ),
@@ -101,6 +102,7 @@ async function getReviewerQuality(options = {}) {
                 parent.first_name AS parent_first_name,
                 parent.last_name AS parent_last_name
             FROM review r
+            JOIN paper p ON p.id = r.paper_id AND p.conference_id = $1
             JOIN program_committee_member parent ON parent.id = r.program_committee_member_id
             WHERE r.sub_reviewer_person_id IS NOT NULL AND r.is_superseded = false
             ORDER BY r.sub_reviewer_person_id, parent.id
@@ -114,7 +116,7 @@ async function getReviewerQuality(options = {}) {
                        s.first_name || ' ' || s.last_name AS sub_name
                 FROM review r
                 JOIN paper p ON p.id = r.paper_id AND p.conference_id = $1
-                JOIN program_committee_member s ON s.external_person_id = r.sub_reviewer_person_id
+                JOIN program_committee_member s ON s.external_person_id = r.sub_reviewer_person_id AND s.conference_id = $1
                 WHERE r.sub_reviewer_person_id IS NOT NULL AND r.is_superseded = false
             ) x
             GROUP BY x.parent_pcm_id

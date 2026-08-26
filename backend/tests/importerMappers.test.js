@@ -114,17 +114,16 @@ test('mapReview parses ids and scores from a standard row', () => {
     const r = row({
         2: '10', 3: '20', 4: 'John Smith', 5: '3', 6: '2',
         7: 'Good paper', 8: 'overall:4', 9: '4.0',
-        10: 'Sub', 11: 'Rev', 12: 'sub@x.com', 13: '99',
         14: '2026-02-01', 15: '10:00', 16: 'yes'
     });
     assert.deepStrictEqual(mapReview(r), {
         externalSubmissionId: 10,
         externalPersonId: 20,
         memberName: 'John Smith',
-        subReviewerPersonId: 99,
-        subReviewerFirstName: 'Sub',
-        subReviewerLastName: 'Rev',
-        subReviewerEmail: 'sub@x.com',
+        subReviewerPersonId: null,
+        subReviewerFirstName: null,
+        subReviewerLastName: null,
+        subReviewerEmail: null,
         reviewNumber: 3,
         version: 2,
         reviewText: 'Good paper',
@@ -134,6 +133,39 @@ test('mapReview parses ids and scores from a standard row', () => {
         reviewTime: '10:00',
         hasAttachment: true
     });
+});
+
+function rowWithHeaders(values, headers) {
+    const r = row(values);
+    r.worksheet = {
+        getRow() { return { values: [null, ...headers] }; }
+    };
+    return r;
+}
+
+test('mapReview reads sub-reviewers only from explicit Subreviewer columns', () => {
+    const headers = ['#', 'Submission #', 'Member #', 'Member name', 'Number', 'Version', 'Text',
+        'Scores', 'Total score', 'Subreviewer first name', 'Subreviewer last name',
+        'Subreviewer email', 'Subreviewer Person #', 'Date', 'Time', 'Attachment?'];
+    const mapped = mapReview(rowWithHeaders({
+        2: '10', 3: '20', 4: 'John Smith', 5: '1', 6: '1', 7: 't', 8: 's', 9: '3',
+        10: 'Sub', 11: 'Rev', 12: 'sub@x.com', 13: '99'
+    }, headers));
+    assert.strictEqual(mapped.subReviewerPersonId, 99);
+    assert.strictEqual(mapped.subReviewerFirstName, 'Sub');
+    assert.strictEqual(mapped.subReviewerLastName, 'Rev');
+    assert.strictEqual(mapped.subReviewerEmail, 'sub@x.com');
+});
+
+test('mapReview ignores reviewer identity columns when no Subreviewer headers exist', () => {
+    // conf2-style sheet: column 13 is "Reviewer Person #", NOT a sub-reviewer
+    const headers = ['#', 'Submission #', 'Member #', 'Member name', 'Number', 'Version', 'Text',
+        'Scores', 'Total score', 'Reviewer first name', 'Reviewer last name',
+        'Reviewer email', 'Reviewer Person #', 'Date', 'Time', 'Attachment?'];
+    const mapped = mapReview(rowWithHeaders({
+        2: '10', 3: '20', 4: 'John Smith', 13: '20'
+    }, headers));
+    assert.strictEqual(mapped.subReviewerPersonId, null);
 });
 
 test('mapReview defaults missing numeric fields to null/1/empty', () => {
