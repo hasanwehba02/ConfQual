@@ -5,10 +5,22 @@ const { AsyncLocalStorage } = require("async_hooks");
 
 let connStr = process.env.DATABASE_URL;
 
+// SSL certificate validation. Managed Postgres providers (e.g. Supabase pooler)
+// often use chains not in Node's CA store. To enable full validation, either
+// point DB_SSL_CA_PATH at the provider's CA certificate, or set
+// DB_SSL_REJECT_UNAUTHORIZED=false to explicitly accept unvalidated TLS.
+const sslRejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false';
+const fs = require("fs");
+const caPath = process.env.DB_SSL_CA_PATH;
+const sslConfig = {
+    rejectUnauthorized: caPath ? true : sslRejectUnauthorized,
+    ...(caPath ? { ca: fs.readFileSync(caPath).toString() } : {})
+};
+
 const dbConfig = connStr
     ? {
         connectionString: connStr,
-        ssl: { rejectUnauthorized: false },
+        ssl: sslConfig,
         max: 20
       }
     : {
@@ -17,6 +29,7 @@ const dbConfig = connStr
         database: process.env.DB_NAME,
         user: process.env.DB_USER,
         password: process.env.DB_PASSWORD,
+        ssl: process.env.DB_SSL === 'true' ? sslConfig : undefined,
         max: 20
     };
 
@@ -28,14 +41,9 @@ pool.on('error', (err, _client) => {
     console.error('Unexpected error on idle PostgreSQL client', err);
 });
 
-pool.connect()
-    .then((client) => {
-        console.log("Connected to PostgreSQL (Pool)");
-        client.release();
-    })
-    .catch((err) => {
-        console.error("PostgreSQL connection failed:", err.message);
-    });
+pool.on('connect', () => {
+    console.log("Connected to PostgreSQL (Pool)");
+});
 
 // Proxy the pool so we can intercept `.query` calls and route them to the active transaction client if it exists.
 const clientProxy = new Proxy(pool, {
