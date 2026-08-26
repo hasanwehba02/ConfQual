@@ -42,11 +42,12 @@ async function getSubmissions(options = {}) {
             pcm.last_name,
             r.total_score,
             r.review_date,
-            r.review_time
+            r.review_time,
+            r.is_superseded
         FROM review r
         JOIN paper p ON r.paper_id = p.id
         JOIN program_committee_member pcm ON r.program_committee_member_id = pcm.id
-        WHERE r.is_superseded = false AND p.is_deleted = false AND p.conference_id = $1
+        WHERE p.is_deleted = false AND p.conference_id = $1
         ${filterClause}
         ${orderClause}
         ${limitClause} ${offsetClause}

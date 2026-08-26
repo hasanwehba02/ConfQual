@@ -173,14 +173,16 @@ export function renderSubmissionsTable(submissions) {
 
         const dateStr = sub.review_date ? new Date(sub.review_date).toLocaleDateString() : '-';
         const timeStr = sub.review_time ? sub.review_time : '-';
+        const supersededStyle = sub.is_superseded ? ' style="color: var(--text-muted); font-style: italic;"' : '';
+        const supersededTag = sub.is_superseded ? ' <span class="badge bg-neutral" title="This review was replaced by a newer version">superseded</span>' : '';
 
         tr.innerHTML = `
-            <td style="font-family: 'Roboto Mono', monospace;">#${escapeHtml(sub.id)}</td>
-            <td style="font-weight: bold;">${escapeHtml(sub.first_name)} ${escapeHtml(sub.last_name)}</td>
-            <td style="font-family: 'Roboto Mono', monospace;">#${escapeHtml(sub.external_submission_id)}</td>
-            <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(sub.total_score)}</td>
-            <td style="font-family: 'Roboto Mono', monospace;">${dateStr}</td>
-            <td style="font-family: 'Roboto Mono', monospace;">${timeStr}</td>
+            <td${supersededStyle} style="font-family: 'Roboto Mono', monospace;">#${escapeHtml(sub.id)}${supersededTag}</td>
+            <td${supersededStyle} style="font-weight: bold;">${escapeHtml(sub.first_name)} ${escapeHtml(sub.last_name)}</td>
+            <td${supersededStyle} style="font-family: 'Roboto Mono', monospace;">#${escapeHtml(sub.external_submission_id)}</td>
+            <td${supersededStyle} style="font-family: 'Roboto Mono', monospace;">${escapeHtml(sub.total_score)}</td>
+            <td${supersededStyle} style="font-family: 'Roboto Mono', monospace;">${dateStr}</td>
+            <td${supersededStyle} style="font-family: 'Roboto Mono', monospace;">${timeStr}</td>
         `;
         tbody.appendChild(tr);
     });
