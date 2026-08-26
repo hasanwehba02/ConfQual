@@ -1,5 +1,5 @@
 const client = require("../../config/database");
-const { resolveConferenceId, getAnonymizationSettings, maskNames, buildOrderBy } = require("./helpers");
+const { resolveConferenceId, getAnonymizationSettings, maskNames, buildOrderBy, getFilterModes } = require("./helpers");
 
 async function getReviewerQuality(options = {}) {
     const cid = await resolveConferenceId(options.conferenceId);
@@ -9,18 +9,24 @@ async function getReviewerQuality(options = {}) {
     let paramIdx = 2;
 
     let filterClause = '';
-    if (options.filterMode === 'no_comments') {
-        filterClause = `AND COALESCE(rc.total_comments, 0) = 0`;
-    } else if (options.filterMode === 'has_comments') {
-        filterClause = `AND COALESCE(rc.total_comments, 0) > 0`;
-    } else if (options.filterMode === 'high_variance') {
-        filterClause = `AND ABS(rcal.calibration_index) > 1.5`;
-    } else if (options.filterMode === 'missed_assignments') {
-        filterClause = `AND COALESCE(ast.missed_reviews, 0) > 0`;
-    } else if (options.filterMode === 'has_subreviews') {
-        filterClause = `AND COALESCE(sc.sub_reviewer_count, 0) > 0`;
-    } else if (options.filterMode === 'no_subreviews') {
-        filterClause = `AND pcm.role <> 'Sub-reviewer' AND COALESCE(sc.sub_reviewer_count, 0) = 0`;
+    const modes = getFilterModes(options);
+    if (modes.includes('no_comments')) {
+        filterClause += ` AND COALESCE(rc.total_comments, 0) = 0`;
+    }
+    if (modes.includes('has_comments')) {
+        filterClause += ` AND COALESCE(rc.total_comments, 0) > 0`;
+    }
+    if (modes.includes('high_variance')) {
+        filterClause += ` AND ABS(rcal.calibration_index) > 1.5`;
+    }
+    if (modes.includes('missed_assignments')) {
+        filterClause += ` AND COALESCE(ast.missed_reviews, 0) > 0`;
+    }
+    if (modes.includes('has_subreviews')) {
+        filterClause += ` AND COALESCE(sc.sub_reviewer_count, 0) > 0`;
+    }
+    if (modes.includes('no_subreviews')) {
+        filterClause += ` AND pcm.role <> 'Sub-reviewer' AND COALESCE(sc.sub_reviewer_count, 0) = 0`;
     }
 
     const { clause: orderClause } = buildOrderBy(options.sortBy, options.sortOrder, 'avg_word_count DESC NULLS LAST');

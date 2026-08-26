@@ -2,8 +2,14 @@ import { escapeHtml } from './utils.js';
 import { state } from './state.js';
 import { createPreset, createPresetStore, encodePapersHash, parsePapersHash,
          resolveActiveConferenceId, sanitizePapersState } from './viewState.mjs';
+import { getSelectedFilters, setSelectedFilters } from './filterMenu.js';
 
 const presetStore = createPresetStore(window.localStorage);
+
+function getPaperFilterModes() {
+    const selected = getSelectedFilters('paper-filter');
+    return selected.length > 0 ? selected : ['all'];
+}
 
 export function readPaperControls() {
     const sortVal = document.getElementById('paper-sort')?.value || 'external_submission_id_desc';
@@ -11,7 +17,7 @@ export function readPaperControls() {
     return {
         sortBy: sortVal.substring(0, li),
         sortOrder: sortVal.substring(li + 1).toUpperCase(),
-        filterMode: document.getElementById('paper-filter')?.value || 'all',
+        filterMode: getPaperFilterModes().join(','),
         searchText: document.getElementById('paper-search')?.value || '',
         conferenceId: state.activeConferenceId,
     };
@@ -25,9 +31,8 @@ export function applyHashToControls() {
     const raw = parsePapersHash(location.hash);
     if (!raw) return null;
     const sortSelect = document.getElementById('paper-sort');
-    const filterSelect = document.getElementById('paper-filter');
     const restored = sanitizePapersState(raw, {
-        filterModes: Array.from(filterSelect.options).map(o => o.value),
+        filterModes: Array.from(document.querySelectorAll('#paper-filter input[type="checkbox"]')).map(cb => cb.value),
         sortFields: Array.from(sortSelect.options)
             .map(o => o.value.substring(0, o.value.lastIndexOf('_'))),
         conferenceIds: state.loadedConferences.map(c => c.id),
@@ -37,7 +42,7 @@ export function applyHashToControls() {
     // otherwise a stale hash silently switches back to an old conference.
     const combined = `${restored.sortBy}_${restored.sortOrder.toLowerCase()}`;
     if (Array.from(sortSelect.options).some(o => o.value === combined)) sortSelect.value = combined;
-    filterSelect.value = restored.filterMode;
+    setSelectedFilters('paper-filter', restored.filterMode === 'all' ? [] : restored.filterMode.split(','));
     const searchInput = document.getElementById('paper-search');
     if (searchInput) searchInput.value = restored.searchText;
     return restored;
@@ -71,7 +76,7 @@ function applyPreset(p) {
     const sortSelect = document.getElementById('paper-sort');
     const combined = `${p.sortBy}_${p.sortOrder.toLowerCase()}`;
     if (Array.from(sortSelect.options).some(o => o.value === combined)) sortSelect.value = combined;
-    document.getElementById('paper-filter').value = p.filterMode;
+    setSelectedFilters('paper-filter', p.filterMode);
     state.activePaperFilter = null;
     document.getElementById('paper-filter-banner')?.classList.add('hidden');
     const titleEl = document.querySelector('#tab-papers h2');
@@ -160,8 +165,10 @@ window.fetchPapers = async function() {
     const { sortBy, sortOrder, filterMode, searchText, conferenceId } = readPaperControls();
     history.replaceState(null, '', encodePapersHash({ sortBy, sortOrder, filterMode, searchText, conferenceId }));
     const cidParam = conferenceId ? `&conferenceId=${conferenceId}` : '';
+    const filterParams = filterMode.split(',').filter(Boolean)
+        .map(m => `&filterMode=${encodeURIComponent(m)}`).join('');
     try {
-        const res = await fetch(`/api/analytics/papers?sortBy=${sortBy}&sortOrder=${sortOrder}&filterMode=${filterMode}&limit=2000${cidParam}`);
+        const res = await fetch(`/api/analytics/papers?sortBy=${sortBy}&sortOrder=${sortOrder}${filterParams}&limit=2000${cidParam}`);
         const data = await res.json();
         state.allPapers = data.items || data;
         window.renderPapersTable(state.allPapers);

@@ -32,7 +32,11 @@ export function sanitizePapersState(raw, options) {
   const state = { ...PAPERS_DEFAULT, conferenceId: null, searchText: '' };
   const c = parseInt(raw.c, 10);
   if (options.conferenceIds && options.conferenceIds.includes(c)) state.conferenceId = c;
-  if (typeof raw.f === 'string' && options.filterModes.includes(raw.f)) state.filterMode = raw.f;
+  // 'f' may be a single mode or comma-joined modes (multi-filter)
+  if (typeof raw.f === 'string' && raw.f) {
+    const modes = raw.f.split(',').filter(m => options.filterModes.includes(m));
+    if (modes.length > 0) state.filterMode = modes.join(',');
+  }
   if (typeof raw.s === 'string' && options.sortFields.includes(raw.s)) state.sortBy = raw.s;
   if (typeof raw.o === 'string') {
     const up = raw.o.toUpperCase();

@@ -1,6 +1,6 @@
 const client = require("../../config/database");
 const { normalizeDecision } = require("../../utils/decisionHelper");
-const { resolveConferenceId, getAnonymizationSettings, maskNames, buildOrderBy } = require("./helpers");
+const { resolveConferenceId, getAnonymizationSettings, maskNames, buildOrderBy, getFilterModes } = require("./helpers");
 
 async function getSubmissions(options = {}) {
     const cid = await resolveConferenceId(options.conferenceId);
@@ -10,10 +10,12 @@ async function getSubmissions(options = {}) {
     let paramIdx = 2;
 
     let filterClause = '';
-    if (options.filterMode === 'high_score') {
-        filterClause = 'AND r.total_score >= 2';
-    } else if (options.filterMode === 'low_score') {
-        filterClause = 'AND r.total_score <= -2';
+    const subModes = getFilterModes(options);
+    if (subModes.includes('high_score')) {
+        filterClause += ' AND r.total_score >= 2';
+    }
+    if (subModes.includes('low_score')) {
+        filterClause += ' AND r.total_score <= -2';
     }
 
     const { clause: orderClause } = buildOrderBy(options.sortBy, options.sortOrder, 'r.review_date DESC NULLS LAST, r.review_time DESC NULLS LAST');
@@ -62,39 +64,42 @@ async function getPaperDebates(options = {}) {
     const values = [cid];
     let paramIdx = 2;
 
-    const excludeDeskNoDecision = !['rejected', 'desk_rejected', 'no_decision'].includes(options.filterMode)
-        ? `AND (p.decision_category IS NULL OR (p.decision_category != 'desk reject' AND p.decision_category != 'no decision'))`
-        : '';
+    const modes = getFilterModes(options);
+
+    const decisionFilters = ['rejected', 'desk_rejected', 'no_decision'];
+    const excludeDeskNoDecision = modes.some((m) => decisionFilters.includes(m))
+        ? ''
+        : `AND (p.decision_category IS NULL OR (p.decision_category != 'desk reject' AND p.decision_category != 'no decision'))`;
 
     let havingClause = 'HAVING 1=1';
-    if (options.filterMode === 'no_comments' || options.noComments === 'true') {
+    if (modes.includes('no_comments') || options.noComments === 'true') {
         havingClause += ` AND COALESCE((SELECT COUNT(*) FROM comment c WHERE c.paper_id = p.id), 0) = 0`;
     }
-    if (options.filterMode === 'high_variance') {
+    if (modes.includes('high_variance')) {
         havingClause += ` AND (MAX(r.total_score) - MIN(r.total_score)) > 2`;
     }
-    if (options.filterMode === 'low_variance') {
+    if (modes.includes('low_variance')) {
         havingClause += ` AND (MAX(r.total_score) - MIN(r.total_score)) = 0`;
     }
-    if (options.filterMode === 'unanimous_reject') {
+    if (modes.includes('unanimous_reject')) {
         havingClause += ` AND AVG(r.total_score) <= -1.5`;
     }
-    if (options.filterMode === 'unanimous_accept') {
+    if (modes.includes('unanimous_accept')) {
         havingClause += ` AND AVG(r.total_score) >= 1.5`;
     }
-    if (options.filterMode === 'borderline') {
+    if (modes.includes('borderline')) {
         havingClause += ` AND AVG(r.total_score) >= -0.5 AND AVG(r.total_score) <= 0.5`;
     }
-    if (options.filterMode === 'to_discuss') {
+    if (modes.includes('to_discuss')) {
         havingClause += ` AND ((AVG(r.total_score) >= -0.5 AND AVG(r.total_score) <= 0.5) OR (MAX(r.total_score) - MIN(r.total_score)) > 2)`;
     }
 
     let whereExtra = '';
-    if (options.filterMode === 'rejected') {
+    if (modes.includes('rejected')) {
         whereExtra = `AND MAX(p.decision_category) = 'reject'`;
-    } else if (options.filterMode === 'desk_rejected') {
+    } else if (modes.includes('desk_rejected')) {
         whereExtra = `AND MAX(p.decision_category) = 'desk reject'`;
-    } else if (options.filterMode === 'no_decision') {
+    } else if (modes.includes('no_decision')) {
         whereExtra = `AND MAX(p.decision_category) = 'no decision'`;
     }
 
