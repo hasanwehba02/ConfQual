@@ -71,6 +71,10 @@ function maskNames(rows, settings, idKey = 'id') {
             if (masked.email !== undefined) masked.email = `${prefix}reviewer_${id}@example.com`;
         }
 
+        if (!isAnonymized && masked.sub_reviewer_names !== undefined && masked.sub_reviewer_names !== null) {
+            masked.sub_reviewer_names = shortenSubName(masked.sub_reviewer_names);
+        }
+
         if (isAnonymized) {
             if (masked.reviewer_first_name !== undefined) masked.reviewer_first_name = `${prefix}Reviewer_${id}`;
             if (masked.reviewer_last_name !== undefined) masked.reviewer_last_name = '';
