@@ -101,6 +101,7 @@ test('API Endpoints Integration Suite', async (t) => {
         if (data.items.length > 0) {
             assert.ok(data.items[0].id !== undefined);
             assert.ok(data.items[0].bias_category !== undefined);
+            assert.ok(data.items[0].bias_label !== undefined, 'bias_label required by dashboard UI');
         }
     });
 
