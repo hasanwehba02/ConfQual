@@ -35,15 +35,26 @@ async function getAnonymizationSettings(conferenceId = null) {
 function maskNames(rows, settings, idKey = 'id') {
     const isAnonymized = settings.is_anonymized;
     const prefix = settings.anonymization_prefix ? `${settings.anonymization_prefix}_` : '';
-    
+
+    // Shorten raw EasyChair sub-reviewer names regardless of anonymization,
+    // e.g. "NomSubreviewer123" -> "Subnom123"
+    const shortenSubName = (value) =>
+        typeof value === 'string'
+            ? value.replace(/NomSubreviewer/g, 'Subnom').replace(/CognomSubreviewer/g, 'Cognom')
+            : value;
+
     return rows.map(row => {
         const id = row[idKey];
         const personId = row.reviewer_id || row.external_person_id || id;
         const masked = { ...row };
 
         if (masked.role === 'Sub-reviewer') {
-            if (isAnonymized && masked.first_name !== undefined) masked.first_name = `subnom${personId}`;
-            if (isAnonymized && masked.last_name !== undefined) masked.last_name = `cognom${personId}`;
+            if (masked.first_name !== undefined) {
+                masked.first_name = isAnonymized ? `subnom${personId}` : shortenSubName(masked.first_name);
+            }
+            if (masked.last_name !== undefined) {
+                masked.last_name = isAnonymized ? `cognom${personId}` : shortenSubName(masked.last_name);
+            }
             if (isAnonymized && masked.email !== undefined) masked.email = `subreviewer_${personId}@example.com`;
         } else if (isAnonymized) {
             if (masked.first_name !== undefined) masked.first_name = `${prefix}Reviewer_${id}`;
@@ -59,11 +70,17 @@ function maskNames(rows, settings, idKey = 'id') {
         }
         
         // Handle sub-reviewer in review object
-        if (masked.sub_reviewer_first_name && isAnonymized) {
+        if (masked.sub_reviewer_first_name !== undefined && masked.sub_reviewer_first_name !== null) {
             const subId = masked.sub_reviewer_person_id || personId;
-            masked.sub_reviewer_first_name = `subnom${subId}`;
-            masked.sub_reviewer_last_name = `cognom${subId}`;
-            masked.sub_reviewer_email = `subreviewer_${subId}@example.com`;
+            masked.sub_reviewer_first_name = isAnonymized
+                ? `subnom${subId}`
+                : shortenSubName(masked.sub_reviewer_first_name);
+            if (isAnonymized) {
+                masked.sub_reviewer_last_name = `cognom${subId}`;
+                masked.sub_reviewer_email = `subreviewer_${subId}@example.com`;
+            } else if (masked.sub_reviewer_last_name !== undefined && masked.sub_reviewer_last_name !== null) {
+                masked.sub_reviewer_last_name = shortenSubName(masked.sub_reviewer_last_name);
+            }
         }
         
         return masked;
