@@ -32,7 +32,9 @@ export function applyHashToControls() {
             .map(o => o.value.substring(0, o.value.lastIndexOf('_'))),
         conferenceIds: state.loadedConferences.map(c => c.id),
     });
-    if (restored.conferenceId != null) state.activeConferenceId = restored.conferenceId;
+    // Note: conferenceId is intentionally NOT restored from the hash —
+    // the persisted selection (localStorage) is authoritative across reloads,
+    // otherwise a stale hash silently switches back to an old conference.
     const combined = `${restored.sortBy}_${restored.sortOrder.toLowerCase()}`;
     if (Array.from(sortSelect.options).some(o => o.value === combined)) sortSelect.value = combined;
     filterSelect.value = restored.filterMode;
