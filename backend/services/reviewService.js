@@ -16,8 +16,9 @@ async function createReview(reviewDto) {
         let email = null;
         
         if (isSubReviewer) {
-            firstName = (reviewDto.subReviewerFirstName || 'Unknown').replace('NomSubreviewer', 'NomSub');
-            lastName = (reviewDto.subReviewerLastName || 'Unknown').replace('CognomSubreviewer', 'CogSub');
+            // Shorten anonymized Excel names, e.g. "NomSubreviewer123" -> "Subnom123"
+            firstName = (reviewDto.subReviewerFirstName || 'Unknown').replace('NomSubreviewer', 'Subnom');
+            lastName = (reviewDto.subReviewerLastName || 'Unknown').replace('CognomSubreviewer', 'Cognom');
             email = reviewDto.subReviewerEmail || null;
         } else {
             const nameStr = (reviewDto.memberName || '').trim();
