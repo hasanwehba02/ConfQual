@@ -163,10 +163,15 @@ export function renderReviewersTable(reviewers) {
             : `<span class="text-muted" data-tip="${doneCount < 3 ? 'Bias needs at least 3 completed reviews to compute' : 'No bias classification available'}">-</span>`;
 
         const isSub = r.role === 'Sub-reviewer';
-        const subsCell = isSub ? '-' : (parseInt(r.sub_reviewer_count) > 0 ? escapeHtml(r.sub_reviewer_count) : '0');
+        const subCount = parseInt(r.sub_reviewer_count) || 0;
+        const subsCell = isSub
+            ? '-'
+            : (subCount > 0
+                ? `<span data-tip="Sub-reviewers: ${escapeHtml(r.sub_reviewer_names || '')}">${escapeHtml(r.sub_reviewer_count)}</span>`
+                : '0');
         const missedCount = parseInt(r.missed_reviews) || 0;
         const missedCell = isSub
-            ? '-'
+            ? '<span class="text-muted" data-tip="EasyChair does not record sub-reviewer assignments, so missed reviews cannot be tracked for sub-reviewers">-</span>'
             : (missedCount > 0
                 ? `<strong style="color: var(--danger, #dc2626);" data-tip="${missedCount} assigned paper${missedCount === 1 ? '' : 's'} without a delivered review">${missedCount}</strong>`
                 : '0');

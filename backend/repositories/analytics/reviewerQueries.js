@@ -106,11 +106,15 @@ async function getReviewerQuality(options = {}) {
             ORDER BY r.sub_reviewer_person_id, parent.id
         ),
         SubCounts AS (
-            SELECT x.parent_pcm_id, COUNT(*) AS sub_reviewer_count
+            SELECT x.parent_pcm_id,
+                   COUNT(*) AS sub_reviewer_count,
+                   string_agg(x.sub_name, ', ' ORDER BY x.sub_name) AS sub_reviewer_names
             FROM (
-                SELECT DISTINCT r.sub_reviewer_person_id, r.program_committee_member_id AS parent_pcm_id
+                SELECT DISTINCT r.sub_reviewer_person_id, r.program_committee_member_id AS parent_pcm_id,
+                       s.first_name || ' ' || s.last_name AS sub_name
                 FROM review r
                 JOIN paper p ON p.id = r.paper_id AND p.conference_id = $1
+                JOIN program_committee_member s ON s.external_person_id = r.sub_reviewer_person_id
                 WHERE r.sub_reviewer_person_id IS NOT NULL AND r.is_superseded = false
             ) x
             GROUP BY x.parent_pcm_id
@@ -150,6 +154,7 @@ async function getReviewerQuality(options = {}) {
             srp.parent_first_name,
             srp.parent_last_name,
             COALESCE(sc.sub_reviewer_count, 0) AS sub_reviewer_count,
+            sc.sub_reviewer_names,
             COALESCE(ast.total_assigned, 0) AS total_assigned,
             COALESCE(ast.missed_reviews, 0) AS missed_reviews
         FROM program_committee_member pcm
@@ -165,7 +170,7 @@ async function getReviewerQuality(options = {}) {
         ${filterClause}
         GROUP BY pcm.id, pcm.external_person_id, pcm.first_name, pcm.last_name, pcm.role, rc.total_comments, rb.bidding_match_percentage, rcal.peers_avg, rcal.calibration_index,
                  srp.parent_pcm_id, srp.parent_reviewer_id, srp.parent_first_name, srp.parent_last_name,
-                 sc.sub_reviewer_count, ast.total_assigned, ast.missed_reviews
+                 sc.sub_reviewer_count, sc.sub_reviewer_names, ast.total_assigned, ast.missed_reviews
         ${orderClause}
         ${limitClause} ${offsetClause}
     `;
