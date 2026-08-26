@@ -21,6 +21,11 @@ function formatBiasCell(r) {
     return `<span class="badge ${getBiasBadgeClass(r.bias_label)}">${r.bias_label}</span>`;
 }
 
+function truncateTitle(title, max = 30) {
+    if (!title) return '';
+    return title.length > max ? `${escapeHtml(title.slice(0, max))}…` : escapeHtml(title);
+}
+
 export async function renderPapersTable(papers) {
     const tbody = document.getElementById('papers-table-body');
     tbody.innerHTML = '';
@@ -63,7 +68,7 @@ export async function renderPapersTable(papers) {
                 ${escapeHtml(p.external_submission_id)}
                 ${p.total_reviews < 3 ? '<span style="color: red; margin-left: 6px; font-size: 0.9em;">⚠️ Less than 3 reviews</span>' : ''}
             </td>
-            <td>${escapeHtml(p.title)}</td>
+            <td title="${escapeHtml(p.title || '')}">${truncateTitle(p.title)}</td>
             <td>
                 <select class="form-select" style="padding: 2px 5px; border-radius: 4px; font-size: 0.75rem; border: 1px solid #ccc;" ${selectDisabled}>
                     <option value="Accept" ${currentDec === 'accept' ? 'selected' : ''}>Accept</option>
@@ -135,14 +140,20 @@ export function renderReviewersTable(reviewers) {
 
         const warningHtml = parseInt(r.total_reviews_completed) === 0 ? '<span style="color: red; margin-left: 6px; font-size: 0.9em;">⚠️ 0 reviews completed</span>' : '';
 
+        const doneCount = parseInt(r.total_reviews_completed) || 0;
+        const doneHtml = doneCount > 0
+            ? `<span style="color: var(--success, #16a34a); font-size: 1.05em;" title="${doneCount} review${doneCount === 1 ? '' : 's'} completed">✔</span>`
+            : `<span style="color: var(--danger, #dc2626); font-size: 1.05em;" title="No reviews completed">✘</span>`;
+
         const tr = document.createElement('tr');
         tr.addEventListener('click', () => window.openReviewerModal(r.id, `${r.first_name} ${r.last_name}`));
         tr.innerHTML = `
             <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.reviewer_id) || '-'} ${warningHtml}</td>
             <td style="font-weight: bold;">${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</td>
             <td><span class="badge bg-neutral">${escapeHtml(r.role)}</span></td>
-            <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.total_reviews_completed)}</td>
+            <td class="text-center" style="font-family: 'Roboto Mono', monospace;">${doneHtml}</td>
             <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.avg_word_count) || '0'}</td>
+            <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.total_comments) || '0'}</td>
             <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.avg_score_given) || '-'}</td>
             <td style="font-family: 'Roboto Mono', monospace;">${bmHtml}</td>
             <td>
@@ -154,7 +165,6 @@ export function renderReviewersTable(reviewers) {
                 </div>
             </td>
             <td class="text-center">${formatBiasCell(r)}</td>
-            <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(r.total_comments) || '0'}</td>
         `;
         tbody.appendChild(tr);
     });
