@@ -134,14 +134,14 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>ID</th>
+                                <th data-sort-key="external_submission_id">ID</th>
                                 <th>TITLE</th>
                                 <th>DECISION</th>
-                                <th data-tip="Total number of reviews submitted for this paper">REVIEWS</th>
-                                <th data-tip="Average of the original review scores (conference scale)">AVG</th>
-                                <th style="width: 150px;" data-tip="Difference between the highest and lowest review score. High spread (&gt;2) means reviewers disagreed strongly (a 'debate' paper)">SPREAD</th>
-                                <th style="width: 100px;" data-tip="Bias-corrected average: reviewer harshness/leniency is normalized away (z-score), so papers are comparable across reviewers">ADJ. AVG</th>
-                                <th data-tip="Number of comments written by reviewers on this paper">COMMENTS</th>
+                                <th data-sort-key="total_reviews" data-tip="Total number of reviews submitted for this paper">REVIEWS</th>
+                                <th data-sort-key="average_score" data-tip="Average of the original review scores (conference scale)">AVG</th>
+                                <th data-sort-key="score_spread" style="width: 150px;" data-tip="Difference between the highest and lowest review score. High spread (&gt;2) means reviewers disagreed strongly (a 'debate' paper)">SPREAD</th>
+                                <th data-sort-key="adjusted_score" style="width: 100px;" data-tip="Bias-corrected average: reviewer harshness/leniency is normalized away (z-score), so papers are comparable across reviewers">ADJ. AVG</th>
+                                <th data-sort-key="total_comments" data-tip="Number of comments written by reviewers on this paper">COMMENTS</th>
                             </tr>
                         </thead>
                         <tbody id="papers-table-body"></tbody>
@@ -176,6 +176,10 @@
                         <option value="avg_score_given_asc">Avg Score (Low to High)</option>
                         <option value="calibration_index_desc">Calibration (High to Low)</option>
                         <option value="calibration_index_asc">Calibration (Low to High)</option>
+                        <option value="sub_reviewer_count_desc">Subs (Most to Least)</option>
+                        <option value="sub_reviewer_count_asc">Subs (Least to Most)</option>
+                        <option value="missed_reviews_desc">Missed (Most to Least)</option>
+                        <option value="missed_reviews_asc">Missed (Least to Most)</option>
                     </select>
                     <div class="multiselect" id="reviewer-filter">
                         <button type="button" class="form-select multiselect-toggle" data-all-label="Filter: All Reviewers">Filter: All Reviewers</button>
@@ -201,17 +205,17 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>ID</th>
+                                <th data-sort-key="reviewer_id">ID</th>
                                 <th>NAME</th>
                                 <th>ROLE</th>
-                                <th data-tip="Number of sub-reviewers acting on behalf of this PC member">SUBS</th>
-                                <th data-tip="Whether this reviewer has completed any reviews. Green tick = active, red cross = no reviews yet">DONE</th>
-                                <th data-tip="Assigned papers this reviewer never delivered a review for">MISSED</th>
-                                <th data-tip="Average number of words per review written by this reviewer">W/C</th>
-                                <th data-tip="Total comments left across all reviewed papers">COMMENTS</th>
-                                <th data-tip="Average score this reviewer gives, relative to the conference scale">AVG</th>
+                                <th data-sort-key="sub_reviewer_count" data-tip="Number of sub-reviewers acting on behalf of this PC member">SUBS</th>
+                                <th data-sort-key="total_reviews_completed" data-tip="Whether this reviewer has completed any reviews. Green tick = active, red cross = no reviews yet">DONE</th>
+                                <th data-sort-key="missed_reviews" data-tip="Assigned papers this reviewer never delivered a review for">MISSED</th>
+                                <th data-sort-key="avg_word_count" data-tip="Average number of words per review written by this reviewer">W/C</th>
+                                <th data-sort-key="total_comments" data-tip="Total comments left across all reviewed papers">COMMENTS</th>
+                                <th data-sort-key="avg_score_given" data-tip="Average score this reviewer gives, relative to the conference scale">AVG</th>
                                 <th data-tip="Percentage of assigned papers where the reviewer's bid was 'yes' or 'maybe' — how well assignments matched their preferences">MATCH %</th>
-                                <th style="width: 150px;" data-tip="Calibration index: average difference between a reviewer's score and the score other reviewers gave the same paper. Positive = generous, negative = stricter than peers">CALIBRATION</th>
+                                <th data-sort-key="calibration_index" style="width: 150px;" data-tip="Calibration index: average difference between a reviewer's score and the score other reviewers gave the same paper. Positive = generous, negative = stricter than peers">CALIBRATION</th>
                                 <th style="width: 100px;" data-tip="Bias classification from the calibration index: calibrated (within 0.5), lenient/strict (0.5–1.5), extreme (beyond 1.5)">BIAS</th>
                             </tr>
                         </thead>
@@ -240,6 +244,8 @@
                         <option value="id_desc">ID (High to Low)</option>
                         <option value="total_score_desc">Score (High to Low)</option>
                         <option value="total_score_asc">Score (Low to High)</option>
+                        <option value="external_submission_id_desc">Paper (High to Low)</option>
+                        <option value="external_submission_id_asc">Paper (Low to High)</option>
                     </select>
                     <div class="multiselect" id="submission-filter">
                         <button type="button" class="form-select multiselect-toggle" data-all-label="Filter: All Submissions">Filter: All Submissions</button>
@@ -254,11 +260,11 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>REVIEW ID</th>
+                                <th data-sort-key="id">REVIEW ID</th>
                                 <th>REVIEWER</th>
-                                <th>PAPER</th>
-                                <th>SCORE</th>
-                                <th>DATE</th>
+                                <th data-sort-key="external_submission_id">PAPER</th>
+                                <th data-sort-key="total_score">SCORE</th>
+                                <th data-sort-key="review_date">DATE</th>
                                 <th>TIME</th>
                             </tr>
                         </thead>
