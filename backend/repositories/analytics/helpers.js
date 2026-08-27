@@ -124,10 +124,51 @@ function getFilterModes(options) {
     return modes.filter((m) => m && m !== 'all');
 }
 
+const alertDefaults = require('../../config/alertRuleDefaults');
+
+async function getAlertRules(conferenceId) {
+    const cid = conferenceId ? parseInt(conferenceId) : await resolveConferenceId(null);
+    if (!cid) return { ...Object.fromEntries(Object.entries(alertDefaults).map(([k, v]) => [k, { value: v.default, enabled: true }])) };
+    try {
+        const res = await client.query('SELECT rule_key, threshold_value, is_enabled FROM alert_rule WHERE conference_id = $1', [cid]);
+        const byKey = Object.fromEntries(res.rows.map(r => [r.rule_key, { value: Number(r.threshold_value), enabled: r.is_enabled }]));
+        const out = {};
+        for (const [k, def] of Object.entries(alertDefaults)) {
+            out[k] = byKey[k] !== undefined ? byKey[k] : { value: def.default, enabled: true };
+        }
+        return out;
+    } catch {
+        return Object.fromEntries(Object.entries(alertDefaults).map(([k, v]) => [k, { value: v.default, enabled: true }]));
+    }
+}
+
+async function ensureAlertRulesForConference(conferenceId) {
+    const cid = parseInt(conferenceId);
+    if (!cid) return;
+    for (const [key, def] of Object.entries(alertDefaults)) {
+        await client.query(
+            'INSERT INTO alert_rule (conference_id, rule_key, threshold_value, is_enabled) VALUES ($1,$2,$3,true) ON CONFLICT (conference_id, rule_key) DO NOTHING',
+            [cid, key, def.default]
+        );
+    }
+}
+
+function assertSafeNumber(value, label = 'threshold') {
+    const n = Number(value);
+    if (!Number.isFinite(n)) {
+        const { ValidationError } = require('../utils/appError');
+        throw new ValidationError(`Invalid ${label}: ${value}`);
+    }
+    return n;
+}
+
 module.exports = {
     resolveConferenceId,
     getAnonymizationSettings,
     maskNames,
     buildOrderBy,
-    getFilterModes
+    getFilterModes,
+    getAlertRules,
+    ensureAlertRulesForConference,
+    assertSafeNumber
 };
