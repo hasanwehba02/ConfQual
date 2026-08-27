@@ -11,3 +11,4 @@ backend/server.log
 docs/
 .cache/
 backend/.cache/
+.zed/
