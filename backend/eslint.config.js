@@ -27,7 +27,8 @@ const browserGlobals = {
     XLSX: "readonly",
     Blob: "readonly",
     URL: "readonly",
-    Element: "readonly"
+    Element: "readonly",
+    Event: "readonly"
 };
 
 module.exports = [
