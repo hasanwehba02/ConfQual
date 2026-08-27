@@ -65,6 +65,9 @@ async function getPaperDebates(options = {}) {
     let paramIdx = 2;
 
     const modes = getFilterModes(options);
+    const { getAlertRules, assertSafeNumber } = require("./helpers");
+    const rules = await getAlertRules(cid);
+    const th = (key) => assertSafeNumber(rules[key]?.enabled ? rules[key].value : require('../../config/alertRuleDefaults')[key].default, key);
 
     const decisionFilters = ['rejected', 'desk_rejected', 'no_decision'];
     const excludeDeskNoDecision = modes.some((m) => decisionFilters.includes(m))
@@ -76,22 +79,30 @@ async function getPaperDebates(options = {}) {
         havingClause += ` AND COALESCE((SELECT COUNT(*) FROM comment c WHERE c.paper_id = p.id), 0) = 0`;
     }
     if (modes.includes('high_variance')) {
-        havingClause += ` AND (MAX(r.total_score) - MIN(r.total_score)) > 2`;
+        const v = th('paper.high_spread_min');
+        havingClause += ` AND (MAX(r.total_score) - MIN(r.total_score)) > ${v}`;
     }
     if (modes.includes('low_variance')) {
         havingClause += ` AND (MAX(r.total_score) - MIN(r.total_score)) = 0`;
     }
     if (modes.includes('unanimous_reject')) {
-        havingClause += ` AND AVG(r.total_score) <= -1.5`;
+        const v = th('paper.unanimous_reject_avg');
+        havingClause += ` AND AVG(r.total_score) <= ${v}`;
     }
     if (modes.includes('unanimous_accept')) {
-        havingClause += ` AND AVG(r.total_score) >= 1.5`;
+        const v = th('paper.unanimous_accept_avg');
+        havingClause += ` AND AVG(r.total_score) >= ${v}`;
     }
     if (modes.includes('borderline')) {
-        havingClause += ` AND AVG(r.total_score) >= -0.5 AND AVG(r.total_score) <= 0.5`;
+        const bl = th('paper.borderline_low');
+        const bh = th('paper.borderline_high');
+        havingClause += ` AND AVG(r.total_score) >= ${bl} AND AVG(r.total_score) <= ${bh}`;
     }
     if (modes.includes('to_discuss')) {
-        havingClause += ` AND ((AVG(r.total_score) >= -0.5 AND AVG(r.total_score) <= 0.5) OR (MAX(r.total_score) - MIN(r.total_score)) > 2)`;
+        const bl = th('paper.borderline_low');
+        const bh = th('paper.borderline_high');
+        const hs = th('paper.high_spread_min');
+        havingClause += ` AND ((AVG(r.total_score) >= ${bl} AND AVG(r.total_score) <= ${bh}) OR (MAX(r.total_score) - MIN(r.total_score)) > ${hs})`;
     }
 
     let whereExtra = '';

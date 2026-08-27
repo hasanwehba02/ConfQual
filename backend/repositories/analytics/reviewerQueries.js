@@ -10,6 +10,9 @@ async function getReviewerQuality(options = {}) {
 
     let filterClause = '';
     const modes = getFilterModes(options);
+    const { getAlertRules: _getRules, assertSafeNumber: _assert } = require("./helpers");
+    const _rules = await _getRules(cid);
+    const _th = (k) => _assert(_rules[k]?.value ?? require('../../config/alertRuleDefaults')[k].default, k);
     if (modes.includes('no_comments')) {
         filterClause += ` AND COALESCE(rc.total_comments, 0) = 0`;
     }
@@ -17,7 +20,8 @@ async function getReviewerQuality(options = {}) {
         filterClause += ` AND COALESCE(rc.total_comments, 0) > 0`;
     }
     if (modes.includes('high_variance')) {
-        filterClause += ` AND ABS(rcal.calibration_index) > 1.5`;
+        const v = _th('reviewer.high_calibration_abs');
+        filterClause += ` AND ABS(rcal.calibration_index) > ${v}`;
     }
     if (modes.includes('missed_assignments')) {
         filterClause += ` AND COALESCE(ast.missed_reviews, 0) > 0`;
