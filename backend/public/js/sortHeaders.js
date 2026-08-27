@@ -78,13 +78,9 @@ export function attachSortHeaders({ tableSelector, selectId, tabId, fetchFn, def
             if (cur.sortBy !== key) {
                 nextBy = key;
                 nextOrder = 'ASC';
-            } else if (cur.sortOrder === 'ASC') {
-                nextBy = key;
-                nextOrder = 'DESC';
             } else {
-                // reset to default
-                nextBy = defSort.sortBy;
-                nextOrder = defSort.sortOrder;
+                nextBy = key;
+                nextOrder = cur.sortOrder === 'ASC' ? 'DESC' : 'ASC';
             }
 
             if (select) applySelectValue(select, nextBy, nextOrder);
