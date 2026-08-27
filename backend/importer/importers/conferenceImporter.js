@@ -64,6 +64,10 @@ async function importConference(meta = {}) {
     );
 
     console.log(`Conference created: ${conferenceName}`);
+    try {
+        const { ensureAlertRulesForConference } = require("../../repositories/analytics/helpers");
+        await ensureAlertRulesForConference(result.rows[0].id);
+    } catch (e) { console.warn('Could not seed alert rules:', e.message); }
     return result.rows[0];
 }
 

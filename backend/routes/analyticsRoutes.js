@@ -38,6 +38,9 @@ router.get("/comparison", analyticsController.getComparison);
 router.put("/conferences/:id", analyticsController.updateConference);
 router.delete("/conferences/:id", analyticsController.deleteConference);
 
+router.get("/alert-rules", analyticsController.getAlertRules);
+router.put("/alert-rules", analyticsController.updateAlertRules);
+
 const logRateLimiter = new Map();
 router.post("/log", (req, res) => {
     const ip = req.ip || req.connection?.remoteAddress || 'unknown';

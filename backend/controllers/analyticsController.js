@@ -152,6 +152,39 @@ const updateConference = asyncHandler(async (req, res) => {
     res.json(await conferenceRepository.updateConference(req.params.id, req.body));
 });
 
+const { getAlertRules: fetchRules, ensureAlertRulesForConference, assertSafeNumber } = require("../repositories/analytics/helpers");
+const alertDefaults = require("../config/alertRuleDefaults");
+const db = require("../config/database");
+
+const getAlertRules = asyncHandler(async (req, res) => {
+    const rules = await fetchRules(req.query.conferenceId);
+    const out = Object.entries(alertDefaults).map(([key, def]) => ({
+        key, label: def.label, domain: def.domain, default: def.default,
+        value: rules[key]?.value ?? def.default, enabled: rules[key]?.enabled ?? true
+    }));
+    res.json(out);
+});
+
+const updateAlertRules = asyncHandler(async (req, res) => {
+    const cid = parseInt(req.query.conferenceId || req.body.conferenceId);
+    if (!cid) throw new ValidationError('conferenceId required');
+    const items = req.body.rules || req.body;
+    if (!Array.isArray(items)) throw new ValidationError('rules array required');
+    await ensureAlertRulesForConference(cid);
+    await db.withTransaction(async (client) => {
+        for (const r of items) {
+            if (!alertDefaults[r.key]) throw new ValidationError(`Unknown rule: ${r.key}`);
+            const v = assertSafeNumber(r.value, r.key);
+            const enabled = r.enabled !== undefined ? !!r.enabled : true;
+            await client.query(
+                'INSERT INTO alert_rule (conference_id, rule_key, threshold_value, is_enabled) VALUES ($1,$2,$3,$4) ON CONFLICT (conference_id, rule_key) DO UPDATE SET threshold_value = EXCLUDED.threshold_value, is_enabled = EXCLUDED.is_enabled',
+                [cid, r.key, v, enabled]
+            );
+        }
+    });
+    res.json({ ok: true });
+});
+
 module.exports = {
     getConferenceHealth,
     getReviewerQuality,
@@ -174,5 +207,7 @@ module.exports = {
     listConferences,
     getComparison,
     deleteConference,
-    updateConference
+    updateConference,
+    getAlertRules,
+    updateAlertRules
 };
