@@ -601,6 +601,15 @@
                     <input type="checkbox" id="decisionEditingEnabled" style="width: 20px; height: 20px;">
                 </div>
 
+                <details id="alert-thresholds-section" style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-top:16px;">
+                    <summary style="cursor:pointer;font-weight:600;">Alert thresholds (per conference)</summary>
+                    <div id="alert-thresholds-list" style="margin-top:10px;display:flex;flex-direction:column;gap:8px;"></div>
+                    <div class="form-actions mt-4" style="display:flex;gap:8px;">
+                        <button type="button" class="btn btn-outline w-full" id="save-thresholds">Save thresholds</button>
+                        <button type="button" class="btn btn-outline" id="reset-thresholds">Reset to defaults</button>
+                    </div>
+                </details>
+
                 <div class="form-actions mt-4">
                     <button type="submit" class="btn btn-primary w-full" id="submit-settings">SAVE SETTINGS</button>
                 </div>
