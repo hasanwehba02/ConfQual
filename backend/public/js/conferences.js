@@ -1,6 +1,7 @@
 import { fetchConferences, deleteConference, updateConference } from './api.js';
 import { state } from './state.js';
 import { switchToTab } from './filters.js';
+import { invalidateFilterLabels } from './filterMenu.js';
 
 const ACTIVE_CONF_STORAGE_KEY = 'confqual.activeConferenceId';
 
@@ -50,6 +51,7 @@ export async function loadConferences() {
 window.selectConference = async function(id) {
     state.activeConferenceId = id;
     window.localStorage.setItem(ACTIVE_CONF_STORAGE_KEY, String(id));
+    invalidateFilterLabels();
     await loadConferences(); // Refresh the top bar label
     // Switch to analytics view
     switchToTab('tab-analytics');

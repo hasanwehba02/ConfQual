@@ -98,14 +98,14 @@
                         <button type="button" class="form-select multiselect-toggle" data-all-label="Filter: All Papers">Filter: All Papers</button>
                         <div class="multiselect-list hidden">
                             <label><input type="checkbox" value="no_comments"> No Comments</label>
-                            <label><input type="checkbox" value="high_variance" title="Review score spread greater than 2 points — reviewers strongly disagreed">High Spread (&gt;2)</label>
+                            <label><input type="checkbox" value="high_variance">High Spread</label>
                             <label><input type="checkbox" value="low_variance" title="All reviewers gave exactly the same score">Unanimous Agreement (Spread = 0)</label>
-                            <label><input type="checkbox" value="unanimous_reject" title="Average score at most -1.5 — all reviewers lean reject">Unanimous Rejects (Avg &lt;= -1.5)</label>
-                            <label><input type="checkbox" value="unanimous_accept" title="Average score at least 1.5 — all reviewers lean accept">Unanimous Accepts (Avg &gt;= 1.5)</label>
+                            <label><input type="checkbox" value="unanimous_reject">Unanimous Rejects</label>
+                            <label><input type="checkbox" value="unanimous_accept">Unanimous Accepts</label>
                             <label><input type="checkbox" value="rejected">Rejected Papers</label>
                             <label><input type="checkbox" value="desk_rejected">Desk Rejected Papers</label>
                             <label><input type="checkbox" value="no_decision">No Decision Papers</label>
-                            <label><input type="checkbox" value="borderline" title="Average score between -0.5 and 0.5 — could go either way">Borderline (-0.5 to 0.5)</label>
+                            <label><input type="checkbox" value="borderline">Borderline</label>
                             <label><input type="checkbox" value="to_discuss" title="Borderline papers OR papers with spread > 2 that likely need a discussion">To Discuss</label>
                         </div>
                     </div>
@@ -182,7 +182,7 @@
                         <div class="multiselect-list hidden">
                             <label><input type="checkbox" value="no_comments"> No Comments</label>
                             <label><input type="checkbox" value="has_comments"> Has Comments</label>
-                            <label><input type="checkbox" value="high_variance" title="Reviewers whose average score deviates more than 1.5 points from the scores other reviewers gave the same papers">High Calibration Variance (|deviation| &gt; 1.5)</label>
+                            <label><input type="checkbox" value="high_variance">High Calibration Variance</label>
                             <label><input type="checkbox" value="missed_assignments"> Missed Assignments</label>
                             <label><input type="checkbox" value="has_subreviews"> PC Members With Sub-reviewers</label>
                             <label><input type="checkbox" value="no_subreviews"> PC Members Without Sub-reviewers</label>

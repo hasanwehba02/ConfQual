@@ -69,6 +69,8 @@ export function wireSettingsView() {
             const err = await res.json().catch(() => ({}));
             alert(err.error || 'Failed to save thresholds');
         } else {
+            const { invalidateFilterLabels } = await import('./filterMenu.js');
+            invalidateFilterLabels();
             await loadDashboardData();
         }
     });
