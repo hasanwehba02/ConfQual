@@ -829,3 +829,10 @@ th, .metric-value, .brand {
 .multiselect-clear:hover {
     background: #fef2f2;
 }
+
+th[data-sort-key]:hover {
+    background: #f1f5f9;
+}
+th.sort-active {
+    color: var(--primary, #2563eb);
+}

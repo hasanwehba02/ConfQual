@@ -20,6 +20,7 @@ import { wireUploadView } from './uploadView.js';
 import { wireSettingsView } from './settingsView.js';
 import { wireProjectorModalClose } from './projector.js';
 import { wireEvents } from './events.js';
+import { attachSortHeaders } from './sortHeaders.js';
 import { checkExistingData } from './dashboardView.js';
 
 window.onerror = function(message, source, lineno, colno, error) {
@@ -39,6 +40,10 @@ window.addEventListener('unhandledrejection', function(event) {
 
 document.addEventListener('DOMContentLoaded', () => {
     wireEvents();
+
+    attachSortHeaders({ tableSelector: '#tab-papers table', selectId: 'paper-sort', tabId: 'tab-papers', fetchFn: () => window.fetchPapers() });
+    attachSortHeaders({ tableSelector: '#tab-reviewers table', selectId: 'reviewer-sort', tabId: 'tab-reviewers', fetchFn: () => window.fetchReviewers() });
+    attachSortHeaders({ tableSelector: '#tab-submissions table', selectId: 'submission-sort', tabId: 'tab-submissions', fetchFn: () => window.fetchSubmissions() });
     wireUploadView();
     wireSettingsView();
     wireDetailDrawerClose();
