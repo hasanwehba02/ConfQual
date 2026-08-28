@@ -198,7 +198,30 @@ async function getAlerts(prefetched = null, conferenceId = null, settingsArg = n
         });
     }
 
-    // 6. Sentiment Mismatches
+    // 6. Insufficient reviewers per paper (from Configuration Information nb_reviewers) — checks ASSIGNED count, not written
+    try {
+        const configRepo = require("../../repositories/configurationRepository");
+        const cfg = await configRepo.getConfig(cid);
+        const required = cfg && cfg.nb_reviewers ? parseInt(cfg.nb_reviewers) : null;
+        if (required && required > 0) {
+            const underAssigned = papers.filter(p => parseInt(p.total_assigned || 0) < required);
+            if (underAssigned.length > 0) {
+                alerts.push({
+                    severity: "HIGH",
+                    category: "COVERAGE",
+                    title: `${underAssigned.length} Papers Have Fewer Than ${required} Assigned Reviewers`,
+                    message: `Configuration requires ${required} reviewers per paper; these papers are under-assigned (assigned < required).`,
+                    action: "Assign additional reviewers.",
+                    affectedIds: underAssigned.map(p => p.external_submission_id),
+                    target: "tab-papers",
+                    filterKey: "paper",
+                    customTitle: `Papers With < ${required} Assigned`
+                });
+            }
+        }
+    } catch { /* ignore config errors */ }
+
+    // 7. Sentiment Mismatches
     const sentimentMismatches = prefetched?.sentimentMismatches || await analyticsRepository.getSentimentMismatches(cid);
     if (sentimentMismatches.length > 0) {
         let sentimentContext = null;
