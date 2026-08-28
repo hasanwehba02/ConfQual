@@ -171,11 +171,13 @@ async function getPaperDebates(options = {}) {
             p.decision,
             p.decision_category,
             COUNT(DISTINCT r.id) as total_reviews,
+            COUNT(DISTINCT a.program_committee_member_id) as total_assigned,
             ROUND(AVG(r.total_score), 2) as average_score,
             (MAX(r.total_score) - MIN(r.total_score)) as score_spread,
             COALESCE((SELECT COUNT(*) FROM comment c WHERE c.paper_id = p.id), 0) as total_comments,
             ROUND(AVG(nr.adjusted_score), 2) as adjusted_score
         FROM paper p
+        LEFT JOIN assignment a ON a.paper_id = p.id
         LEFT JOIN review r ON p.id = r.paper_id AND r.is_superseded = false
         LEFT JOIN NormalizedReviews nr ON nr.review_id = r.id
         WHERE p.is_deleted = false AND p.conference_id = $1
