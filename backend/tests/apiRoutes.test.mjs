@@ -168,4 +168,54 @@ test('API Endpoints Integration Suite', async (t) => {
         assert.ok(typeof data === 'object');
         assert.ok(typeof data.is_anonymized === 'boolean');
     });
+
+    await t.test('Notes CRUD API endpoints (GET, POST, PUT, DELETE)', async (st) => {
+        if (!dbAvailable) {
+            st.skip('Database unavailable in this environment');
+            return;
+        }
+
+        // 1. GET /api/analytics/notes
+        const listRes = await fetch(`${baseUrl}/api/analytics/notes`);
+        assert.equal(listRes.status, 200);
+        const initialNotes = await listRes.json();
+        assert.ok(Array.isArray(initialNotes));
+
+        // 2. POST /api/analytics/notes (validation error on empty text)
+        const emptyRes = await fetch(`${baseUrl}/api/analytics/notes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: '' })
+        });
+        assert.equal(emptyRes.status, 400);
+
+        // 3. POST /api/analytics/notes (create valid note)
+        const createRes = await fetch(`${baseUrl}/api/analytics/notes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: 'API Route Test Note' })
+        });
+        assert.equal(createRes.status, 200);
+        const createdNote = await createRes.json();
+        assert.ok(createdNote.id);
+        assert.equal(createdNote.text, 'API Route Test Note');
+
+        // 4. PUT /api/analytics/notes/:id (update note)
+        const updateRes = await fetch(`${baseUrl}/api/analytics/notes/${createdNote.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: 'API Route Test Note Updated' })
+        });
+        assert.equal(updateRes.status, 200);
+        const updatedNote = await updateRes.json();
+        assert.equal(updatedNote.text, 'API Route Test Note Updated');
+
+        // 5. DELETE /api/analytics/notes/:id
+        const deleteRes = await fetch(`${baseUrl}/api/analytics/notes/${createdNote.id}`, {
+            method: 'DELETE'
+        });
+        assert.equal(deleteRes.status, 200);
+        const deleteResult = await deleteRes.json();
+        assert.equal(deleteResult.ok, true);
+    });
 });

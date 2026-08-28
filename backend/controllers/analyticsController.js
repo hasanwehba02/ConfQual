@@ -59,7 +59,7 @@ const getPaperDetails = asyncHandler(async (req, res) => {
 });
 
 const getReviewerDetails = asyncHandler(async (req, res) => {
-    const data = await analyticsService.getReviewerDetails(req.params.id);
+    const data = await analyticsService.getReviewerDetails(req.params.id, req.query.conferenceId);
     if (!data) throw new NotFoundError("Reviewer not found");
     res.json(data);
 });
@@ -68,7 +68,7 @@ const getReviewerReport = asyncHandler(async (req, res) => {
     const rawInclude = String(req.query.includeReviewText || '').toLowerCase();
     const includeReviewText = rawInclude === '1' || rawInclude === 'true';
 
-    const data = await reportService.buildReportData(req.params.id);
+    const data = await reportService.buildReportData(req.params.id, req.query.conferenceId);
     if (!data) throw new NotFoundError("Reviewer not found");
 
     const html = reportService.buildReportHtml(data, { includeReviewText });
@@ -185,6 +185,142 @@ const updateAlertRules = asyncHandler(async (req, res) => {
     res.json({ ok: true });
 });
 
+const noteRepo = require("../repositories/noteRepository");
+
+const listNotes = asyncHandler(async (req, res) => {
+    const {
+        paperId,
+        participantId,
+        editionId,
+        reviewId,
+        commentId,
+        conferenceId,
+        editionNoteId,
+        topicId,
+        targetAuthorId,
+        researcherId,
+        assignmentId,
+        decisionPaperId
+    } = req.query;
+
+    const notes = await noteRepo.listNotes({
+        paperId: paperId ? parseInt(paperId, 10) : undefined,
+        participantId: participantId ? parseInt(participantId, 10) : undefined,
+        editionId: editionId ? parseInt(editionId, 10) : undefined,
+        reviewId: reviewId ? parseInt(reviewId, 10) : undefined,
+        commentId: commentId ? parseInt(commentId, 10) : undefined,
+        conferenceId: conferenceId ? parseInt(conferenceId, 10) : undefined,
+        editionNoteId: editionNoteId ? parseInt(editionNoteId, 10) : undefined,
+        topicId: topicId ? parseInt(topicId, 10) : undefined,
+        targetAuthorId: targetAuthorId ? parseInt(targetAuthorId, 10) : undefined,
+        researcherId: researcherId ? parseInt(researcherId, 10) : undefined,
+        assignmentId: assignmentId ? parseInt(assignmentId, 10) : undefined,
+        decisionPaperId: decisionPaperId ? parseInt(decisionPaperId, 10) : undefined
+    });
+    res.json(notes);
+});
+
+const configRepo = require("../repositories/configurationRepository");
+const getConfiguration = asyncHandler(async (req, res) => {
+    const cfg = await configRepo.getConfig(req.query.editionId || req.query.conferenceId || stateActiveConferenceId(req));
+    res.json(cfg || {});
+});
+function stateActiveConferenceId(req) {
+    // try to get from query, fallback to null (repo will resolve most recent)
+    return req.query.editionId || req.query.conferenceId || null;
+}
+const updateConfiguration = asyncHandler(async (req, res) => {
+    const eid = req.query.editionId || req.body.editionId || req.query.conferenceId || req.body.conferenceId;
+    if (!eid) throw new ValidationError('editionId required');
+    const cfg = await configRepo.upsertConfig(eid, req.body);
+    res.json(cfg);
+});
+const createNote = asyncHandler(async (req, res) => {
+    const {
+        text,
+        paperId,
+        participantId,
+        reviewId,
+        commentId,
+        editionId,
+        conferenceId,
+        editionNoteId,
+        topicId,
+        targetAuthorId,
+        researcherId,
+        assignmentId,
+        decisionPaperId,
+        authorParticipantId
+    } = req.body;
+
+    if (!text || !text.trim()) throw new ValidationError('text required');
+
+    const edition = editionId || req.query.editionId || editionNoteId;
+    let authorId = authorParticipantId ? parseInt(authorParticipantId, 10) : null;
+    if (!authorId && edition) {
+        const participant = await db.query(
+            'SELECT id FROM participant_new WHERE edition_id = $1 LIMIT 1',
+            [parseInt(edition, 10)]
+        );
+        authorId = participant.rows[0]?.id || null;
+    }
+    if (!authorId) {
+        const participantAny = await db.query('SELECT id FROM participant_new LIMIT 1');
+        authorId = participantAny.rows[0]?.id || 1;
+    }
+
+    const note = await noteRepo.createNote({
+        text: text.trim(),
+        authorParticipantId: authorId,
+        editionId: edition ? parseInt(edition, 10) : undefined,
+        paperId: paperId ? parseInt(paperId, 10) : null,
+        participantId: participantId ? parseInt(participantId, 10) : null,
+        reviewId: reviewId ? parseInt(reviewId, 10) : null,
+        commentId: commentId ? parseInt(commentId, 10) : null,
+        conferenceId: conferenceId ? parseInt(conferenceId, 10) : null,
+        editionNoteId: editionNoteId ? parseInt(editionNoteId, 10) : null,
+        topicId: topicId ? parseInt(topicId, 10) : null,
+        targetAuthorId: targetAuthorId ? parseInt(targetAuthorId, 10) : null,
+        researcherId: researcherId ? parseInt(researcherId, 10) : null,
+        assignmentId: assignmentId ? parseInt(assignmentId, 10) : null,
+        decisionPaperId: decisionPaperId ? parseInt(decisionPaperId, 10) : null
+    });
+
+    res.json(note);
+});
+
+const updateNote = asyncHandler(async (req, res) => {
+    const { text } = req.body;
+    if (!text || !text.trim()) throw new ValidationError('text required');
+    const noteId = parseInt(req.params.id, 10);
+    if (isNaN(noteId)) throw new ValidationError('Invalid note id');
+
+    const note = await noteRepo.updateNote(noteId, text.trim());
+    if (!note) throw new NotFoundError('Note not found');
+    res.json(note);
+});
+
+const deleteNote = asyncHandler(async (req, res) => {
+    const noteId = parseInt(req.params.id, 10);
+    if (isNaN(noteId)) throw new ValidationError('Invalid note id');
+    await noteRepo.deleteNote(noteId);
+    res.json({ ok: true });
+});
+
+const deleteNotesByEdition = asyncHandler(async (req, res) => {
+    const eid = req.query.editionId || req.query.conferenceId;
+    if (!eid) throw new ValidationError('editionId required');
+    await noteRepo.deleteNotesByEdition(parseInt(eid, 10));
+    res.json({ ok: true });
+});
+
+const deleteNotesByConference = asyncHandler(async (req, res) => {
+    const cid = req.params.id || req.query.conferenceId;
+    if (!cid) throw new ValidationError('conferenceId required');
+    await noteRepo.deleteNotesByConferenceSeries(parseInt(cid, 10));
+    res.json({ ok: true });
+});
+
 module.exports = {
     getConferenceHealth,
     getReviewerQuality,
@@ -209,5 +345,13 @@ module.exports = {
     deleteConference,
     updateConference,
     getAlertRules,
-    updateAlertRules
+    updateAlertRules,
+    listNotes,
+    createNote,
+    updateNote,
+    deleteNote,
+    deleteNotesByEdition,
+    deleteNotesByConference,
+    getConfiguration,
+    updateConfiguration
 };
