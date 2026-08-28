@@ -140,6 +140,14 @@ window.openPaperModal = async function(externalId) {
                 ${draftPaperBtnHtml}
             </div>
 
+            <div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:1rem;background:#f8fafc;">
+                <h4 style="margin:0 0 8px 0;">Notes</h4><div id="paper-notes-list" class="text-muted">Loading…</div>
+                <div style="display:flex;gap:6px;margin-top:8px;">
+                    <input id="paper-note-input" placeholder="Add private note…" style="flex:1;padding:6px;border:1px solid #ccc;border-radius:4px;">
+                    <button id="paper-note-add" class="btn btn-outline btn-sm" style="display:flex;align-items:center;gap:0.35rem;"><i class="ph ph-note"></i> Add Note</button>
+                </div>
+            </div>
+
             <h3>REVIEWS (${paper.reviews ? paper.reviews.length : 0})</h3>
             <div class="detail-list">
         `;
@@ -160,6 +168,13 @@ window.openPaperModal = async function(externalId) {
                             <strong>REVIEWER EXPERTISE:</strong> ${escapeHtml(r.topics) || 'None'}
                         </div>
                         <div class="detail-text">${escapeHtml(r.review_text) || 'No review text'}</div>
+                        <div class="review-notes" style="margin-top:8px;border-top:1px dashed #e2e8f0;padding-top:6px;">
+                            <div id="review-notes-${r.id}" class="text-muted" style="font-size:0.8rem;">Loading notes…</div>
+                            <div style="display:flex;gap:4px;margin-top:4px;">
+                                <input id="review-note-input-${r.id}" placeholder="Add note…" style="flex:1;padding:4px;border:1px solid #ccc;border-radius:4px;font-size:0.8rem;">
+                                <button data-review-note-add="${r.id}" class="btn btn-outline btn-sm" style="font-size:0.75rem;"><i class="ph ph-note"></i> Add</button>
+                            </div>
+                        </div>
                     </div>
                 `;
             });
@@ -170,11 +185,18 @@ window.openPaperModal = async function(externalId) {
         html += `</div><h3>COMMENTS (${paper.comments ? paper.comments.length : 0})</h3><div class="detail-list">`;
 
         if (paper.comments && paper.comments.length > 0) {
-            paper.comments.forEach(c => {
-                html += `
+                paper.comments.forEach(c => {
+                    html += `
                     <div class="detail-item">
                         <div class="detail-item-header">${escapeHtml(c.first_name)} ${escapeHtml(c.last_name)}</div>
                         <div class="detail-text">${escapeHtml(c.comment_text)}</div>
+                        <div class="comment-notes" style="margin-top:6px;border-top:1px dashed #e2e8f0;padding-top:4px;">
+                            <div id="comment-notes-${c.id}" class="text-muted" style="font-size:0.8rem;">Loading notes…</div>
+                            <div style="display:flex;gap:4px;margin-top:4px;">
+                                <input id="comment-note-input-${c.id}" placeholder="Add note…" style="flex:1;padding:4px;border:1px solid #ccc;border-radius:4px;font-size:0.8rem;">
+                                <button data-comment-note-add="${c.id}" class="btn btn-outline btn-sm" style="font-size:0.75rem;"><i class="ph ph-note"></i> Add</button>
+                            </div>
+                        </div>
                     </div>
                 `;
             });
@@ -184,6 +206,61 @@ window.openPaperModal = async function(externalId) {
 
         html += '</div>';
         drawerBody.innerHTML = html;
+        const refreshPaperNotes=async()=>{
+            const pr=await fetch(`/api/analytics/notes?paperId=${paper.id}`);
+            const notes=pr.ok?await pr.json():[];
+            const list=document.getElementById('paper-notes-list');
+            if(list) list.innerHTML=notes.length?notes.map(n=>`<div style="padding:6px 0;border-bottom:1px solid #f1f5f9;"><small class="text-muted">${new Date(n.created_at).toLocaleString()}</small><br>${escapeHtml(n.text)}</div>`).join(''):'<span class="text-muted">No notes yet.</span>';
+        };
+        const addPaperNote=async()=>{
+            const inp=document.getElementById('paper-note-input');
+            const text=inp.value.trim(); if(!text) return;
+            await fetch('/api/analytics/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text, paperId: paper.id, editionId: state.activeConferenceId || 1})});
+            inp.value=''; await refreshPaperNotes();
+        };
+        (async()=>{
+            try{ await refreshPaperNotes(); }catch(e){ console.warn(e); }
+            document.getElementById('paper-note-add')?.addEventListener('click', addPaperNote);
+            document.getElementById('paper-note-input')?.addEventListener('keydown', e=>{ if(e.key==='Enter') addPaperNote(); });
+            // Review notes per review
+            for(const r of (paper.reviews||[])){
+                const rid=r.id; if(!rid) continue;
+                const refresh=async()=>{
+                    const pr=await fetch(`/api/analytics/notes?reviewId=${rid}`);
+                    const notes=pr.ok?await pr.json():[];
+                    const el=document.getElementById(`review-notes-${rid}`);
+                    if(el) el.innerHTML=notes.length?notes.map(n=>`<div style="padding:3px 0;font-size:0.8rem;">${escapeHtml(n.text)} <small class="text-muted">${new Date(n.created_at).toLocaleDateString()}</small></div>`).join(''):'<span class="text-muted">No notes.</span>';
+                };
+                await refresh();
+                const add=async()=>{
+                    const inp=document.getElementById(`review-note-input-${rid}`);
+                    const t=inp.value.trim(); if(!t) return;
+                    await fetch('/api/analytics/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t, reviewId: rid, editionId: state.activeConferenceId || 1})});
+                    inp.value=''; await refresh();
+                };
+                document.querySelector(`[data-review-note-add="${rid}"]`)?.addEventListener('click', add);
+                document.getElementById(`review-note-input-${rid}`)?.addEventListener('keydown', e=>{ if(e.key==='Enter') add(); });
+            }
+            // Comment notes per comment
+            for(const c of (paper.comments||[])){
+                const cid=c.id; if(!cid) continue;
+                const refresh=async()=>{
+                    const pr=await fetch(`/api/analytics/notes?commentId=${cid}`);
+                    const notes=pr.ok?await pr.json():[];
+                    const el=document.getElementById(`comment-notes-${cid}`);
+                    if(el) el.innerHTML=notes.length?notes.map(n=>`<div style="padding:3px 0;font-size:0.8rem;">${escapeHtml(n.text)} <small class="text-muted">${new Date(n.created_at).toLocaleDateString()}</small></div>`).join(''):'<span class="text-muted">No notes.</span>';
+                };
+                await refresh();
+                const add=async()=>{
+                    const inp=document.getElementById(`comment-note-input-${cid}`);
+                    const t=inp.value.trim(); if(!t) return;
+                    await fetch('/api/analytics/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t, commentId: cid, editionId: state.activeConferenceId || 1})});
+                    inp.value=''; await refresh();
+                };
+                document.querySelector(`[data-comment-note-add="${cid}"]`)?.addEventListener('click', add);
+                document.getElementById(`comment-note-input-${cid}`)?.addEventListener('keydown', e=>{ if(e.key==='Enter') add(); });
+            }
+        })();
 
         const paperDraftBtn = drawerBody.querySelector('#paper-draft-email-btn');
         if (paperDraftBtn) {
@@ -287,7 +364,8 @@ window.openReviewerModal = async function(reviewerId, name) {
     drawerBody.innerHTML = '<div class="spinner"></div>';
 
     try {
-        const res = await fetch(`/api/analytics/reviewers/${reviewerId}`);
+        const cid = state.activeConferenceId ? `?conferenceId=${state.activeConferenceId}` : '';
+        const res = await fetch(`/api/analytics/reviewers/${reviewerId}${cid}`);
         if (!res.ok) throw new Error("Failed to fetch");
         const rev = await res.json();
 
@@ -306,6 +384,14 @@ window.openReviewerModal = async function(reviewerId, name) {
                         <i class="ph ph-file-pdf"></i> Export Reviewer Card
                     </button>
                     ${!state.isCurrentAnonymized && !(isAnonymizedCheckbox && isAnonymizedCheckbox.checked) ? `<button id="reviewer-draft-email-btn" class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 0.35rem;"><i class="ph ph-envelope-simple"></i> Draft Email</button>` : ''}
+                </div>
+            </div>
+
+            <div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:1rem;background:#f8fafc;">
+                <h4 style="margin:0 0 8px 0;">Notes</h4><div id="reviewer-notes-list" class="text-muted">Loading…</div>
+                <div style="display:flex;gap:6px;margin-top:8px;">
+                    <input id="reviewer-note-input" placeholder="Add private note…" style="flex:1;padding:6px;border:1px solid #ccc;border-radius:4px;">
+                    <button id="reviewer-note-add" class="btn btn-outline btn-sm" style="display:flex;align-items:center;gap:0.35rem;"><i class="ph ph-note"></i> Add Note</button>
                 </div>
             </div>
 
@@ -384,6 +470,28 @@ window.openReviewerModal = async function(reviewerId, name) {
         html += '</div>';
         drawerBody.innerHTML = html;
 
+        // Reviewer notes
+        (async()=>{
+            const refresh=async()=>{
+                const pr=await fetch(`/api/analytics/notes?participantId=${reviewerId}`);
+                const notes=pr.ok?await pr.json():[];
+                const list=document.getElementById('reviewer-notes-list');
+                if(list) list.innerHTML=notes.length?notes.map(n=>{
+                    const editionTag = n.note_edition_year ? ` · Edition ${n.note_edition_year}` : (n.participant_edition_year ? ` · Edition ${n.participant_edition_year}` : '');
+                    return `<div style="padding:6px 0;border-bottom:1px solid #f1f5f9;"><small class="text-muted">${new Date(n.created_at).toLocaleString()}${editionTag}</small><br>${escapeHtml(n.text)}</div>`;
+                }).join(''):'<span class="text-muted">No notes yet.</span>';
+            };
+            const add=async()=>{
+                const inp=document.getElementById('reviewer-note-input');
+                const t=inp.value.trim(); if(!t) return;
+                await fetch('/api/analytics/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t, participantId: reviewerId, editionId: state.activeConferenceId || 1})});
+                inp.value=''; await refresh();
+            };
+            try{ await refresh(); }catch(e){ console.warn(e); }
+            document.getElementById('reviewer-note-add')?.addEventListener('click', add);
+            document.getElementById('reviewer-note-input')?.addEventListener('keydown', e=>{ if(e.key==='Enter') add(); });
+        })();
+
         const exportBtn = drawerBody.querySelector('#export-pdf-btn');
         const includeTextCb = drawerBody.querySelector('#report-include-text');
         if (exportBtn) {
@@ -393,8 +501,9 @@ window.openReviewerModal = async function(reviewerId, name) {
                 exportBtn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Exporting...';
                 try {
                     const inc = includeTextCb && includeTextCb.checked ? '1' : '';
+                    const cid = state.activeConferenceId ? `&conferenceId=${state.activeConferenceId}` : '';
                     const a = document.createElement('a');
-                    a.href = `/api/analytics/reviewers/${reviewerId}/report?includeReviewText=${inc}`;
+                    a.href = `/api/analytics/reviewers/${reviewerId}/report?includeReviewText=${inc}${cid}`;
                     a.download = '';
                     a.rel = 'noopener';
                     a.target = '_blank';
