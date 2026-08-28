@@ -33,8 +33,8 @@ function buildReportFilename(reviewer, fallbackId = 'report') {
     return `${safeName || `Reviewer_${fallbackId}`}_report.pdf`;
 }
 
-async function buildReportData(reviewerId) {
-    const reviewer = await analyticsRepository.getReviewerDetails(reviewerId);
+async function buildReportData(reviewerId, conferenceId = null) {
+    const reviewer = await analyticsRepository.getReviewerDetails(reviewerId, conferenceId);
     if (!reviewer) return null;
     const stats = await analyticsRepository.getReviewerStatsById(reviewerId);
     const biasLabel = scoreNormalization.deriveBiasLabel(
@@ -42,7 +42,23 @@ async function buildReportData(reviewerId) {
         stats.conf_mean,
         stats.total_reviews_completed
     );
-    return { reviewer, stats, biasLabel };
+    // Private notes for this reviewer (participant) and for their assigned papers
+    let notes = [];
+    let paperNotes = {};
+    try {
+        const noteRepo = require('../repositories/noteRepository');
+        notes = await noteRepo.listNotes({ participantId: reviewerId });
+        // Also fetch paper notes for each assigned paper
+        if (reviewer.assignments && reviewer.assignments.length > 0) {
+            for (const a of reviewer.assignments) {
+                const pId = a.paper_id || a.id;
+                if (!pId) continue;
+                const pNotes = await noteRepo.listNotes({ paperId: pId });
+                if (pNotes.length) paperNotes[pId] = pNotes;
+            }
+        }
+    } catch { /* notes are optional */ }
+    return { reviewer, stats, biasLabel, notes, paperNotes };
 }
 
 function buildReportHtml(data, { includeReviewText = false } = {}) {
@@ -69,6 +85,15 @@ function buildReportHtml(data, { includeReviewText = false } = {}) {
         </div>
     `;
 
+    const notes = data.notes || [];
+    const paperNotes = data.paperNotes || {};
+    const notesHtml = notes.length > 0 ? `
+        <h2>Private Notes (${notes.length})</h2>
+        <div class="notes">
+            ${notes.map(n => `<div class="note"><div class="note-text">${escapeHtml(n.text)}</div><div class="note-meta mono">${escapeHtml(new Date(n.created_at).toLocaleString())}</div></div>`).join('')}
+        </div>
+    ` : '';
+
     let papersHtml;
     if (reviewer.assignments && reviewer.assignments.length > 0) {
         const rows = reviewer.assignments.map(a => {
@@ -82,12 +107,15 @@ function buildReportHtml(data, { includeReviewText = false } = {}) {
                     commentsHtml = `<div class="comments">${validComments.map(c => `<div class="comment">💬 "${escapeHtml(c)}"</div>`).join('')}</div>`;
                 }
             }
+            const pNotes = paperNotes[a.paper_id || a.id] || [];
+            const pNotesHtml = pNotes.length ? `<div class="notes-inline">${pNotes.map(n=>`<div class="note-inline">📝 ${escapeHtml(n.text)} <span class="mono" style="font-size:10px;color:#9ca3af;">${escapeHtml(new Date(n.created_at).toLocaleDateString())}</span></div>`).join('')}</div>` : '';
             return `
                 <tr>
                     <td class="mono">#${escapeHtml(a.external_submission_id)}</td>
                     <td>${escapeHtml(a.title)}
                         ${reviewTextHtml}
                         ${commentsHtml}
+                        ${pNotesHtml}
                     </td>
                     <td class="mono">${a.given_score !== null && a.given_score !== undefined ? escapeHtml(a.given_score) : 'PENDING'}</td>
                     <td class="mono">${fmtNum(a.peer_average)}</td>
@@ -172,6 +200,11 @@ function buildReportHtml(data, { includeReviewText = false } = {}) {
         .review-text { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e5e7eb; font-size: 11px; color: #374151; white-space: pre-wrap; }
         .comments { margin-top: 4px; }
         .comment { font-size: 11px; font-style: italic; color: #6b7280; }
+        .note { border-left: 3px solid #3b82f6; padding: 6px 10px; margin: 6px 0; background: #eff6ff; font-size: 11px; }
+        .note-text { white-space: pre-wrap; }
+        .note-meta { font-size: 9px; color: #9ca3af; margin-top: 2px; }
+        .notes-inline { margin-top: 6px; }
+        .note-inline { font-size: 10px; background: #eff6ff; border-left: 2px solid #3b82f6; padding: 3px 6px; margin: 3px 0; }
         .muted { color: #6b7280; font-size: 12px; }
         .footer { margin-top: 32px; font-size: 10px; color: #9ca3af; }
     </style>
@@ -182,6 +215,7 @@ function buildReportHtml(data, { includeReviewText = false } = {}) {
         ${fmt(reviewer.role)}${reviewer.email ? ` · ${escapeHtml(reviewer.email)}` : ''} · Generated ${escapeHtml(generated)}
     </div>
     ${statsHtml}
+    ${notesHtml}
     ${papersHtml}
     ${bidsHtml}
     <div class="footer">Conference Quality Dashboard — Reviewer Report Card</div>

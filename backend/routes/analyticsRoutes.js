@@ -41,6 +41,16 @@ router.delete("/conferences/:id", analyticsController.deleteConference);
 router.get("/alert-rules", analyticsController.getAlertRules);
 router.put("/alert-rules", analyticsController.updateAlertRules);
 
+router.get("/notes", analyticsController.listNotes);
+router.post("/notes", analyticsController.createNote);
+router.put("/notes/:id", analyticsController.updateNote);
+router.delete("/notes/conference/:id", analyticsController.deleteNotesByConference);
+router.delete("/notes/:id", analyticsController.deleteNote);
+router.delete("/notes", analyticsController.deleteNotesByEdition);
+
+router.get("/configuration", analyticsController.getConfiguration);
+router.put("/configuration", analyticsController.updateConfiguration);
+
 const logRateLimiter = new Map();
 router.post("/log", (req, res) => {
     const ip = req.ip || req.connection?.remoteAddress || 'unknown';
