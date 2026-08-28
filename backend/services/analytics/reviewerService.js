@@ -51,8 +51,8 @@ async function getReviewerQuality(options = {}) {
     return enrichReviewerBias(reviewers);
 }
 
-async function getReviewerDetails(id) {
-    return await analyticsRepository.getReviewerDetails(id);
+async function getReviewerDetails(id, conferenceId = null) {
+    return await analyticsRepository.getReviewerDetails(id, conferenceId);
 }
 
 module.exports = { enrichReviewerBias, getReviewerQuality, getReviewerDetails };

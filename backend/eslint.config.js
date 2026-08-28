@@ -28,7 +28,8 @@ const browserGlobals = {
     Blob: "readonly",
     URL: "readonly",
     Element: "readonly",
-    Event: "readonly"
+    Event: "readonly",
+    CustomEvent: "readonly"
 };
 
 module.exports = [

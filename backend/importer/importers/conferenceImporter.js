@@ -43,18 +43,25 @@ async function importConference(meta = {}) {
         // Derive short_name as the part before the year
         shortName = conferenceName.replace(/\s*\d{4}\s*.*/, "").trim() || conferenceName;
     }
-    // Overwrite logic: if a conference with the same short_name + year exists, delete it first
+    // Re-import strategy: find-or-update (never delete) so ConfQual-created data (notes, config) survives
     if (shortName && year) {
         const existing = await client.query(
-            `SELECT id FROM conference WHERE short_name = $1 AND year = $2`,
+            `SELECT * FROM conference WHERE short_name = $1 AND year = $2`,
             [shortName, year]
         );
         if (existing.rows.length > 0) {
-            const idToDelete = existing.rows[0].id;
-            await client.query(`DELETE FROM paper WHERE conference_id = $1`, [idToDelete]);
-            await client.query(`DELETE FROM program_committee_member WHERE conference_id = $1`, [idToDelete]);
-            await client.query(`DELETE FROM conference WHERE id = $1`, [idToDelete]);
-            console.log(`Replaced existing conference: ${shortName} ${year}`);
+            const conf = existing.rows[0];
+            // Update name if provided and different
+            if (conferenceName && conferenceName !== conf.name) {
+                await client.query(`UPDATE conference SET name = $1 WHERE id = $2`, [conferenceName, conf.id]);
+                conf.name = conferenceName;
+            }
+            console.log(`Reusing existing conference: ${shortName} ${year} (id=${conf.id})`);
+            try {
+                const { ensureAlertRulesForConference } = require("../../repositories/analytics/helpers");
+                await ensureAlertRulesForConference(conf.id);
+            } catch (e) { console.warn('Could not seed alert rules:', e.message); }
+            return conf;
         }
     }
 

@@ -308,8 +308,8 @@ async function getTopReviewers(conferenceId = null) {
     return maskNames(result.rows, settings, 'id');
 }
 
-async function getReviewerDetails(reviewerId) {
-    const settings = await getAnonymizationSettings();
+async function getReviewerDetails(reviewerId, conferenceId = null) {
+    const settings = await getAnonymizationSettings(conferenceId);
 
     const query = `
         SELECT pcm.id, pcm.external_person_id, pcm.first_name, pcm.last_name, pcm.role, pcm.email
