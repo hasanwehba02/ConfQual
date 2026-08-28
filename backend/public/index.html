@@ -598,27 +598,56 @@
         </div>
         <div class="drawer-body">
             <form id="settings-form">
-                <div class="form-group mb-4" style="display: flex; align-items: center; justify-content: space-between;">
-                    <label for="isAnonymized" style="font-weight: bold;">Anonymize Data</label>
-                    <input type="checkbox" id="isAnonymized" style="width: 20px; height: 20px;">
-                </div>
-                <div class="form-group mb-4" style="display: flex; align-items: center; justify-content: space-between;">
-                    <label for="decisionEditingEnabled" style="font-weight: bold;">Enable Decision Editing (Chair)</label>
-                    <input type="checkbox" id="decisionEditingEnabled" style="width: 20px; height: 20px;">
+                <div class="settings-card">
+                    <div class="settings-card-header"><i class="ph ph-shield-check"></i> General</div>
+                    <label class="settings-row" data-tip="When enabled, reviewer names, emails and assignment details are replaced with anonymized aliases (e.g. Reviewer_1). Useful for blind review analysis.">
+                        <div><div class="settings-label">Anonymize Data</div><div class="settings-desc">Hide reviewer identities across all views</div></div>
+                        <label class="toggle"><input type="checkbox" id="isAnonymized"><span class="toggle-slider"></span></label>
+                    </label>
+                    <label class="settings-row" data-tip="When enabled, the PC Chair can edit paper decisions (Accept / Reject / Desk Reject) directly in the Paper Explorer table.">
+                        <div><div class="settings-label">Decision Editing</div><div class="settings-desc">Allow PC Chair to edit decisions inline</div></div>
+                        <label class="toggle"><input type="checkbox" id="decisionEditingEnabled"><span class="toggle-slider"></span></label>
+                    </label>
                 </div>
 
-                <details id="alert-thresholds-section" style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-top:16px;">
-                    <summary style="cursor:pointer;font-weight:600;">Alert thresholds (per conference)</summary>
-                    <div id="alert-thresholds-list" style="margin-top:10px;display:flex;flex-direction:column;gap:8px;"></div>
-                    <div class="form-actions mt-4" style="display:flex;gap:8px;">
-                        <button type="button" class="btn btn-outline w-full" id="save-thresholds">Save thresholds</button>
-                        <button type="button" class="btn btn-outline" id="reset-thresholds">Reset to defaults</button>
+                <details id="alert-thresholds-section" class="settings-card">
+                    <summary class="settings-card-header" style="cursor:pointer; list-style:none; display:flex; align-items:center; gap:8px;" data-tip="Tune when ConfQual raises alerts — e.g. high spread, unanimous decisions, low calibration. Changes apply per conference and affect alerts, filters and scorecards."><i class="ph ph-warning-circle"></i> Alert Thresholds <span style="margin-left:auto; font-size:0.7rem; font-weight:400; color:var(--text-muted);">per conference</span></summary>
+                    <div id="alert-thresholds-list" style="margin-top:12px;display:flex;flex-direction:column;gap:8px;"></div>
+                    <div style="display:flex;gap:8px;margin-top:12px;">
+                        <button type="button" class="btn btn-primary" style="flex:1;" id="save-thresholds"><i class="ph ph-floppy-disk"></i> Save thresholds</button>
+                        <button type="button" class="btn btn-outline" id="reset-thresholds">Reset</button>
                     </div>
                 </details>
 
-                <div class="form-actions mt-4">
-                    <button type="submit" class="btn btn-primary w-full" id="submit-settings">SAVE SETTINGS</button>
-                </div>
+                <details id="config-section" class="settings-card">
+                    <summary class="settings-card-header" style="cursor:pointer; list-style:none; display:flex; align-items:center; gap:8px;" data-tip="Default parameters for this Edition — review deadline, score ranges, paper types, etc. Imported from EasyChair where available, editable by the PC Chair. Reusable for future editions."><i class="ph ph-sliders"></i> Configuration <span style="margin-left:auto; font-size:0.7rem; font-weight:400; color:var(--text-muted);">per Edition</span></summary>
+                    <div id="config-list" style="margin-top:12px;display:flex;flex-direction:column;gap:8px;"></div>
+                    <div style="margin-top:12px;">
+                        <button type="button" class="btn btn-primary w-full" id="save-config"><i class="ph ph-floppy-disk"></i> Save configuration</button>
+                    </div>
+                </details>
+
+                <details id="conference-notes-section" class="settings-card">
+                    <summary class="settings-card-header" style="cursor:pointer; list-style:none; display:flex; align-items:center; gap:8px;" data-tip="Private notes attached to this conference series — visible only in ConfQual, survive re-import."><i class="ph ph-note"></i> Conference Notes</summary>
+                    <div id="conference-notes-list" style="margin-top:12px; display:flex; flex-direction:column; gap:6px;" class="text-muted">Loading…</div>
+                    <div style="display:flex;gap:6px;margin-top:8px;">
+                        <input id="conference-note-input" placeholder="Add conference note…" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:var(--radius);">
+                        <button type="button" id="conference-note-add" class="btn btn-outline btn-sm" style="display:flex;align-items:center;gap:0.35rem;"><i class="ph ph-note"></i> Add</button>
+                    </div>
+                    <button type="button" id="delete-all-conference-notes" class="btn btn-outline btn-sm" style="margin-top:8px; color:var(--alert-crimson); font-size:0.7rem;">Delete all conference notes for this edition</button>
+                </details>
+
+                <details id="edition-notes-section" class="settings-card">
+                    <summary class="settings-card-header" style="cursor:pointer; list-style:none; display:flex; align-items:center; gap:8px;" data-tip="Private notes attached to this specific Edition (year) — e.g. edition-specific reminders."><i class="ph ph-calendar"></i> Edition Notes</summary>
+                    <div id="edition-notes-list" style="margin-top:12px; display:flex; flex-direction:column; gap:6px;" class="text-muted">Loading…</div>
+                    <div style="display:flex;gap:6px;margin-top:8px;">
+                        <input id="edition-note-input" placeholder="Add edition note…" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:var(--radius);">
+                        <button type="button" id="edition-note-add" class="btn btn-outline btn-sm" style="display:flex;align-items:center;gap:0.35rem;"><i class="ph ph-note"></i> Add</button>
+                    </div>
+                    <button type="button" id="delete-all-edition-notes" class="btn btn-outline btn-sm" style="margin-top:8px; color:var(--alert-crimson); font-size:0.7rem;">Delete all notes for this edition</button>
+                </details>
+
+                <button type="submit" class="btn btn-primary w-full" id="submit-settings" style="margin-top:16px;"><i class="ph ph-check"></i> Save Settings</button>
             </form>
         </div>
     </aside>

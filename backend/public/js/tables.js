@@ -48,6 +48,17 @@ export async function renderPapersTable(papers) {
     }
     const selectDisabled = settings.decision_editing_enabled ? '' : 'disabled';
 
+    // Nb reviewers threshold from Configuration Information (per Edition)
+    let nbThreshold = 3;
+    try {
+        const qs = state.activeConferenceId ? `?conferenceId=${state.activeConferenceId}` : '';
+        const cfgRes = await fetch(`/api/analytics/configuration${qs}`);
+        if (cfgRes.ok) {
+            const cfg = await cfgRes.json();
+            if (cfg && cfg.nb_reviewers) nbThreshold = parseInt(cfg.nb_reviewers);
+        }
+    } catch (e) { void e; }
+
     // Find max spread to scale sparkline
     let maxSpread = 0;
     dataToRender.forEach(p => {
@@ -66,7 +77,7 @@ export async function renderPapersTable(papers) {
         tr.innerHTML = `
             <td style="font-family: 'Roboto Mono', monospace; display: flex; align-items: center;">
                 ${escapeHtml(p.external_submission_id)}
-                ${p.total_reviews < 3 ? '<span data-tip="Less than 3 reviews — scores may be unreliable" style="cursor: help; margin-left: 6px; font-size: 0.95em;">⚠️</span>' : ''}
+                ${parseInt(p.total_assigned || 0) < nbThreshold ? `<span data-tip="Fewer than ${nbThreshold} assigned reviewers" style="cursor: help; margin-left: 6px; font-size: 0.95em;">⚠️</span>` : ''}
             </td>
             <td data-tip="${escapeHtml(p.title || '')}">${truncateTitle(p.title)}</td>
             <td>

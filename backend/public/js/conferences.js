@@ -52,6 +52,7 @@ window.selectConference = async function(id) {
     state.activeConferenceId = id;
     window.localStorage.setItem(ACTIVE_CONF_STORAGE_KEY, String(id));
     invalidateFilterLabels();
+    window.dispatchEvent(new CustomEvent('conferenceChanged', { detail: { conferenceId: id } }));
     await loadConferences(); // Refresh the top bar label
     // Switch to analytics view
     switchToTab('tab-analytics');

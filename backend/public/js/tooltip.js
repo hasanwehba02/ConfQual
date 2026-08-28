@@ -1,6 +1,6 @@
 // Fast custom tooltip: shows after a short delay on any element with [data-tip].
 // Native title="" tooltips take ~1s to appear; this is near-instant.
-const SHOW_DELAY_MS = 120;
+const SHOW_DELAY_MS = 400;
 
 let tipEl = null;
 let showTimer = null;
