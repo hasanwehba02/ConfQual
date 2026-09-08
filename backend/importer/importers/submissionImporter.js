@@ -2,7 +2,7 @@ const { readWorkbook } = require("../workbookReader");
 const mapPaper = require("../mappers/paperMapper");
 const paperRepository = require("../../repositories/paperRepository");
 
-async function importSubmissions(conference) {
+async function importSubmissions(edition) {
     const workbook = await readWorkbook();
 
     const submissionsSheet = workbook.getWorksheet("Submissions");
@@ -26,9 +26,8 @@ async function importSubmissions(conference) {
     const dtos = [];
     for (let i = 2; i <= submissionsSheet.rowCount; i++) {
         const row = submissionsSheet.getRow(i);
-        const paper = mapPaper(row, conference.id, deletedColIdx);
+        const paper = mapPaper(row, edition.id, deletedColIdx);
 
-        // Skip empty rows
         if (!paper.externalSubmissionId || !paper.title) {
             skipped++;
             continue;
@@ -49,7 +48,7 @@ async function importSubmissions(conference) {
         }
     }
 
-    console.log(`Conference: ${conference.name}`);
+    console.log(`Conference: ${edition.conferenceName || 'Unknown'} ${edition.year}`);
     console.log(`Imported papers: ${imported}`);
     console.log(`Skipped rows: ${skipped}`);
     console.log("Submissions imported successfully.\n");

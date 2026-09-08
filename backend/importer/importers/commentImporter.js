@@ -2,13 +2,13 @@ const { readWorkbook } = require("../workbookReader");
 const mapComment = require("../mappers/commentMapper");
 const commentRepository = require("../../repositories/commentRepository");
 const paperRepository = require("../../repositories/paperRepository");
-const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
+const participantRepository = require("../../repositories/participantRepository");
 
-async function importCommentsForSheet(workbook, sheetName, conference, _isSuperseded = false) {
+async function importCommentsForSheet(workbook, sheetName, edition) {
     const sheet = workbook.getWorksheet(sheetName);
     if (!sheet) return;
-    const paperMap = await paperRepository.getIdMap(conference.id);
-    const pcmMap = await programCommitteeRepository.getIdMap(conference.id);
+    const paperMap = await paperRepository.getIdMap(edition.id);
+    const participantMap = await participantRepository.getParticipantIdMap(edition.id);
     let imported = 0;
     let skipped = 0;
     const dtos = [];
@@ -20,8 +20,8 @@ async function importCommentsForSheet(workbook, sheetName, conference, _isSupers
             continue;
         }
         dto.paperId = paperMap[dto.externalSubmissionId];
-        dto.programCommitteeMemberId = pcmMap[dto.externalPersonId];
-        if (!dto.paperId || !dto.programCommitteeMemberId) {
+        dto.participantId = participantMap[dto.externalPersonId];
+        if (!dto.paperId || !dto.participantId) {
             skipped++;
             continue;
         }
@@ -35,10 +35,10 @@ async function importCommentsForSheet(workbook, sheetName, conference, _isSupers
     console.log(`Imported comments: ${imported}, skipped: ${skipped}`);
 }
 
-async function importComments(conference) {
+async function importComments(edition) {
     const workbook = await readWorkbook();
-    await importCommentsForSheet(workbook, "Comments", conference);
-    console.log("comment imported successfully.\n");
+    await importCommentsForSheet(workbook, "Comments", edition);
+    console.log("Comment imported successfully.\n");
 }
 
 module.exports = importComments;

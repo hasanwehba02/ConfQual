@@ -1,8 +1,8 @@
 const { extractValue } = require('../../utils/excelHelper');
 
-function mapProgramCommitteeMember(row, conferenceId, roleIndex = 8) {
+function mapProgramCommitteeMember(row, editionId, roleIndex = 8) {
     return {
-        conferenceId,
+        editionId,
         externalPersonId: extractValue(row.getCell(2)),
         firstName: extractValue(row.getCell(3)),
         lastName: extractValue(row.getCell(4)),

@@ -3,12 +3,12 @@ const { findWorksheet } = require("../../utils/excelHelper");
 const mapAssignment = require("../mappers/assignmentMapper");
 const assignmentRepository = require("../../repositories/assignmentRepository");
 const paperRepository = require("../../repositories/paperRepository");
-const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
+const participantRepository = require("../../repositories/participantRepository");
 
-async function importAssignmentsForSheet(workbook, sheet, conference, _isSuperseded = false) {
+async function importAssignmentsForSheet(workbook, sheet, edition) {
     if (!sheet) return;
-    const paperMap = await paperRepository.getIdMap(conference.id);
-    const pcmMap = await programCommitteeRepository.getIdMap(conference.id);
+    const paperMap = await paperRepository.getIdMap(edition.id);
+    const participantMap = await participantRepository.getParticipantIdMap(edition.id);
     let imported = 0;
     let skipped = 0;
     const dtos = [];
@@ -20,8 +20,8 @@ async function importAssignmentsForSheet(workbook, sheet, conference, _isSuperse
             continue;
         }
         dto.paperId = paperMap[dto.externalSubmissionId];
-        dto.programCommitteeMemberId = pcmMap[dto.externalPersonId];
-        if (!dto.paperId || !dto.programCommitteeMemberId) {
+        dto.participantId = participantMap[dto.externalPersonId];
+        if (!dto.paperId || !dto.participantId) {
             skipped++;
             continue;
         }
@@ -35,7 +35,7 @@ async function importAssignmentsForSheet(workbook, sheet, conference, _isSuperse
     console.log(`Imported assignments: ${imported}, skipped: ${skipped}`);
 }
 
-async function importAssignments(conference) {
+async function importAssignments(edition) {
     const workbook = await readWorkbook();
     const candidateSheets = [
         "Submission assignment", "Submission assignments", "Submission_assignment",
@@ -43,7 +43,7 @@ async function importAssignments(conference) {
     ];
     const sheet = findWorksheet(workbook, candidateSheets);
     if (sheet) {
-        await importAssignmentsForSheet(workbook, sheet, conference);
+        await importAssignmentsForSheet(workbook, sheet, edition);
         console.log(`Assignments imported successfully from sheet '${sheet.name}'.\n`);
     } else {
         console.log("No assignments sheet found. Skipping.\n");

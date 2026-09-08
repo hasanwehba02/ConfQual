@@ -1,11 +1,11 @@
 const { readWorkbook } = require("../workbookReader");
 const mapAuthor = require("../mappers/authorMapper");
-
-const authorRepository = require("../../repositories/authorRepository");
+const researcherRepository = require("../../repositories/researcherRepository");
+const participantRepository = require("../../repositories/participantRepository");
 const paperRepository = require("../../repositories/paperRepository");
 const paperAuthorRepository = require("../../repositories/paperAuthorRepository");
 
-async function importAuthors(conference) {
+async function importAuthors(edition) {
     const workbook = await readWorkbook();
     const candidateSheets = ["Authors", "authors", "Author", "author", "Authors sheet"];
     const sheetName = candidateSheets.find(name => workbook.getWorksheet(name));
@@ -52,41 +52,71 @@ async function importAuthors(conference) {
         author.authorOrder = authorOrder;
         const corrVal = row.getCell(corrCol).value;
         author.corresponding = corrVal === "✔" || corrVal === "yes" || corrVal === true;
-        
+
         dtos.push(author);
         authorOrder++;
     }
 
-    // Step 1: Bulk insert all authors
     const chunkSize = 200;
-    for (let i = 0; i < dtos.length; i += chunkSize) {
-        const chunk = dtos.slice(i, i + chunkSize);
-        importedAuthors += await authorRepository.bulkCreateAuthors(chunk);
-    }
-    
-    // Step 2: Fetch id maps
-    const paperMap = await paperRepository.getIdMap(conference.id);
-    const authorMap = await authorRepository.getIdMap(conference.id);
-    
-    // Step 3: Map relations and bulk insert paper_authors
-    const relations = [];
+
+    // Step 1: Find or create researchers and participants
+    const paperMap = await paperRepository.getIdMap(edition.id);
+    const participantMap = {}; // externalPersonId -> participantId
+
     for (const dto of dtos) {
-        const paperId = paperMap[dto.externalSubmissionId];
-        const authorId = authorMap[dto.externalPersonId];
-        
-        if (!paperId || !authorId) {
+        if (!dto.externalPersonId) {
             skipped++;
             continue;
         }
-        
+
+        try {
+            // Find or create researcher
+            const researcher = await researcherRepository.findOrCreateResearcher({
+                firstName: dto.firstName,
+                lastName: dto.lastName,
+                email: dto.email,
+                country: dto.country,
+                affiliation: dto.affiliation,
+                webPage: dto.webPage
+            });
+
+            // Find or create participant
+            const participant = await participantRepository.findOrCreateParticipant({
+                researcherId: researcher.id,
+                editionId: edition.id,
+                externalPersonId: dto.externalPersonId
+            });
+
+            // Create author role if not exists
+            await participantRepository.createAuthorParticipant(participant.id);
+
+            participantMap[dto.externalPersonId] = participant.id;
+            importedAuthors++;
+        } catch (err) {
+            console.error(`Error importing author: ${err.message}`);
+            skipped++;
+        }
+    }
+
+    // Step 2: Map relations and bulk insert paper_authors
+    const relations = [];
+    for (const dto of dtos) {
+        const paperId = paperMap[dto.externalSubmissionId];
+        const participantId = participantMap[dto.externalPersonId];
+
+        if (!paperId || !participantId) {
+            skipped++;
+            continue;
+        }
+
         relations.push({
             paperId,
-            authorId,
+            participantId,
             authorOrder: dto.authorOrder,
             corresponding: dto.corresponding
         });
     }
-    
+
     for (let i = 0; i < relations.length; i += chunkSize) {
         const chunk = relations.slice(i, i + chunkSize);
         importedRelationships += await paperAuthorRepository.bulkCreatePaperAuthors(chunk);

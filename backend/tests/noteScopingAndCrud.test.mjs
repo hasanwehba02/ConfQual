@@ -8,8 +8,17 @@ describe('Note Scoping and CRUD Repository Tests', () => {
     let editionA2025, editionA2026, editionB2025;
     let researcherId;
     let participantA2025, participantA2026;
+    let dbAvailable = false;
 
     before(async () => {
+        try {
+            const check = await db.query('SELECT 1');
+            dbAvailable = !!check;
+        } catch {
+            dbAvailable = false;
+            return;
+        }
+
         // Setup isolated test conference series and editions
         const csA = await db.query(
             "INSERT INTO conference_series (name, acronym) VALUES ('Test Conf A ' || random(), 'TCA') RETURNING id"
@@ -45,19 +54,20 @@ describe('Note Scoping and CRUD Repository Tests', () => {
         researcherId = res.rows[0].id;
 
         const pA1 = await db.query(
-            "INSERT INTO participant_new (researcher_id, edition_id) VALUES ($1, $2) RETURNING id",
+            "INSERT INTO participant (researcher_id, edition_id) VALUES ($1, $2) RETURNING id",
             [researcherId, editionA2025]
         );
         participantA2025 = pA1.rows[0].id;
 
         const pA2 = await db.query(
-            "INSERT INTO participant_new (researcher_id, edition_id) VALUES ($1, $2) RETURNING id",
+            "INSERT INTO participant (researcher_id, edition_id) VALUES ($1, $2) RETURNING id",
             [researcherId, editionA2026]
         );
         participantA2026 = pA2.rows[0].id;
     });
 
     after(async () => {
+        if (!dbAvailable) return;
         try {
             const editionIds = [editionA2025, editionA2026, editionB2025].filter(Boolean);
             if (editionIds.length > 0) {
@@ -75,7 +85,11 @@ describe('Note Scoping and CRUD Repository Tests', () => {
         }
     });
 
-    test('Conference series notes are scoped to the specific conference series', async () => {
+    test('Conference series notes are scoped to the specific conference series', async (t) => {
+        if (!dbAvailable) {
+            t.skip('Database unavailable in this environment');
+            return;
+        }
         const noteA = await noteRepo.createNote({
             text: 'Conference series note for A',
             authorParticipantId: participantA2025,
@@ -92,7 +106,11 @@ describe('Note Scoping and CRUD Repository Tests', () => {
         assert.ok(!notesB.some(n => n.id === noteA.id), 'Note should not be found for Series B');
     });
 
-    test('Edition notes are scoped to the specific edition', async () => {
+    test('Edition notes are scoped to the specific edition', async (t) => {
+        if (!dbAvailable) {
+            t.skip('Database unavailable in this environment');
+            return;
+        }
         const noteEd2025 = await noteRepo.createNote({
             text: 'Edition 2025 note for A',
             authorParticipantId: participantA2025,
@@ -112,7 +130,11 @@ describe('Note Scoping and CRUD Repository Tests', () => {
         assert.ok(!notesB2025.some(n => n.id === noteEd2025.id), 'Note should not be found for Edition B 2025');
     });
 
-    test('Updating a note modifies the text correctly', async () => {
+    test('Updating a note modifies the text correctly', async (t) => {
+        if (!dbAvailable) {
+            t.skip('Database unavailable in this environment');
+            return;
+        }
         const note = await noteRepo.createNote({
             text: 'Original Text Before Update',
             authorParticipantId: participantA2025,
@@ -129,7 +151,11 @@ describe('Note Scoping and CRUD Repository Tests', () => {
         assert.equal(found.text, 'Updated Text After Edit');
     });
 
-    test('Deleting a note removes it from the database', async () => {
+    test('Deleting a note removes it from the database', async (t) => {
+        if (!dbAvailable) {
+            t.skip('Database unavailable in this environment');
+            return;
+        }
         const note = await noteRepo.createNote({
             text: 'Text To Delete',
             authorParticipantId: participantA2025,
@@ -142,7 +168,11 @@ describe('Note Scoping and CRUD Repository Tests', () => {
         assert.ok(!listed.some(n => n.id === note.id), 'Deleted note should not be returned');
     });
 
-    test('Deleting notes by edition removes all notes for that edition', async () => {
+    test('Deleting notes by edition removes all notes for that edition', async (t) => {
+        if (!dbAvailable) {
+            t.skip('Database unavailable in this environment');
+            return;
+        }
         const note1 = await noteRepo.createNote({
             text: 'Edition 2026 Note 1',
             authorParticipantId: participantA2026,

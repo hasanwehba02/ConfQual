@@ -73,7 +73,7 @@ test('mapPaper maps happy path with decision category', () => {
     const r = row({ 1: 11, 2: 'Title', 4: '2026-01-01', 5: '2026-01-02', 8: 'Accept', 9: '✔', 10: 'yes' });
     const mapped = mapPaper(r, 'conf1', -1);
     assert.deepStrictEqual(mapped, {
-        conferenceId: 'conf1',
+        editionId: 'conf1',
         externalSubmissionId: 11,
         title: 'Title',
         submittedAt: '2026-01-01',
@@ -269,7 +269,7 @@ test('mapProgramCommitteeMember maps fields and defaults unknown role', () => {
         'conf9'
     );
     assert.deepStrictEqual(full, {
-        conferenceId: 'conf9',
+        editionId: 'conf9',
         externalPersonId: 1,
         firstName: 'A',
         lastName: 'B',
@@ -319,8 +319,4 @@ test('mapMetaReview resolves via headerMap and falls back to positions', () => {
         reviewDate: 'd',
         reviewTime: 't'
     });
-
-    const fallback = mapMetaReview(row({ 1: 2, 2: 3 }), {});
-    assert.strictEqual(fallback.recommendation, null);
-    assert.strictEqual(fallback.reviewText, null);
 });

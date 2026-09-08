@@ -152,7 +152,7 @@ const updateConference = asyncHandler(async (req, res) => {
     res.json(await conferenceRepository.updateConference(req.params.id, req.body));
 });
 
-const { getAlertRules: fetchRules, ensureAlertRulesForConference, assertSafeNumber } = require("../repositories/analytics/helpers");
+const { getAlertRules: fetchRules, ensureAlertRulesForEdition, assertSafeNumber } = require("../repositories/analytics/helpers");
 const alertDefaults = require("../config/alertRuleDefaults");
 const db = require("../config/database");
 
@@ -166,19 +166,19 @@ const getAlertRules = asyncHandler(async (req, res) => {
 });
 
 const updateAlertRules = asyncHandler(async (req, res) => {
-    const cid = parseInt(req.query.conferenceId || req.body.conferenceId);
-    if (!cid) throw new ValidationError('conferenceId required');
+    const eid = parseInt(req.query.editionId || req.body.editionId || req.query.conferenceId || req.body.conferenceId);
+    if (!eid) throw new ValidationError('editionId required');
     const items = req.body.rules || req.body;
     if (!Array.isArray(items)) throw new ValidationError('rules array required');
-    await ensureAlertRulesForConference(cid);
+    await ensureAlertRulesForEdition(eid);
     await db.withTransaction(async (client) => {
         for (const r of items) {
             if (!alertDefaults[r.key]) throw new ValidationError(`Unknown rule: ${r.key}`);
             const v = assertSafeNumber(r.value, r.key);
             const enabled = r.enabled !== undefined ? !!r.enabled : true;
             await client.query(
-                'INSERT INTO alert_rule (conference_id, rule_key, threshold_value, is_enabled) VALUES ($1,$2,$3,$4) ON CONFLICT (conference_id, rule_key) DO UPDATE SET threshold_value = EXCLUDED.threshold_value, is_enabled = EXCLUDED.is_enabled',
-                [cid, r.key, v, enabled]
+                'INSERT INTO alert_rule (edition_id, rule_key, threshold_value, is_enabled) VALUES ($1,$2,$3,$4) ON CONFLICT (edition_id, rule_key) DO UPDATE SET threshold_value = EXCLUDED.threshold_value, is_enabled = EXCLUDED.is_enabled',
+                [eid, r.key, v, enabled]
             );
         }
     });
@@ -259,13 +259,13 @@ const createNote = asyncHandler(async (req, res) => {
     let authorId = authorParticipantId ? parseInt(authorParticipantId, 10) : null;
     if (!authorId && edition) {
         const participant = await db.query(
-            'SELECT id FROM participant_new WHERE edition_id = $1 LIMIT 1',
+            'SELECT id FROM participant WHERE edition_id = $1 LIMIT 1',
             [parseInt(edition, 10)]
         );
         authorId = participant.rows[0]?.id || null;
     }
     if (!authorId) {
-        const participantAny = await db.query('SELECT id FROM participant_new LIMIT 1');
+        const participantAny = await db.query('SELECT id FROM participant LIMIT 1');
         authorId = participantAny.rows[0]?.id || 1;
     }
 

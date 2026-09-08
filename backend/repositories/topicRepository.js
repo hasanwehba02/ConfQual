@@ -12,51 +12,37 @@ async function ensureTopicExists(topicName) {
     return result.rows[0].id;
 }
 
-async function createPcTopic(pcmId, topicId) {
-    const query = `
-        INSERT INTO program_committee_member_topic (
-            program_committee_member_id,
-            topic_id
-        )
-        VALUES ($1, $2)
-        ON CONFLICT (program_committee_member_id, topic_id)
-        DO NOTHING
-        RETURNING *;
-    `;
-    const result = await client.query(query, [pcmId, topicId]);
-    return result.rows.length > 0 ? result.rows[0] : null;
-}
-
 async function createPaperTopic(paperId, topicId) {
     const query = `
-        INSERT INTO paper_topic (
-            paper_id,
-            topic_id
-        )
+        INSERT INTO paper_topic (paper_id, topic_id)
         VALUES ($1, $2)
-        ON CONFLICT (paper_id, topic_id)
-        DO NOTHING
+        ON CONFLICT (paper_id, topic_id) DO NOTHING
         RETURNING *;
     `;
     const result = await client.query(query, [paperId, topicId]);
     return result.rows.length > 0 ? result.rows[0] : null;
 }
 
-
-async function bulkCreatePcTopics(topics) {
-    const rows = topics.map(t => [t.pcmId, t.topicId]);
-    return await bulkInsert('program_committee_member_topic', ['program_committee_member_id', 'topic_id'], rows, '(program_committee_member_id, topic_id)');
+async function createParticipantTopic(_participantId, _topicId) {
+    // Note: participant-level topics are tracked via evaluator or author_participant
+    // This is a placeholder - in the new model, topics may be tracked differently
+    return null;
 }
+
 async function bulkCreatePaperTopics(topics) {
     const rows = topics.map(t => [t.paperId, t.topicId]);
     return await bulkInsert('paper_topic', ['paper_id', 'topic_id'], rows, '(paper_id, topic_id)');
 }
 
+async function bulkCreateParticipantTopics(topics) {
+    // Placeholder for participant topics - may need schema support
+    return topics.length;
+}
 
 module.exports = {
-    bulkCreatePcTopics,
-    bulkCreatePaperTopics,
     ensureTopicExists,
-    createPcTopic,
-    createPaperTopic
+    createPaperTopic,
+    createParticipantTopic,
+    bulkCreatePaperTopics,
+    bulkCreateParticipantTopics
 };

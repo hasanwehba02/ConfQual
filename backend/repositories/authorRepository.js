@@ -1,70 +1,63 @@
 const client = require("../config/database");
-const bulkInsert = require("../utils/bulkInsert");
+const researcherRepository = require("./researcherRepository");
 
 async function createAuthor(author) {
-    const query = `
-        INSERT INTO author (
-            external_person_id,
-            first_name,
-            last_name,
-            email,
-            affiliation,
-            country,
-            web_page
-        )
-        VALUES ($1,$2,$3,$4,$5,$6,$7)
-        RETURNING *;
-    `;
-
-    const values = [
-        author.externalPersonId,
-        author.firstName,
-        author.lastName,
-        author.email,
-        author.affiliation,
-        author.country,
-        author.webPage || null
-    ];
-
-    const result = await client.query(query, values);
-
-    if (result.rows.length === 0) {
+    try {
+        const researcher = await researcherRepository.findOrCreateResearcher({
+            firstName: author.firstName,
+            lastName: author.lastName,
+            email: author.email,
+            country: author.country,
+            affiliation: author.affiliation,
+            webPage: author.webPage
+        });
+        return researcher;
+    } catch (err) {
+        console.error('Error creating author:', err);
         return null;
     }
-
-    return result.rows[0];
 }
 
 async function findByExternalPersonId(externalPersonId) {
     const result = await client.query(
-        `
-        SELECT *
-        FROM author
-        WHERE external_person_id = $1;
-        `,
+        `SELECT r.* FROM researcher r
+         JOIN participant pt ON pt.researcher_id = r.id
+         WHERE pt.external_person_id = $1
+         LIMIT 1`,
         [externalPersonId]
     );
-
     return result.rows[0];
 }
 
-// getIdMap: returns {externalPersonId -> authorId}
-async function getIdMap(_conferenceId) {
-    const query = `
-        SELECT external_person_id, id
-        FROM author
-    `;
+async function getIdMap(_editionId) {
+    // This is a compatibility shim - in the new model, author IDs are researcher IDs
+    const query = `SELECT id, id as researcher_id FROM researcher`;
     const result = await client.query(query);
     const map = {};
     for (const row of result.rows) {
-        map[row.external_person_id] = row.id;
+        map[row.researcher_id] = row.id;
     }
     return map;
 }
 
 async function bulkCreateAuthors(authors) {
-    const rows = authors.map(a => [a.externalPersonId, a.firstName, a.lastName, a.email, a.country, a.affiliation, a.webPage || null]);
-    return await bulkInsert('author', ['external_person_id', 'first_name', 'last_name', 'email', 'country', 'affiliation', 'web_page'], rows, null);
+    let count = 0;
+    for (const a of authors) {
+        try {
+            await researcherRepository.findOrCreateResearcher({
+                firstName: a.firstName,
+                lastName: a.lastName,
+                email: a.email,
+                country: a.country,
+                affiliation: a.affiliation,
+                webPage: a.webPage
+            });
+            count++;
+        } catch (err) {
+            console.error('Error bulk creating author:', err);
+        }
+    }
+    return count;
 }
 
 module.exports = {

@@ -3,12 +3,12 @@ const { findWorksheet } = require("../../utils/excelHelper");
 const mapConflict = require("../mappers/conflictMapper");
 const conflictRepository = require("../../repositories/conflictRepository");
 const paperRepository = require("../../repositories/paperRepository");
-const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
+const participantRepository = require("../../repositories/participantRepository");
 
-async function importConflictsForSheet(workbook, sheet, conference, _isSuperseded = false) {
+async function importConflictsForSheet(workbook, sheet, edition) {
     if (!sheet) return;
-    const paperMap = await paperRepository.getIdMap(conference.id);
-    const pcmMap = await programCommitteeRepository.getIdMap(conference.id);
+    const paperMap = await paperRepository.getIdMap(edition.id);
+    const participantMap = await participantRepository.getParticipantIdMap(edition.id);
     const headerMap = {};
     sheet.getRow(1).eachCell((cell, colNumber) => {
         if (cell.value) {
@@ -27,8 +27,8 @@ async function importConflictsForSheet(workbook, sheet, conference, _isSupersede
             continue;
         }
         dto.paperId = paperMap[dto.externalSubmissionId];
-        dto.programCommitteeMemberId = pcmMap[dto.externalPersonId];
-        if (!dto.paperId || !dto.programCommitteeMemberId) {
+        dto.participantId = participantMap[dto.externalPersonId];
+        if (!dto.paperId || !dto.participantId) {
             skipped++;
             continue;
         }
@@ -43,7 +43,7 @@ async function importConflictsForSheet(workbook, sheet, conference, _isSupersede
     console.log(`Skipped conflict rows: ${skipped}`);
 }
 
-async function importConflicts(conference) {
+async function importConflicts(edition) {
     const workbook = await readWorkbook();
     const candidateSheets = [
         "Conflicts of interest", "Conflicts of interests", "Conflicts_of_interest",
@@ -51,7 +51,7 @@ async function importConflicts(conference) {
     ];
     const sheet = findWorksheet(workbook, candidateSheets);
     if (sheet) {
-        await importConflictsForSheet(workbook, sheet, conference);
+        await importConflictsForSheet(workbook, sheet, edition);
         console.log(`Conflicts imported successfully from sheet '${sheet.name}'.\n`);
     } else {
         console.log("No conflicts sheet found. Skipping.\n");

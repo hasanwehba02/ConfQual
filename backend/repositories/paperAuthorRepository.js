@@ -1,44 +1,20 @@
 const client = require("../config/database");
 const bulkInsert = require("../utils/bulkInsert");
 
-async function createPaperAuthor(paperId, authorId, authorOrder, isCorresponding) {
+async function createPaperAuthor(paperId, participantId, authorOrder, isCorresponding) {
     const query = `
-        INSERT INTO paper_author (
-            paper_id,
-            author_id,
-            author_order,
-            is_corresponding
-        )
+        INSERT INTO paper_author_new (paper_id, participant_id, author_order, is_corresponding)
         VALUES ($1,$2,$3,$4)
-        ON CONFLICT (paper_id, author_id)
-        DO NOTHING
+        ON CONFLICT (paper_id, participant_id) DO NOTHING
         RETURNING *;
     `;
-
-    const values = [
-        paperId,
-        authorId,
-        authorOrder,
-        isCorresponding
-    ];
-
-    const result = await client.query(query, values);
-
-    if (result.rows.length === 0) {
-        return null;
-    }
-
-    return result.rows[0];
+    const result = await client.query(query, [paperId, participantId, authorOrder, isCorresponding]);
+    return result.rows.length === 0 ? null : result.rows[0];
 }
-
 
 async function bulkCreatePaperAuthors(paperAuthors) {
-    const rows = paperAuthors.map(pa => [pa.paperId, pa.authorId, pa.authorOrder, pa.corresponding]);
-    return await bulkInsert('paper_author', ['paper_id', 'author_id', 'author_order', 'is_corresponding'], rows, '(paper_id, author_id)');
+    const rows = paperAuthors.map(pa => [pa.paperId, pa.participantId, pa.authorOrder, pa.corresponding]);
+    return await bulkInsert('paper_author_new', ['paper_id', 'participant_id', 'author_order', 'is_corresponding'], rows, '(paper_id, participant_id)');
 }
 
-
-module.exports = {
-    bulkCreatePaperAuthors,
-    createPaperAuthor
-};
+module.exports = { bulkCreatePaperAuthors, createPaperAuthor };

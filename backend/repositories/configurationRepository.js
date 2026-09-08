@@ -1,12 +1,9 @@
 const db = require('../config/database');
 
-async function getEditionId(conferenceId) {
-    if (!conferenceId) return null;
-    // conferenceId may be old conference.id or new edition.id; try both
-    const byEdition = await db.query('SELECT id FROM edition WHERE id=$1', [conferenceId]);
-    if (byEdition.rows.length) return conferenceId;
-    const byConf = await db.query('SELECT e.id FROM edition e JOIN conference c ON c.name=(SELECT name FROM conference_series WHERE id=e.conference_id) AND c.year=e.year WHERE c.id=$1', [conferenceId]);
-    if (byConf.rows.length) return byConf.rows[0].id;
+async function getEditionId(editionId) {
+    if (!editionId) return null;
+    const byEdition = await db.query('SELECT id FROM edition WHERE id=$1', [editionId]);
+    if (byEdition.rows.length) return editionId;
     // fallback: most recent edition
     const fallback = await db.query('SELECT id FROM edition ORDER BY id DESC LIMIT 1');
     return fallback.rows[0]?.id || null;

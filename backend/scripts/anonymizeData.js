@@ -4,45 +4,50 @@ async function anonymizeData() {
     try {
         console.log("Starting data anonymization...");
 
-        // 1. Drop author tables if they still exist
-        try {
-            await pool.query("DROP TABLE IF EXISTS paper_author CASCADE;");
-            await pool.query("DROP TABLE IF EXISTS author CASCADE;");
-            console.log("- Author tables dropped.");
-        } catch (err) {
-            console.log("- Author tables drop error:", err.message);
-        }
+        // 1. Anonymize Researchers
+        const researcherResult = await pool.query("SELECT id FROM researcher");
+        let researcherCount = 0;
 
-        // 2. Anonymize Program Committee Members
-        const pcQuery = "SELECT id FROM program_committee_member";
-        const pcResult = await pool.query(pcQuery);
-        
-        let pcCount = 0;
-        for (const row of pcResult.rows) {
-            const newFirstName = `Reviewer_${row.id}`;
-            const newLastName = ``;
-            const newEmail = `reviewer_${row.id}@example.com`;
-            
+        for (const row of researcherResult.rows) {
+            const newFirstName = `Researcher_${row.id}`;
+            const newLastName = "";
+            const newEmail = `researcher_${row.id}@example.com`;
+            const anonName = `Researcher_${row.id}`;
+
             await pool.query(
-                "UPDATE program_committee_member SET first_name = $1, last_name = $2, email = $3 WHERE id = $4",
+                "UPDATE researcher SET first_name = $1, last_name = $2, email = $3, web_page = NULL WHERE id = $4",
                 [newFirstName, newLastName, newEmail, row.id]
             );
-            pcCount++;
-        }
-        console.log(`- Anonymized ${pcCount} PC Members.`);
 
-        // 3. Anonymize Sub-Reviewers in Review table
-        const reviewQuery = "SELECT id FROM review WHERE sub_reviewer_person_id IS NOT NULL";
-        const reviewResult = await pool.query(reviewQuery);
-        
+            await pool.query(
+                `INSERT INTO anonymised_researcher (researcher_id, anon_name)
+                 VALUES ($1, $2)
+                 ON CONFLICT (researcher_id)
+                 DO UPDATE SET anon_name = EXCLUDED.anon_name`,
+                [row.id, anonName]
+            );
+
+            researcherCount++;
+        }
+        console.log(`- Anonymized ${researcherCount} Researchers.`);
+
+        // 2. Anonymize Sub-Reviewers in Review table
+        const reviewResult = await pool.query(
+            "SELECT id FROM review WHERE sub_reviewer_person_id IS NOT NULL OR sub_reviewer_first_name IS NOT NULL"
+        );
         let subRevCount = 0;
+
         for (const row of reviewResult.rows) {
             const newFirstName = `SubRev_${row.id}`;
-            const newLastName = ``;
+            const newLastName = "";
             const newEmail = `subrev_${row.id}@example.com`;
-            
+
             await pool.query(
-                "UPDATE review SET sub_reviewer_first_name = $1, sub_reviewer_last_name = $2, sub_reviewer_email = $3 WHERE id = $4",
+                `UPDATE review
+                 SET sub_reviewer_first_name = $1,
+                     sub_reviewer_last_name = $2,
+                     sub_reviewer_email = $3
+                 WHERE id = $4`,
                 [newFirstName, newLastName, newEmail, row.id]
             );
             subRevCount++;
@@ -50,11 +55,20 @@ async function anonymizeData() {
         console.log(`- Anonymized ${subRevCount} Sub-reviewers in reviews.`);
 
         console.log("Data anonymization complete!");
-        process.exit(0);
+        if (require.main === module) {
+            process.exit(0);
+        }
     } catch (err) {
         console.error("Error during data anonymization:", err);
-        process.exit(1);
+        if (require.main === module) {
+            process.exit(1);
+        }
+        throw err;
     }
 }
 
-anonymizeData();
+if (require.main === module) {
+    anonymizeData();
+}
+
+module.exports = anonymizeData;

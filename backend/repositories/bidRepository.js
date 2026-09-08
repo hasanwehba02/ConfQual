@@ -3,40 +3,18 @@ const bulkInsert = require("../utils/bulkInsert");
 
 async function createBid(bidData) {
     const query = `
-        INSERT INTO bid (
-            paper_id,
-            program_committee_member_id,
-            bid
-        )
-        VALUES ($1, $2, $3)
-        ON CONFLICT (paper_id, program_committee_member_id)
-        DO NOTHING
+        INSERT INTO bid (paper_id, participant_id, bid)
+        VALUES ($1,$2,$3)
+        ON CONFLICT (paper_id, participant_id) DO NOTHING
         RETURNING *;
     `;
-
-    const values = [
-        bidData.paperId,
-        bidData.programCommitteeMemberId,
-        bidData.bid
-    ];
-
-    const result = await client.query(query, values);
-
-    if (result.rows.length === 0) {
-        return null;
-    }
-
-    return result.rows[0];
+    const result = await client.query(query, [bidData.paperId, bidData.participantId, bidData.bid]);
+    return result.rows.length === 0 ? null : result.rows[0];
 }
-
 
 async function bulkCreateBids(bids) {
-    const rows = bids.map(b => [b.paperId, b.programCommitteeMemberId, b.bid]);
-    return await bulkInsert('bid', ['paper_id', 'program_committee_member_id', 'bid'], rows, '(paper_id, program_committee_member_id)');
+    const rows = bids.map(b => [b.paperId, b.participantId, b.bid]);
+    return await bulkInsert('bid', ['paper_id', 'participant_id', 'bid'], rows, '(paper_id, participant_id)');
 }
 
-
-module.exports = {
-    bulkCreateBids,
-    createBid
-};
+module.exports = { bulkCreateBids, createBid };

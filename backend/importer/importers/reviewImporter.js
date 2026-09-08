@@ -2,17 +2,18 @@ const { readWorkbook } = require("../workbookReader");
 const mapReview = require("../mappers/reviewMapper");
 const reviewRepository = require("../../repositories/reviewRepository");
 const paperRepository = require("../../repositories/paperRepository");
-const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
+const participantRepository = require("../../repositories/participantRepository");
 const analyticsMath = require("../../utils/analyticsMath");
 
-async function importReviewsForSheet(workbook, sheetName, conference, isSuperseded = false) {
+async function importReviewsForSheet(workbook, sheetName, edition, isSuperseded = false) {
     const sheet = workbook.getWorksheet(sheetName);
     if (!sheet) return;
-    const paperMap = await paperRepository.getIdMap(conference.id);
-    const pcmMap = await programCommitteeRepository.getIdMap(conference.id);
+    const paperMap = await paperRepository.getIdMap(edition.id);
+    const participantMap = await participantRepository.getParticipantIdMap(edition.id);
     let imported = 0;
     let skipped = 0;
     const dtos = [];
+
     for (let i = 2; i <= sheet.rowCount; i++) {
         const row = sheet.getRow(i);
         const dto = mapReview(row);
@@ -21,27 +22,34 @@ async function importReviewsForSheet(workbook, sheetName, conference, isSupersed
             continue;
         }
         dto.paperId = paperMap[dto.externalSubmissionId];
-        dto.programCommitteeMemberId = pcmMap[dto.externalPersonId];
-        if (!dto.paperId || !dto.programCommitteeMemberId) {
+        dto.participantId = participantMap[dto.externalPersonId];
+        if (!dto.paperId || !dto.participantId) {
             skipped++;
             continue;
         }
-        
-        // Add sub-reviewer to program committee if they don't exist
-        if (dto.subReviewerPersonId && !pcmMap[dto.subReviewerPersonId]) {
-            const member = {
-                conferenceId: conference.id,
-                externalPersonId: dto.subReviewerPersonId,
-                firstName: dto.subReviewerFirstName || '',
-                lastName: dto.subReviewerLastName || '',
-                email: dto.subReviewerEmail || '',
-                affiliation: '',
-                country: '',
-                role: 'Sub-reviewer'
-            };
-            const savedMember = await programCommitteeRepository.createProgramCommitteeMember(member);
-            if (savedMember) {
-                pcmMap[dto.subReviewerPersonId] = savedMember.id;
+
+        // Add sub-reviewer if they don't exist as a participant
+        if (dto.subReviewerPersonId && !participantMap[dto.subReviewerPersonId]) {
+            try {
+                const researcher = await require("../../repositories/researcherRepository").findOrCreateResearcher({
+                    firstName: dto.subReviewerFirstName || '',
+                    lastName: dto.subReviewerLastName || '',
+                    email: dto.subReviewerEmail || '',
+                    affiliation: '',
+                    country: ''
+                });
+
+                const participant = await participantRepository.findOrCreateParticipant({
+                    researcherId: researcher.id,
+                    editionId: edition.id,
+                    externalPersonId: dto.subReviewerPersonId
+                });
+
+                if (participant) {
+                    participantMap[dto.subReviewerPersonId] = participant.id;
+                }
+            } catch (err) {
+                console.warn(`Could not create sub-reviewer participant: ${err.message}`);
             }
         }
 
@@ -66,11 +74,11 @@ async function importReviewsForSheet(workbook, sheetName, conference, isSupersed
     console.log(`Imported reviews: ${imported}, skipped: ${skipped}`);
 }
 
-async function importReviews(conference) {
+async function importReviews(edition) {
     const workbook = await readWorkbook();
-    await importReviewsForSheet(workbook, "Reviews", conference, false);
-    await importReviewsForSheet(workbook, "Superseded reviews", conference, true);
-    console.log("review imported successfully.\n");
+    await importReviewsForSheet(workbook, "Reviews", edition, false);
+    await importReviewsForSheet(workbook, "Superseded reviews", edition, true);
+    console.log("Review imported successfully.\n");
 }
 
 module.exports = importReviews;

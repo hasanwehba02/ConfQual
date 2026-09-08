@@ -12,3 +12,6 @@ docs/
 .cache/
 backend/.cache/
 .zed/
+
+# kickbacks extension bundle (not part of the project)
+kickbacks-v2.vsix

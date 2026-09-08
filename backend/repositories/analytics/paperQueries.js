@@ -1,186 +1,349 @@
 const client = require("../../config/database");
-const { normalizeDecision } = require("../../utils/decisionHelper");
-const { resolveConferenceId, getAnonymizationSettings, maskNames, buildOrderBy, getFilterModes } = require("./helpers");
+const { resolveEditionId, getAnonymizationSettings, maskNames } = require("./helpers");
 
-async function getSubmissions(options = {}) {
-    const cid = await resolveConferenceId(options.conferenceId);
-    const settings = await getAnonymizationSettings(cid);
+async function getPapersList(filters = {}, editionId = null) {
+    const eid = await resolveEditionId(editionId || filters);
+    const {
+        page = 1,
+        limit = 50,
+        decision,
+        hasConflict,
+        sortBy = 'p.external_submission_id',
+        sortOrder = 'ASC'
+    } = filters;
 
-    const values = [cid];
-    let paramIdx = 2;
+    const offset = (page - 1) * limit;
+    const values = [eid];
+    let paramIndex = 2;
 
-    let filterClause = '';
-    const subModes = getFilterModes(options);
-    if (subModes.includes('high_score')) {
-        filterClause += ' AND r.total_score >= 2';
+    let whereClause = `WHERE p.is_deleted = false AND p.edition_id = $1`;
+
+    if (decision) {
+        whereClause += ` AND p.decision_category = $${paramIndex}`;
+        values.push(decision);
+        paramIndex++;
     }
-    if (subModes.includes('low_score')) {
-        filterClause += ' AND r.total_score <= -2';
+
+    if (hasConflict === 'true') {
+        whereClause += ` AND EXISTS (SELECT 1 FROM conflict c WHERE c.paper_id = p.id)`;
+    } else if (hasConflict === 'false') {
+        whereClause += ` AND NOT EXISTS (SELECT 1 FROM conflict c WHERE c.paper_id = p.id)`;
     }
 
-    const { clause: orderClause } = buildOrderBy(options.sortBy, options.sortOrder, 'r.review_date DESC NULLS LAST, r.review_time DESC NULLS LAST');
+    // Dynamic sorting
+    const allowedSortColumns = {
+        'id': 'p.id',
+        'external_submission_id': 'p.external_submission_id',
+        'title': 'p.title',
+        'decision': 'p.decision_category',
+        'avg_score': 'avg_score',
+        'review_count': 'review_count'
+    };
 
-    const limitVal = parseInt(options.limit) || 'ALL';
-    const offsetVal = parseInt(options.offset) || 0;
-    let limitClause;
-    if (limitVal === 'ALL') {
-        limitClause = 'LIMIT ALL';
-    } else {
-        limitClause = `LIMIT $${paramIdx}`;
-        values.push(limitVal);
-        paramIdx++;
-    }
-    const offsetClause = `OFFSET $${paramIdx}`;
-    values.push(offsetVal);
+    const sortCol = allowedSortColumns[sortBy] || 'p.external_submission_id';
+    const sortDir = sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
 
-    const query = `
-        SELECT 
-            COUNT(*) OVER() as full_count,
+    // Count query
+    const countQuery = `
+        SELECT COUNT(*) as total
+        FROM paper p
+        ${whereClause}
+    `;
+
+    // Data query with aggregated reviews and authors
+    const dataQuery = `
+        SELECT
             p.id,
             p.external_submission_id,
             p.title,
-            pcm.id as reviewer_id,
-            pcm.first_name,
-            pcm.last_name,
-            r.total_score,
-            r.review_date,
-            r.review_time,
-            r.is_superseded
-        FROM review r
-        JOIN paper p ON r.paper_id = p.id
-        JOIN program_committee_member pcm ON r.program_committee_member_id = pcm.id
-        WHERE p.is_deleted = false AND p.conference_id = $1
-        ${filterClause}
-        ${orderClause}
-        ${limitClause} ${offsetClause}
+            p.decision_category as decision,
+            COUNT(DISTINCT r.id) as review_count,
+            ROUND(AVG(r.total_score), 2) as avg_score,
+            (SELECT COUNT(*) FROM conflict c WHERE c.paper_id = p.id) as conflict_count,
+            (SELECT COUNT(*) FROM comment c WHERE c.paper_id = p.id) as comment_count,
+            EXISTS(SELECT 1 FROM meta_review mr WHERE mr.paper_id = p.id) as has_metareview,
+            (
+                SELECT STRING_AGG(t.name, ', ')
+                FROM paper_topic pt
+                JOIN topic t ON pt.topic_id = t.id
+                WHERE pt.paper_id = p.id
+            ) as topics
+        FROM paper p
+        LEFT JOIN review r ON r.paper_id = p.id AND r.is_superseded = false
+        ${whereClause}
+        GROUP BY p.id
+        ORDER BY ${sortCol} ${sortDir}
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
-    const result = await client.query(query, values);
-    return maskNames(result.rows, settings, 'reviewer_id');
+
+    values.push(limit, offset);
+
+    const [countRes, dataRes] = await Promise.all([
+        client.query(countQuery, values.slice(0, paramIndex - 1)),
+        client.query(dataQuery, values)
+    ]);
+
+    return {
+        total: parseInt(countRes.rows[0].total),
+        page: parseInt(page),
+        limit: parseInt(limit),
+        items: dataRes.rows
+    };
 }
 
-async function getPaperDebates(options = {}) {
-    const cid = await resolveConferenceId(options.conferenceId);
-
-    const values = [cid];
-    let paramIdx = 2;
-
-    const modes = getFilterModes(options);
-    const { getAlertRules, assertSafeNumber } = require("./helpers");
-    const rules = await getAlertRules(cid);
-    const th = (key) => assertSafeNumber(rules[key]?.enabled ? rules[key].value : require('../../config/alertRuleDefaults')[key].default, key);
-
-    const decisionFilters = ['rejected', 'desk_rejected', 'no_decision'];
-    const excludeDeskNoDecision = modes.some((m) => decisionFilters.includes(m))
-        ? ''
-        : `AND (p.decision_category IS NULL OR (p.decision_category != 'desk reject' AND p.decision_category != 'no decision'))`;
-
-    let havingClause = 'HAVING 1=1';
-    if (modes.includes('no_comments') || options.noComments === 'true') {
-        havingClause += ` AND COALESCE((SELECT COUNT(*) FROM comment c WHERE c.paper_id = p.id), 0) = 0`;
-    }
-    if (modes.includes('high_variance')) {
-        const v = th('paper.high_spread_min');
-        havingClause += ` AND (MAX(r.total_score) - MIN(r.total_score)) > ${v}`;
-    }
-    if (modes.includes('low_variance')) {
-        havingClause += ` AND (MAX(r.total_score) - MIN(r.total_score)) = 0`;
-    }
-    if (modes.includes('unanimous_reject')) {
-        const v = th('paper.unanimous_reject_avg');
-        havingClause += ` AND AVG(r.total_score) <= ${v}`;
-    }
-    if (modes.includes('unanimous_accept')) {
-        const v = th('paper.unanimous_accept_avg');
-        havingClause += ` AND AVG(r.total_score) >= ${v}`;
-    }
-    if (modes.includes('borderline')) {
-        const bl = th('paper.borderline_low');
-        const bh = th('paper.borderline_high');
-        havingClause += ` AND AVG(r.total_score) >= ${bl} AND AVG(r.total_score) <= ${bh}`;
-    }
-    if (modes.includes('to_discuss')) {
-        const bl = th('paper.borderline_low');
-        const bh = th('paper.borderline_high');
-        const hs = th('paper.high_spread_min');
-        havingClause += ` AND ((AVG(r.total_score) >= ${bl} AND AVG(r.total_score) <= ${bh}) OR (MAX(r.total_score) - MIN(r.total_score)) > ${hs})`;
-    }
-
-    let whereExtra = '';
-    if (modes.includes('rejected')) {
-        whereExtra = `AND MAX(p.decision_category) = 'reject'`;
-    } else if (modes.includes('desk_rejected')) {
-        whereExtra = `AND MAX(p.decision_category) = 'desk reject'`;
-    } else if (modes.includes('no_decision')) {
-        whereExtra = `AND MAX(p.decision_category) = 'no decision'`;
-    }
-
-    const { clause: orderClause } = buildOrderBy(options.sortBy, options.sortOrder, 'external_submission_id DESC NULLS LAST');
-
-    const limitVal = parseInt(options.limit) || 'ALL';
-    const offsetVal = parseInt(options.offset) || 0;
-    let limitClause;
-    if (limitVal === 'ALL') {
-        limitClause = 'LIMIT ALL';
-    } else {
-        limitClause = `LIMIT $${paramIdx}`;
-        values.push(limitVal);
-        paramIdx++;
-    }
-    const offsetClause = `OFFSET $${paramIdx}`;
-    values.push(offsetVal);
-
+async function getPaperDebates(editionId = null) {
+    const eid = await resolveEditionId(editionId);
     const query = `
-        WITH ReviewIdentity AS (
-            SELECT r.id AS review_id, r.paper_id, r.total_score,
-                   COALESCE(r.sub_reviewer_person_id, pcm.external_person_id) AS reviewer_person_id
-            FROM review r
-            JOIN program_committee_member pcm ON pcm.id = r.program_committee_member_id
-            JOIN paper p ON r.paper_id = p.id
-            WHERE r.is_superseded = false
-              AND p.is_deleted = false
-              AND p.conference_id = $1
-        ),
-        ReviewerZStats AS (
-            SELECT reviewer_person_id,
-                   COUNT(*)::int AS review_count,
-                   AVG(total_score) AS reviewer_mean,
-                   STDDEV(total_score) AS reviewer_std
-            FROM ReviewIdentity
-            GROUP BY reviewer_person_id
-            HAVING COUNT(*) >= 3
-        ),
-        ConferenceStats AS (
-            SELECT AVG(total_score) AS conf_mean, STDDEV(total_score) AS conf_std
-            FROM ReviewIdentity
-        ),
-        NormalizedReviews AS (
-            SELECT ri.review_id,
-                   CASE WHEN rz.reviewer_std IS NOT NULL AND rz.reviewer_std > 0
-                        THEN cs.conf_mean + ((ri.total_score - rz.reviewer_mean) / rz.reviewer_std) * cs.conf_std
-                        ELSE ri.total_score
-                   END AS adjusted_score
-            FROM ReviewIdentity ri
-            LEFT JOIN ReviewerZStats rz USING (reviewer_person_id)
-            CROSS JOIN ConferenceStats cs
-        )
-        SELECT 
-            COUNT(*) OVER() as full_count,
+        SELECT
             p.id,
             p.external_submission_id,
             p.title,
-            p.decision,
-            p.decision_category,
-            COUNT(DISTINCT r.id) as total_reviews,
-            COUNT(DISTINCT a.program_committee_member_id) as total_assigned,
-            ROUND(AVG(r.total_score), 2) as average_score,
-            (MAX(r.total_score) - MIN(r.total_score)) as score_spread,
-            COALESCE((SELECT COUNT(*) FROM comment c WHERE c.paper_id = p.id), 0) as total_comments,
-            ROUND(AVG(nr.adjusted_score), 2) as adjusted_score
+            p.decision_category as decision,
+            COUNT(DISTINCT r.id) as review_count,
+            COUNT(DISTINCT c.id) as comment_count,
+            ROUND(AVG(r.total_score), 2) as avg_score,
+            ROUND(STDDEV(r.total_score), 2) as score_std_dev,
+            MAX(r.total_score) - MIN(r.total_score) as score_spread,
+            ARRAY_AGG(DISTINCT r.total_score) as scores
+        FROM paper p
+        JOIN review r ON r.paper_id = p.id AND r.is_superseded = false
+        LEFT JOIN comment c ON c.paper_id = p.id
+        WHERE p.is_deleted = false AND p.edition_id = $1
+        GROUP BY p.id
+        HAVING COUNT(DISTINCT r.id) >= 2
+        ORDER BY score_spread DESC NULLS LAST
+    `;
+    const result = await client.query(query, [eid]);
+    return result.rows;
+}
+
+async function getSubmissions(options = {}) {
+    const eid = await resolveEditionId(options);
+    const query = `
+        SELECT
+            p.id,
+            p.external_submission_id,
+            p.title,
+            p.decision_category as decision,
+            COUNT(DISTINCT r.id) as review_count,
+            ROUND(AVG(r.total_score), 2) as avg_score,
+            (SELECT COUNT(*) FROM conflict c WHERE c.paper_id = p.id) as conflict_count,
+            (SELECT COUNT(*) FROM comment c WHERE c.paper_id = p.id) as comment_count,
+            EXISTS(SELECT 1 FROM meta_review mr WHERE mr.paper_id = p.id) as has_metareview,
+            COUNT(*) OVER() as full_count
+        FROM paper p
+        LEFT JOIN review r ON r.paper_id = p.id AND r.is_superseded = false
+        WHERE p.is_deleted = false AND p.edition_id = $1
+        GROUP BY p.id
+        ORDER BY p.external_submission_id ASC
+    `;
+    const result = await client.query(query, [eid]);
+    return result.rows;
+}
+
+async function getTopPapers(editionId = null, limit = 5) {
+    const eid = await resolveEditionId(editionId);
+    const query = `
+        SELECT
+            p.id,
+            p.external_submission_id,
+            p.title,
+            p.decision_category as decision,
+            ROUND(AVG(r.total_score), 2) as avg_score,
+            COUNT(DISTINCT r.id) as review_count
+        FROM paper p
+        JOIN review r ON r.paper_id = p.id AND r.is_superseded = false
+        WHERE p.is_deleted = false AND p.edition_id = $1
+        GROUP BY p.id
+        ORDER BY avg_score DESC NULLS LAST
+        LIMIT $2
+    `;
+    const result = await client.query(query, [eid, limit]);
+    return result.rows;
+}
+
+async function updatePaperDecision(paperId, decisionCategory) {
+    const query = `
+        UPDATE paper
+        SET decision_category = $1
+        WHERE id = $2
+        RETURNING *
+    `;
+    const result = await client.query(query, [decisionCategory, paperId]);
+    return result.rows[0] || null;
+}
+
+async function getPapersViewList(params = {}, editionId = null) {
+    const eid = await resolveEditionId(editionId || params);
+    const {
+        sort = 'submission',
+        order = 'asc',
+        limit = 50,
+        offset = 0,
+        search = '',
+        filter_spread = false,
+        filter_reviews = false,
+        filter_conflict = false,
+        filter_metareview = false,
+        filter_discussion = false,
+        filter_outlier = false,
+        filter_author_bias = false,
+        filter_single_perspective = false,
+        filter_uncalibrated = false,
+        hide_desk_no_decision = false,
+    } = params;
+
+    const values = [eid];
+    let paramIdx = 2;
+
+    const conditions = [];
+    if (search) {
+        conditions.push(`(p.title ILIKE $${paramIdx} OR CAST(p.external_submission_id AS TEXT) ILIKE $${paramIdx})`);
+        values.push(`%${search}%`);
+        paramIdx++;
+    }
+
+    const havingConditions = [];
+    if (filter_spread) {
+        havingConditions.push(`(MAX(rv.total_score) - MIN(rv.total_score)) >= 1.5`);
+    }
+    if (filter_reviews) {
+        havingConditions.push(`COUNT(DISTINCT rv.id) < 3`);
+    }
+    if (filter_conflict) {
+        havingConditions.push(`EXISTS (SELECT 1 FROM conflict c WHERE c.paper_id = p.id)`);
+    }
+    if (filter_metareview) {
+        havingConditions.push(`NOT EXISTS (SELECT 1 FROM meta_review mr WHERE mr.paper_id = p.id)`);
+    }
+    if (filter_discussion) {
+        havingConditions.push(`(MAX(rv.total_score) - MIN(rv.total_score)) >= 1.5 AND (SELECT COUNT(*) FROM comment cm WHERE cm.paper_id = p.id) = 0`);
+    }
+    if (filter_outlier) {
+        havingConditions.push(`EXISTS (
+            SELECT 1 FROM review r_sub
+            WHERE r_sub.paper_id = p.id AND r_sub.is_superseded = false
+            AND ABS(r_sub.total_score - (
+                SELECT AVG(r_other.total_score) FROM review r_other
+                WHERE r_other.paper_id = p.id AND r_other.id != r_sub.id AND r_other.is_superseded = false
+            )) >= 2.0
+        )`);
+    }
+    if (filter_author_bias) {
+        havingConditions.push(`EXISTS (
+            SELECT 1 FROM paper_author_new pa
+            JOIN participant p_author ON p_author.id = pa.participant_id
+            WHERE pa.paper_id = p.id
+            AND EXISTS (
+                SELECT 1 FROM person_conflict pc
+                WHERE (pc.person1_id = p_author.researcher_id OR pc.person2_id = p_author.researcher_id)
+            )
+        )`);
+    }
+    if (filter_single_perspective) {
+        havingConditions.push(`(
+            SELECT COUNT(DISTINCT res.country)
+            FROM review r_sub
+            JOIN participant pt_sub ON r_sub.participant_id = pt_sub.id
+            JOIN researcher res ON res.id = pt_sub.researcher_id
+            WHERE r_sub.paper_id = p.id AND r_sub.is_superseded = false AND res.country IS NOT NULL AND res.country != ''
+        ) = 1 AND COUNT(DISTINCT rv.id) >= 2`);
+    }
+    if (filter_uncalibrated) {
+        havingConditions.push(`EXISTS (
+            SELECT 1 FROM review r_sub
+            JOIN NormalizedReviews nr_sub ON nr_sub.review_id = r_sub.id
+            WHERE r_sub.paper_id = p.id AND r_sub.is_superseded = false
+            AND ABS(r_sub.total_score - nr_sub.normalized_score) >= 1.0
+        )`);
+    }
+
+    const sortMap = {
+        submission: 'p.external_submission_id',
+        title: 'p.title',
+        authors: 'authors',
+        avg_score: 'avg_score',
+        normalized_avg: 'normalized_avg',
+        review_count: 'review_count',
+        assignment_count: 'assignment_count',
+        spread: 'spread',
+        decision: 'p.decision_category'
+    };
+    const sortField = sortMap[sort] || 'p.external_submission_id';
+    const sortDirection = (order && order.toLowerCase() === 'desc') ? 'DESC' : 'ASC';
+    const orderClause = `ORDER BY ${sortField} ${sortDirection} NULLS LAST`;
+
+    const limitClause = limit ? `LIMIT $${paramIdx++}` : '';
+    if (limit) values.push(limit);
+    const offsetClause = offset ? `OFFSET $${paramIdx}` : '';
+    if (offset) values.push(offset);
+
+    const whereExtra = conditions.length > 0 ? `AND ${conditions.join(' AND ')}` : '';
+    const havingClause = havingConditions.length > 0 ? `HAVING ${havingConditions.join(' AND ')}` : '';
+
+    const excludeDeskNoDecision = hide_desk_no_decision
+        ? `AND p.decision_category NOT IN ('desk_reject', 'no_decision', 'withdrawn')`
+        : '';
+
+    const query = `
+        WITH ReviewerStats AS (
+            SELECT
+                r.participant_id,
+                AVG(r.total_score) as rev_mean,
+                STDDEV_SAMP(r.total_score) as rev_std,
+                COUNT(r.id) as rev_count
+            FROM review r
+            JOIN paper p ON r.paper_id = p.id
+            WHERE r.is_superseded = false AND p.is_deleted = false AND p.edition_id = $1
+            GROUP BY r.participant_id
+            HAVING COUNT(r.id) >= 3 AND STDDEV_SAMP(r.total_score) > 0
+        ),
+        ConfStats AS (
+            SELECT
+                AVG(r.total_score) as conf_mean,
+                STDDEV_SAMP(r.total_score) as conf_std
+            FROM review r
+            JOIN paper p ON r.paper_id = p.id
+            WHERE r.is_superseded = false AND p.is_deleted = false AND p.edition_id = $1
+        ),
+        NormalizedReviews AS (
+            SELECT
+                r.id as review_id,
+                r.paper_id,
+                r.total_score as raw_score,
+                CASE
+                    WHEN rs.rev_count >= 3 AND rs.rev_std > 0 AND cs.conf_std > 0 THEN
+                        ROUND(CAST(cs.conf_mean + ((r.total_score - rs.rev_mean) / rs.rev_std) * cs.conf_std AS numeric), 2)
+                    ELSE r.total_score
+                END as normalized_score
+            FROM review r
+            JOIN paper p ON r.paper_id = p.id
+            CROSS JOIN ConfStats cs
+            LEFT JOIN ReviewerStats rs ON r.participant_id = rs.participant_id
+            WHERE r.is_superseded = false AND p.is_deleted = false AND p.edition_id = $1
+        )
+        SELECT
+            p.id,
+            p.external_submission_id,
+            p.title,
+            p.decision_category as decision_category,
+            COUNT(DISTINCT a.id) as assignment_count,
+            COUNT(DISTINCT rv.id) as review_count,
+            ROUND(AVG(rv.total_score), 2) as avg_score,
+            ROUND(AVG(nr.normalized_score), 2) as normalized_avg,
+            (MAX(rv.total_score) - MIN(rv.total_score)) as spread,
+            (
+                SELECT STRING_AGG(CONCAT(res.first_name, ' ', res.last_name), ', ')
+                FROM paper_author_new pa
+                JOIN participant pt ON pa.participant_id = pt.id
+                JOIN researcher res ON res.id = pt.researcher_id
+                WHERE pa.paper_id = p.id
+            ) as authors
         FROM paper p
         LEFT JOIN assignment a ON a.paper_id = p.id
-        LEFT JOIN review r ON p.id = r.paper_id AND r.is_superseded = false
-        LEFT JOIN NormalizedReviews nr ON nr.review_id = r.id
-        WHERE p.is_deleted = false AND p.conference_id = $1
+        LEFT JOIN review rv ON p.id = rv.paper_id AND rv.is_superseded = false
+        LEFT JOIN NormalizedReviews nr ON nr.review_id = rv.id
+        WHERE p.is_deleted = false AND p.edition_id = $1
         ${excludeDeskNoDecision}
         GROUP BY p.id
         ${havingClause}
@@ -192,9 +355,9 @@ async function getPaperDebates(options = {}) {
     return result.rows;
 }
 
-async function getPaperDetails(externalSubmissionId, conferenceId = null) {
-    const cid = conferenceId ? parseInt(conferenceId) : await resolveConferenceId(null);
-    const settings = await getAnonymizationSettings(cid);
+async function getPaperDetails(externalSubmissionId, editionId = null) {
+    const eid = await resolveEditionId(editionId);
+    const settings = await getAnonymizationSettings(eid);
 
     const query = `
         SELECT p.id, p.title, p.external_submission_id,
@@ -207,77 +370,70 @@ async function getPaperDetails(externalSubmissionId, conferenceId = null) {
                 WHERE mr.paper_id = p.id
                ) as has_metareview
         FROM paper p
-        WHERE p.external_submission_id = $1 AND p.is_deleted = false AND p.conference_id = $2
+        WHERE p.external_submission_id = $1 AND p.is_deleted = false AND p.edition_id = $2
     `;
-    const paperRes = await client.query(query, [externalSubmissionId, cid]);
+    const paperRes = await client.query(query, [externalSubmissionId, eid]);
     if (paperRes.rows.length === 0) return null;
-    
+
     const paper = paperRes.rows[0];
 
     const reviewsQuery = `
-        SELECT r.id, pcm.id as reviewer_id, pcm.first_name, pcm.last_name, pcm.role,
-               COALESCE(NULLIF(pcm.email, ''), CASE WHEN pcm.role = 'Sub-reviewer' THEN CONCAT('subreviewer_', pcm.id, '@example.com') ELSE CONCAT('reviewer_', pcm.id, '@example.com') END) as email,
-               r.total_score, r.review_text,
-               (SELECT STRING_AGG(t.name, ', ')
-                FROM program_committee_member_topic pcmt
-                JOIN topic t ON pcmt.topic_id = t.id
-                WHERE pcmt.program_committee_member_id = pcm.id) as topics
-        FROM review r
-        JOIN program_committee_member pcm ON r.program_committee_member_id = pcm.id
-        WHERE r.paper_id = $1 AND r.is_superseded = false
+        SELECT rv.id, pt.id as reviewer_id, r.first_name, r.last_name, ev.evaluator_role as role,
+               COALESCE(NULLIF(r.email, ''), CASE WHEN ev.evaluator_role = 'subreviewer' THEN CONCAT('subreviewer_', pt.id, '@example.com') ELSE CONCAT('reviewer_', pt.id, '@example.com') END) as email,
+               rv.total_score, rv.review_text,
+               NULL as topics
+        FROM review rv
+        JOIN participant pt ON rv.participant_id = pt.id
+        JOIN researcher r ON r.id = pt.researcher_id
+        LEFT JOIN evaluator ev ON ev.participant_id = pt.id
+        WHERE rv.paper_id = $1 AND rv.is_superseded = false
     `;
     const reviewsRes = await client.query(reviewsQuery, [paper.id]);
     paper.reviews = maskNames(reviewsRes.rows, settings, 'reviewer_id');
 
     const commentsQuery = `
-        SELECT c.id, pcm.id as reviewer_id, pcm.first_name, pcm.last_name, pcm.role,
-               COALESCE(NULLIF(pcm.email, ''), CASE WHEN pcm.role = 'Sub-reviewer' THEN CONCAT('subreviewer_', pcm.id, '@example.com') ELSE CONCAT('reviewer_', pcm.id, '@example.com') END) as email,
+        SELECT c.id, pt.id as reviewer_id, r.first_name, r.last_name, ev.evaluator_role as role,
+               COALESCE(NULLIF(r.email, ''), CASE WHEN ev.evaluator_role = 'subreviewer' THEN CONCAT('subreviewer_', pt.id, '@example.com') ELSE CONCAT('reviewer_', pt.id, '@example.com') END) as email,
                c.comment_text
         FROM comment c
-        JOIN program_committee_member pcm ON c.program_committee_member_id = pcm.id
+        JOIN participant pt ON c.participant_id = pt.id
+        JOIN researcher r ON r.id = pt.researcher_id
+        LEFT JOIN evaluator ev ON ev.participant_id = pt.id
         WHERE c.paper_id = $1
     `;
     const commentsRes = await client.query(commentsQuery, [paper.id]);
     paper.comments = maskNames(commentsRes.rows, settings, 'reviewer_id');
 
+    const authorsQuery = `
+        SELECT res.first_name, res.last_name, res.email, res.country, res.affiliation, pa.author_order, pa.corresponding
+        FROM paper_author_new pa
+        JOIN participant pt ON pa.participant_id = pt.id
+        JOIN researcher res ON res.id = pt.researcher_id
+        WHERE pa.paper_id = $1
+        ORDER BY pa.author_order ASC
+    `;
+    const authorsRes = await client.query(authorsQuery, [paper.id]);
+    paper.authors = maskNames(authorsRes.rows, settings);
+
+    const conflictsQuery = `
+        SELECT res.first_name, res.last_name, res.email, cf.conflict_type
+        FROM conflict cf
+        JOIN participant pt ON cf.participant_id = pt.id
+        JOIN researcher res ON res.id = pt.researcher_id
+        WHERE cf.paper_id = $1
+    `;
+    const conflictsRes = await client.query(conflictsQuery, [paper.id]);
+    paper.conflicts = maskNames(conflictsRes.rows, settings);
+
     return paper;
 }
 
-async function updatePaperDecision(paperId, newDecision) {
-    const query = `
-        UPDATE paper 
-        SET decision = $1, decision_category = $2
-        WHERE id = $3 
-        RETURNING *;
-    `;
-    const result = await client.query(query, [newDecision, normalizeDecision(newDecision), paperId]);
-    return result.rows[0];
-}
-
-async function getTopPapers(conferenceId = null) {
-    const cid = await resolveConferenceId(conferenceId);
-    const query = `
-        SELECT 
-            p.id, 
-            p.title, 
-            ROUND(AVG(r.total_score), 2) as avg_score,
-            (MAX(r.total_score) - MIN(r.total_score)) as spread
-        FROM paper p
-        JOIN review r ON p.id = r.paper_id AND r.is_superseded = false
-        WHERE p.is_deleted = false AND p.conference_id = $1
-        GROUP BY p.id, p.title
-        HAVING AVG(r.total_score) >= 1.5 AND (MAX(r.total_score) - MIN(r.total_score)) <= 2
-        ORDER BY AVG(r.total_score) DESC, (MAX(r.total_score) - MIN(r.total_score)) ASC
-        LIMIT 5
-    `;
-    const result = await client.query(query, [cid]);
-    return result.rows;
-}
-
 module.exports = {
-    getSubmissions,
+    getPapersList,
     getPaperDebates,
-    getPaperDetails,
+    getSubmissions,
+    getTopPapers,
     updatePaperDecision,
-    getTopPapers
+    getPapersViewList,
+    getPaperDetails
 };

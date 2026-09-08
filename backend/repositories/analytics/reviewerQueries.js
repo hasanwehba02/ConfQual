@@ -1,17 +1,17 @@
 const client = require("../../config/database");
-const { resolveConferenceId, getAnonymizationSettings, maskNames, buildOrderBy, getFilterModes } = require("./helpers");
+const { resolveEditionId, getAnonymizationSettings, maskNames, buildOrderBy, getFilterModes } = require("./helpers");
 
 async function getReviewerQuality(options = {}) {
-    const cid = await resolveConferenceId(options.conferenceId);
-    const settings = options.settings || await getAnonymizationSettings(cid);
+    const eid = await resolveEditionId(options.editionId);
+    const settings = options.settings || await getAnonymizationSettings(eid);
 
-    const values = [cid];
+    const values = [eid];
     let paramIdx = 2;
 
     let filterClause = '';
     const modes = getFilterModes(options);
     const { getAlertRules: _getRules, assertSafeNumber: _assert } = require("./helpers");
-    const _rules = await _getRules(cid);
+    const _rules = await _getRules(eid);
     const _th = (k) => _assert(_rules[k]?.value ?? require('../../config/alertRuleDefaults')[k].default, k);
     if (modes.includes('no_comments')) {
         filterClause += ` AND COALESCE(rc.total_comments, 0) = 0`;
@@ -30,7 +30,7 @@ async function getReviewerQuality(options = {}) {
         filterClause += ` AND COALESCE(sc.sub_reviewer_count, 0) > 0`;
     }
     if (modes.includes('no_subreviews')) {
-        filterClause += ` AND pcm.role <> 'Sub-reviewer' AND COALESCE(sc.sub_reviewer_count, 0) = 0`;
+        filterClause += ` AND ev.evaluator_role <> 'subreviewer' AND COALESCE(sc.sub_reviewer_count, 0) = 0`;
     }
 
     const { clause: orderClause } = buildOrderBy(options.sortBy, options.sortOrder, 'avg_word_count DESC NULLS LAST');
@@ -49,119 +49,121 @@ async function getReviewerQuality(options = {}) {
     values.push(offsetVal);
 
     const query = `
-        WITH PaperStats AS (
-            SELECT r.paper_id, SUM(r.total_score) as sum_score, COUNT(r.id) as review_count
+        WITH PaperStats AS (\n            SELECT r.paper_id, SUM(r.total_score) as sum_score, COUNT(r.id) as review_count
             FROM review r
             JOIN paper p ON r.paper_id = p.id AND p.is_deleted = false
-            WHERE r.is_superseded = false AND p.is_deleted = false AND p.conference_id = $1
+            WHERE r.is_superseded = false AND p.is_deleted = false AND p.edition_id = $1
             GROUP BY r.paper_id
         ),
         ReviewerCalibration AS (
-            SELECT 
-                pcm.id as program_committee_member_id,
+            SELECT
+                pt.id as participant_id,
                 ROUND(AVG(
-                    CASE 
+                    CASE
                         WHEN ps.review_count <= 1 THEN r.total_score
                         ELSE ((ps.sum_score - r.total_score) / (ps.review_count - 1))
                     END
                 ), 2) as peers_avg,
                 ROUND(AVG(
-                    CASE 
+                    CASE
                         WHEN ps.review_count <= 1 THEN 0
                         ELSE r.total_score - ((ps.sum_score - r.total_score) / (ps.review_count - 1))
                     END
                 ), 2) as calibration_index
             FROM review r
-            JOIN program_committee_member pcm ON (pcm.id = r.program_committee_member_id OR pcm.external_person_id = r.sub_reviewer_person_id)
+            JOIN paper p ON r.paper_id = p.id
+            JOIN participant pt ON pt.id = r.participant_id
             JOIN PaperStats ps ON r.paper_id = ps.paper_id
             WHERE r.is_superseded = false
-            GROUP BY pcm.id
+            GROUP BY pt.id
             HAVING COUNT(r.id) > 1
         ),
         ReviewerBidding AS (
-            SELECT 
-                a.program_committee_member_id,
-                CASE 
-                    WHEN EXISTS (SELECT 1 FROM bid WHERE program_committee_member_id = a.program_committee_member_id AND LOWER(bid) IN ('yes', 'maybe'))
+            SELECT
+                a.participant_id,
+                CASE
+                    WHEN EXISTS (SELECT 1 FROM bid WHERE participant_id = a.participant_id AND LOWER(bid) IN ('yes', 'maybe'))
                     THEN ROUND(COUNT(b.id) * 100.0 / NULLIF(COUNT(a.id), 0), 2)
                     ELSE NULL
                 END as bidding_match_percentage
             FROM assignment a
-            JOIN paper abp ON abp.id = a.paper_id AND abp.conference_id = $1
+            JOIN paper abp ON abp.id = a.paper_id AND abp.edition_id = $1
             LEFT JOIN bid b ON a.paper_id = b.paper_id
-                AND a.program_committee_member_id = b.program_committee_member_id
+                AND a.participant_id = b.participant_id
                 AND LOWER(b.bid) IN ('yes', 'maybe')
-            GROUP BY a.program_committee_member_id
+            GROUP BY a.participant_id
         ),
         ReviewerComments AS (
-            SELECT program_committee_member_id, COUNT(*) as total_comments
+            SELECT participant_id, COUNT(*) as total_comments
             FROM comment
-            GROUP BY program_committee_member_id
+            GROUP BY participant_id
         ),
         ConferenceStats AS (
             SELECT AVG(r.total_score) AS conf_mean, STDDEV(r.total_score) AS conf_std
             FROM review r
             JOIN paper p ON r.paper_id = p.id
-            WHERE r.is_superseded = false AND p.is_deleted = false AND p.conference_id = $1
+            WHERE r.is_superseded = false AND p.is_deleted = false AND p.edition_id = $1
         ),
         SubReviewerParent AS (
             SELECT DISTINCT ON (r.sub_reviewer_person_id)
                 r.sub_reviewer_person_id,
-                parent.id AS parent_pcm_id,
+                parent.id AS parent_participant_id,
                 parent.external_person_id AS parent_reviewer_id,
-                parent.first_name AS parent_first_name,
-                parent.last_name AS parent_last_name
+                pr.first_name AS parent_first_name,
+                pr.last_name AS parent_last_name
             FROM review r
-            JOIN paper p ON p.id = r.paper_id AND p.conference_id = $1
-            JOIN program_committee_member parent ON parent.id = r.program_committee_member_id
+            JOIN paper p ON p.id = r.paper_id AND p.edition_id = $1
+            JOIN participant parent ON parent.id = r.participant_id
+            JOIN researcher pr ON pr.id = parent.researcher_id
             WHERE r.sub_reviewer_person_id IS NOT NULL AND r.is_superseded = false
             ORDER BY r.sub_reviewer_person_id, parent.id
         ),
         SubCounts AS (
-            SELECT x.parent_pcm_id,
+            SELECT x.parent_participant_id,
                    COUNT(*) AS sub_reviewer_count,
                    string_agg(x.sub_name, ', ' ORDER BY x.sub_name) AS sub_reviewer_names
             FROM (
-                SELECT DISTINCT r.sub_reviewer_person_id, r.program_committee_member_id AS parent_pcm_id,
-                       s.first_name || ' ' || s.last_name AS sub_name
+                SELECT DISTINCT r.sub_reviewer_person_id, r.participant_id AS parent_participant_id,
+                       sr.first_name || ' ' || sr.last_name AS sub_name
                 FROM review r
-                JOIN paper p ON p.id = r.paper_id AND p.conference_id = $1
-                JOIN program_committee_member s ON s.external_person_id = r.sub_reviewer_person_id AND s.conference_id = $1
+                JOIN paper p ON p.id = r.paper_id AND p.edition_id = $1
+                JOIN participant sp ON sp.edition_id = $1 AND sp.external_person_id = r.sub_reviewer_person_id
+                JOIN researcher sr ON sr.id = sp.researcher_id
                 WHERE r.sub_reviewer_person_id IS NOT NULL AND r.is_superseded = false
             ) x
-            GROUP BY x.parent_pcm_id
+            GROUP BY x.parent_participant_id
         ),
         AssignStats AS (
-            SELECT a.program_committee_member_id,
+            SELECT a.participant_id,
                    COUNT(DISTINCT a.paper_id) AS total_assigned,
                    COUNT(DISTINCT rv.paper_id) AS total_delivered,
                    GREATEST(COUNT(DISTINCT a.paper_id) - COUNT(DISTINCT rv.paper_id), 0) AS missed_reviews
             FROM assignment a
-            JOIN paper p ON p.id = a.paper_id AND p.conference_id = $1
+            JOIN paper p ON p.id = a.paper_id AND p.edition_id = $1
             LEFT JOIN review rv ON rv.paper_id = a.paper_id
-                AND rv.program_committee_member_id = a.program_committee_member_id
+                AND rv.participant_id = a.participant_id
                 AND rv.is_superseded = false
-            GROUP BY a.program_committee_member_id
+            GROUP BY a.participant_id
         )
         SELECT
             COUNT(*) OVER() as full_count,
-            pcm.id,
-            pcm.external_person_id as reviewer_id,
-            pcm.first_name,
-            pcm.last_name,
-            pcm.role,
-            pcm.email,
-            COUNT(DISTINCT r.id) as total_reviews_completed,
-            ROUND(AVG(cardinality(regexp_split_to_array(trim(r.review_text), '\\s+'))), 0) as avg_word_count,
-            ROUND(AVG(r.total_score), 2) as avg_score_given,
-            ROUND(STDDEV(r.total_score), 2) as reviewer_std,
+            pt.id,
+            pt.external_person_id as reviewer_id,
+            r.first_name,
+            r.last_name,
+            ev.evaluator_role as role,
+            r.email,
+            COUNT(DISTINCT rv.id) as total_reviews_completed,
+            ROUND(AVG(cardinality(regexp_split_to_array(trim(rv.review_text), '\\s+'))), 0) as avg_word_count,
+            ROUND(AVG(rv.total_score), 2) as avg_score_given,
+            ROUND(STDDEV(rv.total_score), 2) as reviewer_std,
             rcal.peers_avg,
             COALESCE(rc.total_comments, 0) as total_comments,
             rb.bidding_match_percentage,
             rcal.calibration_index,
             MAX(cs.conf_mean) AS conf_mean,
             MAX(cs.conf_std) AS conf_std,
-            srp.parent_pcm_id,
+            srp.parent_participant_id,
             srp.parent_reviewer_id,
             srp.parent_first_name,
             srp.parent_last_name,
@@ -169,19 +171,21 @@ async function getReviewerQuality(options = {}) {
             sc.sub_reviewer_names,
             COALESCE(ast.total_assigned, 0) AS total_assigned,
             COALESCE(ast.missed_reviews, 0) AS missed_reviews
-        FROM program_committee_member pcm
-        LEFT JOIN review r ON (pcm.id = r.program_committee_member_id OR pcm.external_person_id = r.sub_reviewer_person_id) AND r.is_superseded = false
-        LEFT JOIN ReviewerComments rc ON pcm.id = rc.program_committee_member_id
-        LEFT JOIN ReviewerBidding rb ON pcm.id = rb.program_committee_member_id
-        LEFT JOIN ReviewerCalibration rcal ON pcm.id = rcal.program_committee_member_id
-        LEFT JOIN SubReviewerParent srp ON srp.sub_reviewer_person_id = pcm.external_person_id
-        LEFT JOIN SubCounts sc ON sc.parent_pcm_id = pcm.id
-        LEFT JOIN AssignStats ast ON ast.program_committee_member_id = pcm.id
+        FROM participant pt
+        JOIN researcher r ON r.id = pt.researcher_id
+        LEFT JOIN evaluator ev ON ev.participant_id = pt.id
+        LEFT JOIN review rv ON (pt.id = rv.participant_id) AND rv.is_superseded = false
+        LEFT JOIN ReviewerComments rc ON pt.id = rc.participant_id
+        LEFT JOIN ReviewerBidding rb ON pt.id = rb.participant_id
+        LEFT JOIN ReviewerCalibration rcal ON pt.id = rcal.participant_id
+        LEFT JOIN SubReviewerParent srp ON srp.sub_reviewer_person_id = pt.external_person_id
+        LEFT JOIN SubCounts sc ON sc.parent_participant_id = pt.id
+        LEFT JOIN AssignStats ast ON ast.participant_id = pt.id
         CROSS JOIN ConferenceStats cs
-        WHERE pcm.conference_id = $1
+        WHERE pt.edition_id = $1
         ${filterClause}
-        GROUP BY pcm.id, pcm.external_person_id, pcm.first_name, pcm.last_name, pcm.role, rc.total_comments, rb.bidding_match_percentage, rcal.peers_avg, rcal.calibration_index,
-                 srp.parent_pcm_id, srp.parent_reviewer_id, srp.parent_first_name, srp.parent_last_name,
+        GROUP BY pt.id, pt.external_person_id, r.first_name, r.last_name, ev.evaluator_role, r.email, rc.total_comments, rb.bidding_match_percentage, rcal.peers_avg, rcal.calibration_index,
+                 srp.parent_participant_id, srp.parent_reviewer_id, srp.parent_first_name, srp.parent_last_name,
                  sc.sub_reviewer_count, sc.sub_reviewer_names, ast.total_assigned, ast.missed_reviews
         ${orderClause}
         ${limitClause} ${offsetClause}
@@ -196,52 +200,54 @@ async function getReviewerStatsById(reviewerId) {
             SELECT r.paper_id, SUM(r.total_score) as sum_score, COUNT(r.id) as review_count
             FROM review r
             JOIN paper p ON r.paper_id = p.id AND p.is_deleted = false
-            WHERE r.is_superseded = false AND p.is_deleted = false AND p.conference_id = (SELECT conference_id FROM program_committee_member WHERE id = $1)
+            WHERE r.is_superseded = false AND p.is_deleted = false
+              AND p.edition_id = (SELECT edition_id FROM participant WHERE id = $1)
             GROUP BY r.paper_id
         ),
         ReviewerCalibration AS (
-            SELECT 
-                pcm.id as program_committee_member_id,
+            SELECT
+                pt.id as participant_id,
                 ROUND(AVG(
-                    CASE 
+                    CASE
                         WHEN ps.review_count <= 1 THEN r.total_score
                         ELSE ((ps.sum_score - r.total_score) / (ps.review_count - 1))
                     END
                 ), 2) as peers_avg,
                 ROUND(AVG(
-                    CASE 
+                    CASE
                         WHEN ps.review_count <= 1 THEN 0
                         ELSE r.total_score - ((ps.sum_score - r.total_score) / (ps.review_count - 1))
                     END
                 ), 2) as calibration_index
             FROM review r
-            JOIN program_committee_member pcm ON (pcm.id = r.program_committee_member_id OR pcm.external_person_id = r.sub_reviewer_person_id)
+            JOIN participant pt ON pt.id = r.participant_id
             JOIN PaperStats ps ON r.paper_id = ps.paper_id
             WHERE r.is_superseded = false
-            GROUP BY pcm.id
+            GROUP BY pt.id
             HAVING COUNT(r.id) > 1
         ),
         ReviewerBidding AS (
-            SELECT 
-                a.program_committee_member_id,
-                CASE 
-                    WHEN EXISTS (SELECT 1 FROM bid WHERE program_committee_member_id = a.program_committee_member_id AND LOWER(bid) IN ('yes', 'maybe'))
+            SELECT
+                a.participant_id,
+                CASE
+                    WHEN EXISTS (SELECT 1 FROM bid WHERE participant_id = a.participant_id AND LOWER(bid) IN ('yes', 'maybe'))
                     THEN ROUND(COUNT(b.id) * 100.0 / NULLIF(COUNT(a.id), 0), 2)
                     ELSE NULL
                 END as bidding_match_percentage
             FROM assignment a
-            LEFT JOIN bid b ON a.paper_id = b.paper_id 
-                AND a.program_committee_member_id = b.program_committee_member_id 
+            LEFT JOIN bid b ON a.paper_id = b.paper_id
+                AND a.participant_id = b.participant_id
                 AND LOWER(b.bid) IN ('yes', 'maybe')
-            GROUP BY a.program_committee_member_id
+            GROUP BY a.participant_id
         ),
         ConferenceStats AS (
             SELECT AVG(r.total_score) AS conf_mean, STDDEV(r.total_score) AS conf_std
             FROM review r
             JOIN paper p ON r.paper_id = p.id
-            WHERE r.is_superseded = false AND p.is_deleted = false AND p.conference_id = (SELECT conference_id FROM program_committee_member WHERE id = $1)
+            WHERE r.is_superseded = false AND p.is_deleted = false
+              AND p.edition_id = (SELECT edition_id FROM participant WHERE id = $1)
         )
-        SELECT 
+        SELECT
             COUNT(DISTINCT r.id)::int as total_reviews_completed,
             ROUND(AVG(r.total_score), 2) as avg_score_given,
             ROUND(STDDEV(r.total_score), 2) as reviewer_std,
@@ -250,28 +256,28 @@ async function getReviewerStatsById(reviewerId) {
             MAX(rb.bidding_match_percentage) as bidding_match_percentage,
             MAX(cs.conf_mean) as conf_mean,
             MAX(cs.conf_std) as conf_std
-        FROM program_committee_member pcm
-        LEFT JOIN review r ON (pcm.id = r.program_committee_member_id OR pcm.external_person_id = r.sub_reviewer_person_id) AND r.is_superseded = false
-        LEFT JOIN ReviewerCalibration rcal ON pcm.id = rcal.program_committee_member_id
-        LEFT JOIN ReviewerBidding rb ON pcm.id = rb.program_committee_member_id
+        FROM participant pt
+        LEFT JOIN review r ON (pt.id = r.participant_id) AND r.is_superseded = false
+        LEFT JOIN ReviewerCalibration rcal ON pt.id = rcal.participant_id
+        LEFT JOIN ReviewerBidding rb ON pt.id = rb.participant_id
         CROSS JOIN ConferenceStats cs
-        WHERE pcm.id = $1
-        GROUP BY pcm.id
+        WHERE pt.id = $1
+        GROUP BY pt.id
     `;
     const result = await client.query(query, [reviewerId]);
     return result.rows[0] || null;
 }
 
-async function getTopReviewers(conferenceId = null) {
-    const cid = await resolveConferenceId(conferenceId);
-    const settings = await getAnonymizationSettings(cid);
-    
+async function getTopReviewers(editionId = null) {
+    const eid = await resolveEditionId(editionId);
+    const settings = await getAnonymizationSettings(eid);
+
     const query = `
         WITH PaperStats AS (
             SELECT r.paper_id, SUM(r.total_score) as sum_score, COUNT(r.id) as review_count
             FROM review r
             JOIN paper p ON r.paper_id = p.id AND p.is_deleted = false
-            WHERE r.is_superseded = false AND p.is_deleted = false AND p.conference_id = $1
+            WHERE r.is_superseded = false AND p.is_deleted = false AND p.edition_id = $1
             GROUP BY r.paper_id
         ),
         AvgScores AS (
@@ -280,41 +286,44 @@ async function getTopReviewers(conferenceId = null) {
             WHERE p.review_count > 0
         ),
         ReviewerStats AS (
-            SELECT 
-                pcm.id as reviewer_id,
+            SELECT
+                pt.id as participant_id,
                 COUNT(r.id) as reviews_done,
                 AVG(array_length(regexp_split_to_array(r.review_text, '\\s+'), 1)) as avg_word_count,
                 AVG(r.total_score - a.avg_score) as calibration_index
             FROM review r
-            JOIN program_committee_member pcm ON (pcm.id = r.program_committee_member_id OR pcm.external_person_id = r.sub_reviewer_person_id)
+            JOIN participant pt ON pt.id = r.participant_id
             JOIN AvgScores a ON r.paper_id = a.paper_id
             WHERE r.is_superseded = false
-            GROUP BY pcm.id
+            GROUP BY pt.id
         )
-        SELECT 
-            pcm.id,
-            pcm.first_name,
-            pcm.last_name,
+        SELECT
+            pt.id,
+            r.first_name,
+            r.last_name,
             rs.reviews_done,
             ROUND(CAST(rs.avg_word_count AS NUMERIC), 0) as avg_word_count,
             ROUND(CAST(rs.calibration_index AS NUMERIC), 2) as calibration_index
         FROM ReviewerStats rs
-        JOIN program_committee_member pcm ON rs.reviewer_id = pcm.id
-        WHERE ABS(rs.calibration_index) <= 1.5 AND pcm.conference_id = $1
+        JOIN participant pt ON rs.participant_id = pt.id
+        JOIN researcher r ON r.id = pt.researcher_id
+        WHERE ABS(rs.calibration_index) <= 1.5 AND pt.edition_id = $1
         ORDER BY rs.reviews_done DESC, rs.avg_word_count DESC
         LIMIT 5
     `;
-    const result = await client.query(query, [cid]);
+    const result = await client.query(query, [eid]);
     return maskNames(result.rows, settings, 'id');
 }
 
-async function getReviewerDetails(reviewerId, conferenceId = null) {
-    const settings = await getAnonymizationSettings(conferenceId);
+async function getReviewerDetails(reviewerId, editionId = null) {
+    const settings = await getAnonymizationSettings(editionId);
 
     const query = `
-        SELECT pcm.id, pcm.external_person_id, pcm.first_name, pcm.last_name, pcm.role, pcm.email
-        FROM program_committee_member pcm
-        WHERE pcm.id = $1
+        SELECT pt.id, pt.external_person_id, r.first_name, r.last_name, ev.evaluator_role as role, r.email
+        FROM participant pt
+        JOIN researcher r ON r.id = pt.researcher_id
+        LEFT JOIN evaluator ev ON ev.participant_id = pt.id
+        WHERE pt.id = $1
     `;
     const reviewerRes = await client.query(query, [reviewerId]);
     if (reviewerRes.rows.length === 0) return null;
@@ -322,39 +331,39 @@ async function getReviewerDetails(reviewerId, conferenceId = null) {
     const reviewer = maskNames(reviewerRes.rows, settings, 'id')[0];
 
     const assignmentsQuery = `
-        SELECT p.external_submission_id, p.title, 
-               r.total_score as given_score, 
-               r.review_text,
+        SELECT p.external_submission_id, p.title,
+               rv.total_score as given_score,
+               rv.review_text,
                b.bid as bid_status,
                (
                    SELECT json_agg(c.comment_text)
                    FROM comment c
-                   WHERE c.paper_id = p.id AND c.program_committee_member_id = $1
+                   WHERE c.paper_id = p.id AND c.participant_id = $1
                ) as comments,
                (
-                   SELECT AVG(r2.total_score)
-                   FROM review r2
-                   WHERE r2.paper_id = p.id AND r2.is_superseded = false
+                   SELECT AVG(rv2.total_score)
+                   FROM review rv2
+                   WHERE rv2.paper_id = p.id AND rv2.is_superseded = false
                ) as peer_average
         FROM (
-            SELECT paper_id FROM assignment WHERE program_committee_member_id = $1
+            SELECT paper_id FROM assignment WHERE participant_id = $1
             UNION
-            SELECT paper_id FROM review WHERE (program_committee_member_id = $1 OR sub_reviewer_person_id = $2) AND is_superseded = false
+            SELECT paper_id FROM review WHERE participant_id = $1 AND is_superseded = false
             UNION
-            SELECT paper_id FROM comment WHERE program_committee_member_id = $1
+            SELECT paper_id FROM comment WHERE participant_id = $1
         ) combined
         JOIN paper p ON combined.paper_id = p.id AND p.is_deleted = false
-        LEFT JOIN review r ON combined.paper_id = r.paper_id AND (r.program_committee_member_id = $1 OR r.sub_reviewer_person_id = $2) AND r.is_superseded = false
-        LEFT JOIN bid b ON combined.paper_id = b.paper_id AND b.program_committee_member_id = $1
+        LEFT JOIN review rv ON combined.paper_id = rv.paper_id AND rv.participant_id = $1 AND rv.is_superseded = false
+        LEFT JOIN bid b ON combined.paper_id = b.paper_id AND b.participant_id = $1
     `;
-    const assignmentsRes = await client.query(assignmentsQuery, [reviewer.id, reviewer.external_person_id]);
+    const assignmentsRes = await client.query(assignmentsQuery, [reviewer.id]);
     reviewer.assignments = assignmentsRes.rows;
 
     const bidsQuery = `
         SELECT p.external_submission_id, p.title, b.bid
         FROM bid b
         JOIN paper p ON b.paper_id = p.id AND p.is_deleted = false
-        WHERE b.program_committee_member_id = $1
+        WHERE b.participant_id = $1
     `;
     const bidsRes = await client.query(bidsQuery, [reviewer.id]);
     reviewer.bids = bidsRes.rows;

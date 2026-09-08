@@ -3,12 +3,12 @@ const { findWorksheet } = require("../../utils/excelHelper");
 const mapMetaReview = require("../mappers/metaReviewMapper");
 const metaReviewRepository = require("../../repositories/metaReviewRepository");
 const paperRepository = require("../../repositories/paperRepository");
-const programCommitteeRepository = require("../../repositories/programCommitteeRepository");
+const participantRepository = require("../../repositories/participantRepository");
 
-async function importMetaReviewsForSheet(workbook, sheet, conference, _isSuperseded = false) {
+async function importMetaReviewsForSheet(workbook, sheet, edition) {
     if (!sheet) return;
-    const paperMap = await paperRepository.getIdMap(conference.id);
-    const pcmMap = await programCommitteeRepository.getIdMap(conference.id);
+    const paperMap = await paperRepository.getIdMap(edition.id);
+    const participantMap = await participantRepository.getParticipantIdMap(edition.id);
     const headerMap = {};
     sheet.getRow(1).eachCell((cell, colNumber) => {
         if (cell.value) {
@@ -27,8 +27,8 @@ async function importMetaReviewsForSheet(workbook, sheet, conference, _isSuperse
             continue;
         }
         dto.paperId = paperMap[dto.externalSubmissionId];
-        dto.programCommitteeMemberId = pcmMap[dto.externalPersonId];
-        if (!dto.paperId || !dto.programCommitteeMemberId) {
+        dto.participantId = participantMap[dto.externalPersonId];
+        if (!dto.paperId || !dto.participantId) {
             skipped++;
             continue;
         }
@@ -43,12 +43,12 @@ async function importMetaReviewsForSheet(workbook, sheet, conference, _isSuperse
     console.log(`Skipped meta-review rows: ${skipped}`);
 }
 
-async function importMetaReviews(conference) {
+async function importMetaReviews(edition) {
     const workbook = await readWorkbook();
     const candidateSheets = ["Metareviews", "Meta reviews", "meta reviews", "Metareview", "Meta Reviews", "metareviews", "Meta-reviews"];
     const sheet = findWorksheet(workbook, candidateSheets);
     if (sheet) {
-        await importMetaReviewsForSheet(workbook, sheet, conference);
+        await importMetaReviewsForSheet(workbook, sheet, edition);
         console.log(`Meta-reviews imported successfully from sheet '${sheet.name}'.\n`);
     } else {
         console.log("No meta-reviews sheet found. Skipping.\n");

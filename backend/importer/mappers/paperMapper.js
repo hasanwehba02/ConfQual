@@ -1,7 +1,7 @@
 const { extractValue } = require('../../utils/excelHelper');
 const { normalizeDecision } = require('../../utils/decisionHelper');
 
-function mapPaper(row, conferenceId, deletedColIdx = -1) {
+function mapPaper(row, editionId, deletedColIdx = -1) {
     let isDeleted = false;
     if (deletedColIdx !== -1) {
         const delVal = extractValue(row.getCell(deletedColIdx));
@@ -17,7 +17,7 @@ function mapPaper(row, conferenceId, deletedColIdx = -1) {
     const rawDecision = extractValue(row.getCell(8));
 
     return {
-        conferenceId: conferenceId,
+        editionId: editionId,
         externalSubmissionId: extractValue(row.getCell(1)),
         title: titleStr,
         submittedAt: extractValue(row.getCell(4)),
