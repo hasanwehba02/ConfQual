@@ -3,7 +3,7 @@ const mapReview = require("../mappers/reviewMapper");
 const reviewRepository = require("../../repositories/reviewRepository");
 const paperRepository = require("../../repositories/paperRepository");
 const participantRepository = require("../../repositories/participantRepository");
-const analyticsMath = require("../../utils/analyticsMath");
+const { batchAnalyzeReviewSentiment } = require("../../utils/analyticsMath");
 
 async function importReviewsForSheet(workbook, sheetName, edition, isSuperseded = false) {
     const sheet = workbook.getWorksheet(sheetName);
@@ -54,8 +54,15 @@ async function importReviewsForSheet(workbook, sheetName, edition, isSuperseded 
         }
 
         dto.isSuperseded = isSuperseded;
-        dto.sentimentScore = analyticsMath.analyzeReviewSentimentSync(dto.reviewText || '');
         dtos.push(dto);
+    }
+
+    if (dtos.length > 0) {
+        // Fast batched transformer sentiment analysis
+        const sentimentScores = await batchAnalyzeReviewSentiment(dtos.map(d => d.reviewText || ''));
+        for (let idx = 0; idx < dtos.length; idx++) {
+            dtos[idx].sentimentScore = sentimentScores[idx] || 0;
+        }
     }
 
     const chunkSize = 200;
