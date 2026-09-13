@@ -38,6 +38,12 @@ async function importConference(meta = {}) {
         shortName = conferenceName.replace(/\s*\d{4}\s*.*/, "").trim() || conferenceName;
     }
 
+    // edition.year is NOT NULL in the schema; fall back to the current year
+    // when no year was provided or could be auto-detected.
+    if (!year) {
+        year = new Date().getFullYear();
+    }
+
     // Create or find conference series
     const series = await editionRepository.findOrCreateConferenceSeries({
         name: conferenceName,
@@ -69,4 +75,4 @@ async function importConference(meta = {}) {
     };
 }
 
-module.exports = { importConference };
+module.exports = importConference;

@@ -40,6 +40,7 @@ router.delete("/conferences/:id", analyticsController.deleteConference);
 
 router.get("/alert-rules", analyticsController.getAlertRules);
 router.put("/alert-rules", analyticsController.updateAlertRules);
+router.post("/alert-rules", analyticsController.updateAlertRules);
 
 router.get("/notes", analyticsController.listNotes);
 router.post("/notes", analyticsController.createNote);

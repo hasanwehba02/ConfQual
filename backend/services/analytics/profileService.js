@@ -8,8 +8,8 @@ async function getAcademicQualityProfile(prefetched = null, conferenceId = null)
     const diversity = prefetched?.diversity || await analyticsRepository.getGeographicDiversity(cid);
     const competence = await analyticsRepository.getThematicCompetence(cid);
 
-    const totalPapers = parseInt(health?.total_papers) || 0;
-    const acceptedPapers = parseInt(acceptance?.accepted_papers) || 0;
+    const totalPapers = parseInt(health?.total_papers) || parseInt(acceptance?.total_submissions) || 0;
+    const acceptedPapers = parseInt(acceptance?.accepted_submissions) || 0;
     const acceptanceRate = totalPapers > 0 ? ((acceptedPapers / totalPapers) * 100).toFixed(1) : 0;
 
     let rank = "Unranked / Regional";
@@ -33,9 +33,9 @@ async function getAcademicQualityProfile(prefetched = null, conferenceId = null)
 
     if (diversity && diversity.length > 0) {
         domesticCountry = diversity[0].country;
-        domesticCount = parseInt(diversity[0].member_count) || 0;
+        domesticCount = parseInt(diversity[0].participant_count) || 0;
         for (let i = 1; i < diversity.length; i++) {
-            internationalCount += parseInt(diversity[i].member_count) || 0;
+            internationalCount += parseInt(diversity[i].participant_count) || 0;
         }
     }
 

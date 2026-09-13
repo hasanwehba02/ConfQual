@@ -174,7 +174,7 @@ const updateAlertRules = asyncHandler(async (req, res) => {
     await db.withTransaction(async (client) => {
         for (const r of items) {
             if (!alertDefaults[r.key]) throw new ValidationError(`Unknown rule: ${r.key}`);
-            const v = assertSafeNumber(r.value, r.key);
+            const v = assertSafeNumber(r.value ?? r.threshold, r.key);
             const enabled = r.enabled !== undefined ? !!r.enabled : true;
             await client.query(
                 'INSERT INTO alert_rule (edition_id, rule_key, threshold_value, is_enabled) VALUES ($1,$2,$3,$4) ON CONFLICT (edition_id, rule_key) DO UPDATE SET threshold_value = EXCLUDED.threshold_value, is_enabled = EXCLUDED.is_enabled',

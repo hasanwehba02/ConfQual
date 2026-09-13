@@ -249,11 +249,12 @@ export function wireSettingsView() {
             const rules = await res.json();
             list.innerHTML = '';
             const thresholdTips = {
-                high_discrepancy: 'Threshold for paper score spread (standard deviation or range) to trigger a high discrepancy alert.',
-                unanimous_reject: 'Threshold below which all review scores must fall to trigger a unanimous reject alert.',
-                unanimous_accept: 'Threshold above which all review scores must fall to trigger a unanimous accept alert.',
-                low_calibration: 'Absolute difference between a reviewer’s average score and conference average to flag reviewer calibration bias.',
-                extreme_score: 'Score deviation threshold to flag individual outlier reviews.'
+                'paper.high_spread_min': 'Threshold for a paper\'s score spread (max − min review score) to trigger a high-variance alert.',
+                'paper.unanimous_reject_avg': 'Average review score below which all reviews must fall to flag a unanimous reject.',
+                'paper.unanimous_accept_avg': 'Average review score above which all reviews must fall to flag a unanimous accept.',
+                'paper.borderline_low': 'Lower bound of the average score range treated as borderline.',
+                'paper.borderline_high': 'Upper bound of the average score range treated as borderline.',
+                'reviewer.high_calibration_abs': 'Absolute deviation between a reviewer\'s score and the conference average used to flag calibration bias.',
             };
             for (const r of rules) {
                 const row = document.createElement('div');
@@ -265,8 +266,8 @@ export function wireSettingsView() {
                         <input type="checkbox" data-enabled="${r.key}" ${r.enabled ? 'checked' : ''}>
                         <span class="toggle-slider"></span>
                     </label>
-                    <label style="flex:1;">${escapeHtml(r.name || r.key)}</label>
-                    <input type="number" step="0.1" value="${r.threshold}" data-key="${r.key}" style="width:80px;padding:4px;border:1px solid var(--border);border-radius:var(--radius);">
+                    <label style="flex:1;">${escapeHtml(r.label || r.name || r.key)}</label>
+                    <input type="number" step="0.1" value="${r.value}" data-key="${r.key}" style="width:80px;padding:4px;border:1px solid var(--border);border-radius:var(--radius);">
                 `;
                 list.appendChild(row);
             }
@@ -311,7 +312,7 @@ export function wireSettingsView() {
             const chk = list.querySelector(`input[data-enabled="${key}"]`);
             rules.push({
                 key,
-                threshold: parseFloat(inp.value),
+                value: parseFloat(inp.value),
                 enabled: chk ? chk.checked : true
             });
         });

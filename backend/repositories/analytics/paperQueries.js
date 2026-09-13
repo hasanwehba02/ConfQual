@@ -98,13 +98,15 @@ async function getPaperDebates(editionId = null) {
             p.id,
             p.external_submission_id,
             p.title,
-            p.decision_category as decision,
-            COUNT(DISTINCT r.id) as review_count,
-            COUNT(DISTINCT c.id) as comment_count,
-            ROUND(AVG(r.total_score), 2) as avg_score,
+            p.decision_category,
+            COUNT(DISTINCT r.id) as total_reviews,
+            COUNT(DISTINCT c.id) as total_comments,
+            ROUND(AVG(r.total_score), 2) as average_score,
+            ROUND(AVG(r.total_score), 2) as adjusted_score,
             ROUND(STDDEV(r.total_score), 2) as score_std_dev,
             MAX(r.total_score) - MIN(r.total_score) as score_spread,
-            ARRAY_AGG(DISTINCT r.total_score) as scores
+            ARRAY_AGG(DISTINCT r.total_score) as scores,
+            (SELECT COUNT(*) FROM assignment a WHERE a.paper_id = p.id) as total_assigned
         FROM paper p
         JOIN review r ON r.paper_id = p.id AND r.is_superseded = false
         LEFT JOIN comment c ON c.paper_id = p.id
@@ -119,26 +121,78 @@ async function getPaperDebates(editionId = null) {
 
 async function getSubmissions(options = {}) {
     const eid = await resolveEditionId(options);
+    const settings = await getAnonymizationSettings(eid);
+
+    const values = [eid];
+    let paramIdx = 2;
+
+    // Support filterMode params passed by the frontend (high_score / low_score)
+    let filterClause = '';
+    const rawModes = options.modes || options.filter || [];
+    const subModes = Array.isArray(rawModes) ? rawModes : [rawModes];
+    if (subModes.includes('high_score')) {
+        filterClause += ' AND r.total_score >= 2';
+    }
+    if (subModes.includes('low_score')) {
+        filterClause += ' AND r.total_score <= -2';
+    }
+
+    // Sorting by review date/time by default (matches frontend 'review_date_desc')
+    let orderClause = 'ORDER BY r.review_date DESC NULLS LAST, r.review_time DESC NULLS LAST';
+    const sort = options.sortBy;
+    const order = options.sortOrder;
+    if (sort) {
+        const validSorts = {
+            review_date: 'r.review_date',
+            review_time: 'r.review_time',
+            total_score: 'r.total_score',
+            reviewer_name: 'r.last_name',
+            external_submission_id: 'p.external_submission_id'
+        };
+        if (validSorts[sort]) {
+            const dir = (order && order.toUpperCase() === 'ASC') ? 'ASC' : 'DESC';
+            orderClause = `ORDER BY ${validSorts[sort]} ${dir} NULLS LAST`;
+        }
+    }
+
+    const limitVal = parseInt(options.limit) || 'ALL';
+    const offsetVal = parseInt(options.offset) || 0;
+    let limitClause;
+    if (limitVal === 'ALL') {
+        limitClause = 'LIMIT ALL';
+    } else {
+        limitClause = `LIMIT $${paramIdx}`;
+        values.push(limitVal);
+        paramIdx++;
+    }
+    const offsetClause = `OFFSET $${paramIdx}`;
+    values.push(offsetVal);
+
     const query = `
         SELECT
+            COUNT(*) OVER() as full_count,
             p.id,
             p.external_submission_id,
             p.title,
-            p.decision_category as decision,
-            COUNT(DISTINCT r.id) as review_count,
-            ROUND(AVG(r.total_score), 2) as avg_score,
-            (SELECT COUNT(*) FROM conflict c WHERE c.paper_id = p.id) as conflict_count,
-            (SELECT COUNT(*) FROM comment c WHERE c.paper_id = p.id) as comment_count,
-            EXISTS(SELECT 1 FROM meta_review mr WHERE mr.paper_id = p.id) as has_metareview,
-            COUNT(*) OVER() as full_count
-        FROM paper p
-        LEFT JOIN review r ON r.paper_id = p.id AND r.is_superseded = false
+            pt.id as reviewer_id,
+            r.id as review_id,
+            res.first_name,
+            res.last_name,
+            r.total_score,
+            r.review_date,
+            r.review_time,
+            r.is_superseded
+        FROM review r
+        JOIN paper p ON r.paper_id = p.id
+        JOIN participant pt ON r.participant_id = pt.id
+        JOIN researcher res ON pt.researcher_id = res.id
         WHERE p.is_deleted = false AND p.edition_id = $1
-        GROUP BY p.id
-        ORDER BY p.external_submission_id ASC
+        ${filterClause}
+        ${orderClause}
+        ${limitClause} ${offsetClause}
     `;
-    const result = await client.query(query, [eid]);
-    return result.rows;
+    const result = await client.query(query, values);
+    return maskNames(result.rows, settings, 'reviewer_id');
 }
 
 async function getTopPapers(editionId = null, limit = 5) {
@@ -405,7 +459,7 @@ async function getPaperDetails(externalSubmissionId, editionId = null) {
     paper.comments = maskNames(commentsRes.rows, settings, 'reviewer_id');
 
     const authorsQuery = `
-        SELECT res.first_name, res.last_name, res.email, res.country, res.affiliation, pa.author_order, pa.corresponding
+        SELECT res.first_name, res.last_name, res.email, res.country, res.affiliation, pa.author_order, pa.is_corresponding
         FROM paper_author_new pa
         JOIN participant pt ON pa.participant_id = pt.id
         JOIN researcher res ON res.id = pt.researcher_id
@@ -416,7 +470,7 @@ async function getPaperDetails(externalSubmissionId, editionId = null) {
     paper.authors = maskNames(authorsRes.rows, settings);
 
     const conflictsQuery = `
-        SELECT res.first_name, res.last_name, res.email, cf.conflict_type
+        SELECT res.first_name, res.last_name, res.email
         FROM conflict cf
         JOIN participant pt ON cf.participant_id = pt.id
         JOIN researcher res ON res.id = pt.researcher_id

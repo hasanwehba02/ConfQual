@@ -32,16 +32,37 @@ async function getAlertRules(editionId = null) {
     try {
         const eid = await resolveEditionId(editionId);
         const res = await client.query(
-            `SELECT rule_key, threshold_value as value, is_active FROM alert_rule WHERE (edition_id = $1 OR edition_id IS NULL)`,
+            `SELECT rule_key, threshold_value as value, is_enabled FROM alert_rule WHERE (edition_id = $1 OR edition_id IS NULL)`,
             [eid]
         );
         const rules = {};
         for (const row of res.rows) {
-            rules[row.rule_key] = { value: row.value, is_active: row.is_active };
+            rules[row.rule_key] = { value: Number(row.value), enabled: row.is_enabled };
         }
         return rules;
     } catch {
         return {};
+    }
+}
+
+// Seed the alert_rule table for an edition with the configured defaults.
+// Used when an edition is created (importer) so rules exist before first view.
+async function ensureAlertRulesForEdition(editionId) {
+    if (!editionId) return;
+    let defaults;
+    try {
+        defaults = require("../../config/alertRuleDefaults");
+    } catch {
+        return;
+    }
+    for (const [key, def] of Object.entries(defaults)) {
+        const value = typeof def.default === 'number' ? def.default : 0;
+        await client.query(
+            `INSERT INTO alert_rule (edition_id, rule_key, threshold_value, is_enabled)
+             VALUES ($1, $2, $3, true)
+             ON CONFLICT (edition_id, rule_key) DO NOTHING`,
+            [editionId, key, value]
+        );
     }
 }
 
@@ -164,6 +185,7 @@ module.exports = {
     resolveConferenceId,
     assertSafeNumber,
     getAlertRules,
+    ensureAlertRulesForEdition,
     getAnonymizationSettings,
     maskNames,
     buildOrderBy,

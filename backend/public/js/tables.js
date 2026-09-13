@@ -285,7 +285,11 @@ export function renderAlerts(alerts, isAnonymized = false) {
 
     alerts.forEach(alert => {
         const card = document.createElement('div');
-        card.className = `alert-card ${alert.type}`;
+        // Map backend severity (CRITICAL/HIGH/MEDIUM/LOW) to CSS classes.
+        const severity = String(alert.severity || '').toUpperCase();
+        const typeClass = (severity === 'CRITICAL' || severity === 'HIGH') ? 'danger'
+            : (severity === 'MEDIUM' ? 'warning' : '');
+        card.className = `alert-card ${typeClass}`;
         card.innerHTML = `
             <div class="alert-content">
                 <h3 style="font-family: 'Roboto Mono', monospace;">${escapeHtml(alert.title)}</h3>

@@ -4,5 +4,5 @@ module.exports = {
     'paper.unanimous_accept_avg': { default: 1.5, label: 'Unanimous accept avg', domain: 'papers' },
     'paper.borderline_low': { default: -0.5, label: 'Borderline low bound', domain: 'papers' },
     'paper.borderline_high': { default: 0.5, label: 'Borderline high bound', domain: 'papers' },
-    'reviewer.high_calibration_abs': { default: 1.5, label: 'High calibration |deviation|', domain: 'reviewers' },
+    'reviewer.high_calibration_abs': { default: 1.5, label: 'High calibration deviation', domain: 'reviewers' },
 };
