@@ -35,7 +35,7 @@ test('enrichReviewerBias labels extreme reviewers beyond 1.5 points', () => {
 test('enrichReviewerBias returns null bias_label with fewer than 3 reviews', () => {
     const [r] = analyticsService.enrichReviewerBias([makeReviewer({ total_reviews_completed: 2, avg_score_given: 7 })]);
     assert.equal(r.bias_label, null);
-    assert.equal(r.bias_category, 'Standard');
+    assert.equal(r.bias_category, 'Insufficient Data');
 });
 
 test('enrichReviewerBias handles missing scores without throwing', () => {

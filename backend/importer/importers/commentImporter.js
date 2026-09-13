@@ -4,11 +4,11 @@ const commentRepository = require("../../repositories/commentRepository");
 const paperRepository = require("../../repositories/paperRepository");
 const participantRepository = require("../../repositories/participantRepository");
 
-async function importCommentsForSheet(workbook, sheetName, edition) {
+async function importCommentsForSheet(workbook, sheetName, edition, context = {}) {
     const sheet = workbook.getWorksheet(sheetName);
     if (!sheet) return;
-    const paperMap = await paperRepository.getIdMap(edition.id);
-    const participantMap = await participantRepository.getParticipantIdMap(edition.id);
+    const paperMap = context.paperMap ?? await paperRepository.getIdMap(edition.id);
+    const participantMap = context.participantMap ?? await participantRepository.getParticipantIdMap(edition.id);
     let imported = 0;
     let skipped = 0;
     const dtos = [];
@@ -27,7 +27,7 @@ async function importCommentsForSheet(workbook, sheetName, edition) {
         }
         dtos.push(dto);
     }
-    const chunkSize = 200;
+    const chunkSize = 500;
     for (let i = 0; i < dtos.length; i += chunkSize) {
         const chunk = dtos.slice(i, i + chunkSize);
         imported += await commentRepository.bulkCreateComments(chunk);
@@ -35,9 +35,9 @@ async function importCommentsForSheet(workbook, sheetName, edition) {
     console.log(`Imported comments: ${imported}, skipped: ${skipped}`);
 }
 
-async function importComments(edition) {
+async function importComments(edition, context = {}) {
     const workbook = await readWorkbook();
-    await importCommentsForSheet(workbook, "Comments", edition);
+    await importCommentsForSheet(workbook, "Comments", edition, context);
     console.log("Comment imported successfully.\n");
 }
 

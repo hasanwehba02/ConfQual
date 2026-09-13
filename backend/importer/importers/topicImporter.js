@@ -4,7 +4,7 @@ const topicRepository = require("../../repositories/topicRepository");
 const paperRepository = require("../../repositories/paperRepository");
 const participantRepository = require("../../repositories/participantRepository");
 
-async function importPcTopics(workbook, edition) {
+async function importPcTopics(workbook, edition, context = {}) {
     const candidateSheets = ["PC topics", "PC Topics", "pc topics", "pc_topics", "Reviewer topics"];
     const sheetName = candidateSheets.find(name => workbook.getWorksheet(name));
     if (!sheetName) return;
@@ -12,7 +12,7 @@ async function importPcTopics(workbook, edition) {
 
     let imported = 0;
     let skipped = 0;
-    const participantMap = await participantRepository.getParticipantIdMap(edition.id);
+    const participantMap = context.participantMap ?? await participantRepository.getParticipantIdMap(edition.id);
 
     const dtos = [];
     for (let i = 2; i <= sheet.rowCount; i++) {
@@ -34,16 +34,13 @@ async function importPcTopics(workbook, edition) {
     }
 
     const uniqueTopics = [...new Set(dtos.map(d => d.topicName))];
-    const topicMap = {};
-    for (const name of uniqueTopics) {
-        topicMap[name] = await topicRepository.ensureTopicExists(name);
-    }
+    const topicMap = await topicRepository.ensureTopicsExist(uniqueTopics);
 
     for (const dto of dtos) {
         dto.topicId = topicMap[dto.topicName];
     }
 
-    const chunkSize = 200;
+    const chunkSize = 500;
     for (let i = 0; i < dtos.length; i += chunkSize) {
         const chunk = dtos.slice(i, i + chunkSize);
         imported += await topicRepository.bulkCreateParticipantTopics(chunk);
@@ -53,7 +50,7 @@ async function importPcTopics(workbook, edition) {
     console.log(`Skipped PC topic rows: ${skipped}`);
 }
 
-async function importSubmissionTopics(workbook, edition) {
+async function importSubmissionTopics(workbook, edition, context = {}) {
     const candidateSheets = ["Submission topics", "Submission Topics", "submission topics", "submission_topics", "Paper topics"];
     const sheetName = candidateSheets.find(name => workbook.getWorksheet(name));
     if (!sheetName) return;
@@ -61,7 +58,7 @@ async function importSubmissionTopics(workbook, edition) {
 
     let imported = 0;
     let skipped = 0;
-    const paperMap = await paperRepository.getIdMap(edition.id);
+    const paperMap = context.paperMap ?? await paperRepository.getIdMap(edition.id);
 
     const dtos = [];
     for (let i = 2; i <= sheet.rowCount; i++) {
@@ -83,16 +80,13 @@ async function importSubmissionTopics(workbook, edition) {
     }
 
     const uniqueTopics = [...new Set(dtos.map(d => d.topicName))];
-    const topicMap = {};
-    for (const name of uniqueTopics) {
-        topicMap[name] = await topicRepository.ensureTopicExists(name);
-    }
+    const topicMap = await topicRepository.ensureTopicsExist(uniqueTopics);
 
     for (const dto of dtos) {
         dto.topicId = topicMap[dto.topicName];
     }
 
-    const chunkSize = 200;
+    const chunkSize = 500;
     for (let i = 0; i < dtos.length; i += chunkSize) {
         const chunk = dtos.slice(i, i + chunkSize);
         imported += await topicRepository.bulkCreatePaperTopics(chunk);
@@ -102,11 +96,11 @@ async function importSubmissionTopics(workbook, edition) {
     console.log(`Skipped Submission topic rows: ${skipped}`);
 }
 
-async function importTopics(edition) {
+async function importTopics(edition, context = {}) {
     const workbook = await readWorkbook();
 
-    await importPcTopics(workbook, edition);
-    await importSubmissionTopics(workbook, edition);
+    await importPcTopics(workbook, edition, context);
+    await importSubmissionTopics(workbook, edition, context);
 
     console.log("Topics imported successfully.\n");
 }

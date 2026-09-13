@@ -4,13 +4,14 @@ const { deriveBiasLabel } = require("../../utils/scoreNormalization");
 // 2. Reviewer Bias & Normalization
 function enrichReviewerBias(reviewers) {
     reviewers.forEach(reviewer => {
-        const calibration = reviewer.calibration_index !== null ? parseFloat(reviewer.calibration_index) : 0;
+        const hasCalibration = reviewer.calibration_index !== null && reviewer.calibration_index !== undefined;
+        const calibration = hasCalibration ? parseFloat(reviewer.calibration_index) : null;
         const totalReviews = parseInt(reviewer.total_reviews_completed) || 0;
 
-        let biasCategory = "Standard";
+        let biasCategory = totalReviews < 3 ? "Insufficient Data" : "Standard";
         let isReliable = true;
 
-        if (totalReviews > 1) {
+        if (calibration !== null && totalReviews >= 3) {
             if (calibration > 1.5) {
                 biasCategory = "Severe Positive (Easy)";
             } else if (calibration > 0.8) {
@@ -22,10 +23,10 @@ function enrichReviewerBias(reviewers) {
             }
         }
 
-        // Reliability check: Low word count + extreme scores
-        const avgWords = parseInt(reviewer.avg_word_count) || 0;
+        // Reliability check: Low word count + extreme scores (threshold matches alert low-word)
+        const avgWords = reviewer.avg_word_count !== null && reviewer.avg_word_count !== undefined ? parseInt(reviewer.avg_word_count) : null;
         const avgScore = reviewer.avg_score_given !== null ? parseFloat(reviewer.avg_score_given) : 0;
-        if (avgWords < 50 && (avgScore >= 2 || avgScore <= -2)) {
+        if (avgWords !== null && avgWords < 60 && (avgScore >= 2 || avgScore <= -2)) {
             isReliable = false;
         }
 

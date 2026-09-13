@@ -84,7 +84,7 @@ export async function renderPapersTable(papers) {
                 <select class="form-select" style="padding: 2px 5px; border-radius: 4px; font-size: 0.75rem; border: 1px solid #ccc;" ${selectDisabled}>
                     <option value="Accept" ${currentDec === 'accept' ? 'selected' : ''}>Accept</option>
                     <option value="Reject" ${currentDec === 'reject' ? 'selected' : ''}>Reject</option>
-                    <option value="Desk Reject" ${currentDec === 'desk reject' ? 'selected' : ''}>Desk Reject</option>
+                    <option value="Desk Reject" ${currentDec === 'desk reject' || currentDec === 'desk_reject' ? 'selected' : ''}>Desk Reject</option>
                     <option value="No Decision" ${currentDec === 'no decision' || currentDec === 'withdrawn' ? 'selected' : ''}>No Decision/Withdrawn</option>
                 </select>
             </td>

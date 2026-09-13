@@ -9,6 +9,14 @@ async function getAlerts(prefetched = null, conferenceId = null, settingsArg = n
     const cid = conferenceId;
     const MAX_EMAIL_PAPERS = 10;
     const settings = settingsArg || await analyticsRepository.getAnonymizationSettings(cid);
+    const { getAlertRules, assertSafeNumber } = require("../../repositories/analytics/helpers");
+    const alertDefaults = require("../../config/alertRuleDefaults");
+    const rules = await getAlertRules(cid);
+    const t = (k) => {
+        const v = rules[k]?.value ?? alertDefaults[k]?.default;
+        if (v === undefined) return undefined;
+        return assertSafeNumber(v, k);
+    };
 
     // 1. Conflict of Interest Violations
     const coiViolations = prefetched?.coiViolations || await analyticsRepository.getCOIViolations(cid, settings);
@@ -38,7 +46,8 @@ async function getAlerts(prefetched = null, conferenceId = null, settingsArg = n
 
     // 2. High Variance Debates with 0 Discussion
     const papers = prefetched?.papers || await getPaperDebates({ conferenceId: cid });
-    const silentDebates = papers.filter(p => p.score_spread > 2.0 && parseInt(p.total_comments) === 0);
+    const highSpreadMin = t('paper.high_spread_min') ?? 2.0;
+    const silentDebates = papers.filter(p => Number(p.score_spread) > highSpreadMin && parseInt(p.total_comments) === 0);
     if (silentDebates.length > 0) {
         let debateContext = null;
         const debateSlice = silentDebates.slice(0, MAX_EMAIL_PAPERS);
@@ -79,7 +88,7 @@ async function getAlerts(prefetched = null, conferenceId = null, settingsArg = n
             severity: "HIGH",
             category: "DISCUSSION",
             title: `${silentDebates.length} Heavily Debated Papers Have Zero Discussion`,
-            message: `Papers with extreme score divergence (>2.0 spread) currently have 0 PC comments.`,
+            message: `Papers with extreme score divergence (>${highSpreadMin} spread) currently have 0 PC comments.`,
             action: "Open discussion threads or assign a metareviewer.",
             affectedIds: silentDebates.map(p => p.external_submission_id),
             target: "tab-papers",
@@ -172,7 +181,8 @@ async function getAlerts(prefetched = null, conferenceId = null, settingsArg = n
 
     // 5. Short / Low Effort Reviews
     const reviewers = prefetched?.reviewers || await getReviewerQuality({ conferenceId: cid, settings });
-    const lowEffortReviewers = reviewers.filter(r => parseInt(r.avg_word_count) < 60 && parseInt(r.total_reviews_completed) > 0);
+    const lowWordThreshold = t('review.low_word_threshold') ?? 60;
+    const lowEffortReviewers = reviewers.filter(r => parseInt(r.avg_word_count) < lowWordThreshold && parseInt(r.total_reviews_completed) > 0);
     if (lowEffortReviewers.length > 0) {
         const MAX_EMAIL_RECIPIENTS = 10;
         const recipients = lowEffortReviewers.slice(0, MAX_EMAIL_RECIPIENTS).map(r => ({
@@ -184,7 +194,7 @@ async function getAlerts(prefetched = null, conferenceId = null, settingsArg = n
             severity: "LOW",
             category: "QUALITY",
             title: `${lowEffortReviewers.length} Reviewers with Low Feedback Volume`,
-            message: `Reviewers with average review length under 60 words detected.`,
+            message: `Reviewers with average review length under ${lowWordThreshold} words detected.`,
             action: "Flag for quality check prior to author notification.",
             affectedIds: lowEffortReviewers.map(r => r.id),
             target: "tab-reviewers",
@@ -221,8 +231,17 @@ async function getAlerts(prefetched = null, conferenceId = null, settingsArg = n
         }
     } catch { /* ignore config errors */ }
 
-    // 7. Sentiment Mismatches
-    const sentimentMismatches = prefetched?.sentimentMismatches || await analyticsRepository.getSentimentMismatches(cid);
+    // 7. Sentiment Mismatches — threshold is configurable via alert rules; ignore stale prefetched if threshold changed
+    const sentimentThreshold = t('review.sentiment_mismatch_min') ?? 6.0;
+    const sentimentRuleEnabled = rules['review.sentiment_mismatch_min']?.enabled !== false;
+    let sentimentMismatches = [];
+    if (sentimentRuleEnabled) {
+        // If dashboard prefetched with default 6.0 but threshold is different, refetch with correct threshold
+        const needsRefetch = prefetched?.sentimentMismatches == null || sentimentThreshold !== 6.0;
+        sentimentMismatches = needsRefetch
+            ? await analyticsRepository.getSentimentMismatches(cid, settings, sentimentThreshold)
+            : prefetched.sentimentMismatches;
+    }
     if (sentimentMismatches.length > 0) {
         let sentimentContext = null;
         const sentimentMap = new Map();

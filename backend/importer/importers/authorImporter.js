@@ -57,49 +57,53 @@ async function importAuthors(edition) {
         authorOrder++;
     }
 
-    const chunkSize = 200;
+    const chunkSize = 500;
 
-    // Step 1: Find or create researchers and participants
+    // Step 1: Find or create researchers and participants (bulk path)
     const paperMap = await paperRepository.getIdMap(edition.id);
     const participantMap = {}; // externalPersonId -> participantId
     const participantIds = [];
 
+    // Deduplicate by externalPersonId before bulk ops
+    const uniqueByExtId = new Map(); // externalPersonId -> first dto with that id
     for (const dto of dtos) {
-        if (!dto.externalPersonId) {
-            skipped++;
-            continue;
+        if (!dto.externalPersonId) { skipped++; continue; }
+        if (!uniqueByExtId.has(dto.externalPersonId)) {
+            uniqueByExtId.set(dto.externalPersonId, dto);
         }
+    }
+    const uniqueDtos = [...uniqueByExtId.values()];
 
-        if (participantMap[dto.externalPersonId]) {
-            importedAuthors++;
-            continue;
-        }
+    // Bulk find-or-create researchers (2 queries for email rows + 1 per no-email row)
+    const researcherItems = uniqueDtos.map(dto => ({
+        firstName:   dto.firstName,
+        lastName:    dto.lastName,
+        email:       dto.email,
+        country:     dto.country,
+        affiliation: dto.affiliation,
+        webPage:     dto.webPage
+    }));
+    const researcherMap = await researcherRepository.bulkFindOrCreateResearchers(researcherItems);
+    // researcherMap: index → researcher
 
-        try {
-            // Find or create researcher
-            const researcher = await researcherRepository.findOrCreateResearcher({
-                firstName: dto.firstName,
-                lastName: dto.lastName,
-                email: dto.email,
-                country: dto.country,
-                affiliation: dto.affiliation,
-                webPage: dto.webPage
-            });
+    // Bulk find-or-create participants (2 queries)
+    const participantInputs = [];
+    for (let i = 0; i < uniqueDtos.length; i++) {
+        const researcher = researcherMap.get(i);
+        if (!researcher) { skipped++; continue; }
+        participantInputs.push({
+            researcherId:     researcher.id,
+            editionId:        edition.id,
+            externalPersonId: uniqueDtos[i].externalPersonId
+        });
+    }
+    const participantByExtId = await participantRepository.bulkFindOrCreateParticipants(participantInputs);
+    // participantByExtId: externalPersonId → participant row
 
-            // Find or create participant
-            const participant = await participantRepository.findOrCreateParticipant({
-                researcherId: researcher.id,
-                editionId: edition.id,
-                externalPersonId: dto.externalPersonId
-            });
-
-            participantMap[dto.externalPersonId] = participant.id;
-            participantIds.push(participant.id);
-            importedAuthors++;
-        } catch (err) {
-            console.error(`Error importing author: ${err.message}`);
-            skipped++;
-        }
+    for (const [extId, participant] of participantByExtId) {
+        participantMap[extId] = participant.id;
+        participantIds.push(participant.id);
+        importedAuthors++;
     }
 
     // Bulk create author roles for all participants in this edition

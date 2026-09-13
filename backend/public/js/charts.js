@@ -90,7 +90,7 @@ export function renderAnalyticsCharts(analytics) {
             analytics.distributions.decisions.forEach(d => {
                 const dec = d.decision ? d.decision.toLowerCase() : 'no decision';
                 const count = parseInt(d.count, 10) || 0;
-                if (dec === 'desk reject') { deskRejectCount += count; }
+                if (dec === 'desk reject' || dec === 'desk_reject') { deskRejectCount += count; }
                 else if (dec === 'accept') { acceptCount += count; }
                 else if (dec === 'reject') { rejectCount += count; }
                 else { noDecisionCount += count; }

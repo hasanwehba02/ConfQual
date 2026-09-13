@@ -5,6 +5,8 @@ async function getExpertiseMismatches(editionId = null, settingsArg = null) {
     const eid = await resolveEditionId(editionId);
     const settings = settingsArg || await getAnonymizationSettings(eid);
 
+    const hasData = (await client.query('SELECT 1 FROM participant_topic LIMIT 1')).rows.length > 0;
+    if (!hasData) return maskNames([], settings, 'reviewer_id');
     const query = `
         SELECT
             rv.id as review_id,
@@ -16,14 +18,17 @@ async function getExpertiseMismatches(editionId = null, settingsArg = null) {
             r.email as reviewer_email,
             rv.total_score,
             (SELECT STRING_AGG(t.name, ', ') FROM paper_topic pt2 JOIN topic t ON pt2.topic_id = t.id WHERE pt2.paper_id = p.id) as paper_topics,
-            (SELECT STRING_AGG(t.name, ', ') FROM evaluator ev JOIN topic t ON TRUE WHERE ev.participant_id = pt.id) as reviewer_topics
+            (SELECT STRING_AGG(t.name, ', ') FROM participant_topic pct JOIN topic t ON pct.topic_id = t.id WHERE pct.participant_id = pt.id) as reviewer_topics
         FROM review rv
         JOIN paper p ON rv.paper_id = p.id
         JOIN participant pt ON rv.participant_id = pt.id
         JOIN researcher r ON r.id = pt.researcher_id
         WHERE rv.is_superseded = false AND p.edition_id = $1
-        AND EXISTS (
-            SELECT 1 FROM paper_topic pt2 WHERE pt2.paper_id = p.id
+        AND EXISTS (SELECT 1 FROM paper_topic pt2 WHERE pt2.paper_id = p.id)
+        AND NOT EXISTS (
+            SELECT 1 FROM paper_topic pt2
+            JOIN participant_topic pct ON pct.topic_id = pt2.topic_id AND pct.participant_id = pt.id
+            WHERE pt2.paper_id = p.id
         )
     `;
     const result = await client.query(query, [eid]);
@@ -121,9 +126,10 @@ async function getReviewersForPapers(paperExternalIds, editionId = null, setting
     return maskNames(result.rows, settings, 'reviewer_id');
 }
 
-async function getSentimentMismatches(editionId = null, settingsArg = null) {
+async function getSentimentMismatches(editionId = null, settingsArg = null, threshold = 6.0) {
     const eid = await resolveEditionId(editionId);
     const settings = settingsArg || await getAnonymizationSettings(eid);
+    const thr = Number.isFinite(Number(threshold)) ? Math.abs(Number(threshold)) : 6.0;
     const query = `
         SELECT
             rv.id,
@@ -139,13 +145,13 @@ async function getSentimentMismatches(editionId = null, settingsArg = null) {
         JOIN participant pt ON rv.participant_id = pt.id
         JOIN researcher r ON r.id = pt.researcher_id
         WHERE (
-            (rv.total_score < 0 AND rv.sentiment_score >= 6.0) OR
-            (rv.total_score > 1 AND rv.sentiment_score <= -6.0)
+            (rv.total_score < 0 AND rv.sentiment_score >= $2) OR
+            (rv.total_score > 1 AND rv.sentiment_score <= -$2)
         )
         AND rv.is_superseded = false
         AND p.edition_id = $1
     `;
-    const result = await client.query(query, [eid]);
+    const result = await client.query(query, [eid, thr]);
     return maskNames(result.rows, settings, 'reviewer_id');
 }
 

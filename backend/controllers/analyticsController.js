@@ -91,12 +91,16 @@ const getReviewerReport = asyncHandler(async (req, res) => {
     res.send(pdfBuffer);
 });
 
+const { normalizeDecision } = require("../utils/decisionHelper");
+const dashboardCache = require("../utils/dashboardCache");
 const updatePaperDecision = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { decision } = req.body;
     if (decision === undefined) throw new ValidationError("Decision is required");
+    const normalized = normalizeDecision(decision);
     try {
-        const updated = await analyticsService.updatePaperDecision(id, decision);
+        const updated = await analyticsService.updatePaperDecision(id, normalized);
+        dashboardCache.del();
         res.json(updated);
     } catch (error) {
         if (error && error.status === 403) throw new ForbiddenError(error.message);
@@ -105,26 +109,40 @@ const updatePaperDecision = asyncHandler(async (req, res) => {
 });
 
 const runImporter = require("../importer/runImporter");
+const importStatus = new Map();
+let importSeq = 0;
 
 const processUpload = asyncHandler(async (req, res) => {
     if (!req.file) throw new ValidationError("No file uploaded");
 
     console.log(`Processing uploaded file: ${req.file.path}`);
 
-    // User-supplied conference metadata (overrides auto-detection)
     const meta = {
         name: req.body.conferenceName || null,
         shortName: req.body.conferenceShortName || null,
         year: req.body.conferenceYear ? parseInt(req.body.conferenceYear) : null
     };
 
-    try {
-        await runImporter(req.file.path, meta);
-    } catch (error) {
-        console.error("Error during import:", error);
-        throw Object.assign(new Error("Failed to process conference data."), { statusCode: 500 });
-    }
-    res.json({ message: "Conference processed successfully!" });
+    const importId = String(++importSeq);
+    importStatus.set(importId, { status: 'running', startedAt: Date.now() });
+    // Fire-and-forget: respond 202 immediately, poll via /import-status
+    setImmediate(async () => {
+        try {
+            await runImporter(req.file.path, meta);
+            dashboardCache.del();
+            importStatus.set(importId, { status: 'done', finishedAt: Date.now() });
+        } catch (error) {
+            console.error("Error during import:", error);
+            importStatus.set(importId, { status: 'error', error: error.message, finishedAt: Date.now() });
+        }
+    });
+    res.status(202).json({ importId, message: "Import started", pollUrl: `/api/analytics/import-status/${importId}` });
+});
+
+const getImportStatus = asyncHandler(async (req, res) => {
+    const s = importStatus.get(req.params.id);
+    if (!s) return res.status(404).json({ error: "Import not found" });
+    res.json(s);
 });
 
 const resetDatabase = require("../utils/resetDatabase");
@@ -145,11 +163,14 @@ const getComparison = asyncHandler(async (req, res) => {
 
 const deleteConference = asyncHandler(async (req, res) => {
     await conferenceRepository.deleteConference(req.params.id);
+    dashboardCache.del();
     res.json({ message: "Conference deleted successfully" });
 });
 
 const updateConference = asyncHandler(async (req, res) => {
-    res.json(await conferenceRepository.updateConference(req.params.id, req.body));
+    const updated = await conferenceRepository.updateConference(req.params.id, req.body);
+    dashboardCache.del();
+    res.json(updated);
 });
 
 const { getAlertRules: fetchRules, ensureAlertRulesForEdition, assertSafeNumber } = require("../repositories/analytics/helpers");
@@ -182,6 +203,7 @@ const updateAlertRules = asyncHandler(async (req, res) => {
             );
         }
     });
+    dashboardCache.del(eid);
     res.json({ ok: true });
 });
 
@@ -339,6 +361,7 @@ module.exports = {
     getReviewerReport,
     updatePaperDecision,
     processUpload,
+    getImportStatus,
     resetDb,
     listConferences,
     getComparison,

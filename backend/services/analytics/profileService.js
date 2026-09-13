@@ -3,10 +3,11 @@ const { analyticsRepository } = require("./common");
 // 6. Academic Quality Profile (CORE / GII-GRIN-SCIE)
 async function getAcademicQualityProfile(prefetched = null, conferenceId = null) {
     const cid = conferenceId;
-    const health = prefetched?.health || await analyticsRepository.getConferenceHealth(cid);
-    const acceptance = await analyticsRepository.getAcceptanceRate(cid);
-    const diversity = prefetched?.diversity || await analyticsRepository.getGeographicDiversity(cid);
-    const competence = await analyticsRepository.getThematicCompetence(cid);
+    const healthPromise = prefetched?.health ? Promise.resolve(prefetched.health) : analyticsRepository.getConferenceHealth(cid);
+    const acceptancePromise = prefetched?.acceptance ? Promise.resolve(prefetched.acceptance) : analyticsRepository.getAcceptanceRate(cid);
+    const diversityPromise = prefetched?.diversity ? Promise.resolve(prefetched.diversity) : analyticsRepository.getGeographicDiversity(cid);
+    const competencePromise = prefetched?.competence ? Promise.resolve(prefetched.competence) : analyticsRepository.getThematicCompetence(cid);
+    const [health, acceptance, diversity, competence] = await Promise.all([healthPromise, acceptancePromise, diversityPromise, competencePromise]);
 
     const totalPapers = parseInt(health?.total_papers) || parseInt(acceptance?.total_submissions) || 0;
     const acceptedPapers = parseInt(acceptance?.accepted_submissions) || 0;

@@ -91,25 +91,50 @@ async function getPapersList(filters = {}, editionId = null) {
     };
 }
 
+function buildNormalizationCTEs() {
+    return `
+        ReviewerStats AS (
+            SELECT r.participant_id, AVG(r.total_score) as rev_mean, STDDEV_SAMP(r.total_score) as rev_std, COUNT(r.id) as rev_count
+            FROM review r JOIN paper p ON r.paper_id = p.id
+            WHERE r.is_superseded = false AND p.is_deleted = false AND p.edition_id = $1
+            GROUP BY r.participant_id HAVING COUNT(r.id) >= 3 AND STDDEV_SAMP(r.total_score) > 0
+        ),
+        ConfStats AS (
+            SELECT AVG(r.total_score) as conf_mean, STDDEV_SAMP(r.total_score) as conf_std
+            FROM review r JOIN paper p ON r.paper_id = p.id
+            WHERE r.is_superseded = false AND p.is_deleted = false AND p.edition_id = $1
+        ),
+        NormalizedReviews AS (
+            SELECT r.id as review_id, r.paper_id, r.total_score as raw_score,
+                CASE WHEN rs.rev_count >= 3 AND rs.rev_std > 0 AND cs.conf_std > 0
+                THEN ROUND(CAST(cs.conf_mean + ((r.total_score - rs.rev_mean) / rs.rev_std) * cs.conf_std AS numeric), 2)
+                ELSE r.total_score END as normalized_score
+            FROM review r JOIN paper p ON r.paper_id = p.id CROSS JOIN ConfStats cs
+            LEFT JOIN ReviewerStats rs ON r.participant_id = rs.participant_id
+            WHERE r.is_superseded = false AND p.is_deleted = false AND p.edition_id = $1
+        )`;
+}
+
 async function getPaperDebates(editionId = null) {
     const eid = await resolveEditionId(editionId);
     const query = `
+        WITH ${buildNormalizationCTEs()}
         SELECT
             p.id,
             p.external_submission_id,
             p.title,
             p.decision_category,
             COUNT(DISTINCT r.id) as total_reviews,
-            COUNT(DISTINCT c.id) as total_comments,
+            (SELECT COUNT(*) FROM comment c WHERE c.paper_id = p.id) as total_comments,
             ROUND(AVG(r.total_score), 2) as average_score,
-            ROUND(AVG(r.total_score), 2) as adjusted_score,
+            ROUND(AVG(nr.normalized_score), 2) as adjusted_score,
             ROUND(STDDEV(r.total_score), 2) as score_std_dev,
             MAX(r.total_score) - MIN(r.total_score) as score_spread,
             ARRAY_AGG(DISTINCT r.total_score) as scores,
             (SELECT COUNT(*) FROM assignment a WHERE a.paper_id = p.id) as total_assigned
         FROM paper p
         JOIN review r ON r.paper_id = p.id AND r.is_superseded = false
-        LEFT JOIN comment c ON c.paper_id = p.id
+        LEFT JOIN NormalizedReviews nr ON nr.review_id = r.id
         WHERE p.is_deleted = false AND p.edition_id = $1
         GROUP BY p.id
         HAVING COUNT(DISTINCT r.id) >= 2
@@ -137,8 +162,7 @@ async function getSubmissions(options = {}) {
         filterClause += ' AND r.total_score <= -2';
     }
 
-    // Sorting by review date/time by default (matches frontend 'review_date_desc')
-    let orderClause = 'ORDER BY r.review_date DESC NULLS LAST, r.review_time DESC NULLS LAST';
+    let orderClause = 'ORDER BY r.review_date DESC NULLS LAST, r.review_time DESC NULLS LAST, r.id DESC';
     const sort = options.sortBy;
     const order = options.sortOrder;
     if (sort) {
@@ -155,18 +179,24 @@ async function getSubmissions(options = {}) {
         }
     }
 
-    const limitVal = parseInt(options.limit) || 'ALL';
-    const offsetVal = parseInt(options.offset) || 0;
+    let offsetVal = parseInt(options.offset, 10);
+    if (!Number.isFinite(offsetVal) || offsetVal < 0) offsetVal = 0;
     let limitClause;
-    if (limitVal === 'ALL') {
+    let offsetClause;
+    if (options.limit === undefined || options.limit === null || options.limit === '') {
         limitClause = 'LIMIT ALL';
+        offsetClause = `OFFSET $${paramIdx}`;
+        values.push(offsetVal);
     } else {
+        let limitVal = parseInt(options.limit, 10);
+        if (!Number.isFinite(limitVal) || limitVal < 0) limitVal = 50;
+        limitVal = Math.min(limitVal, 100);
         limitClause = `LIMIT $${paramIdx}`;
         values.push(limitVal);
         paramIdx++;
+        offsetClause = `OFFSET $${paramIdx}`;
+        values.push(offsetVal);
     }
-    const offsetClause = `OFFSET $${paramIdx}`;
-    values.push(offsetVal);
 
     const query = `
         SELECT
@@ -213,6 +243,17 @@ async function getTopPapers(editionId = null, limit = 5) {
         LIMIT $2
     `;
     const result = await client.query(query, [eid, limit]);
+    return result.rows;
+}
+
+async function getPaperCoverageStats(editionId = null) {
+    const eid = await resolveEditionId(editionId);
+    const query = `
+        SELECT p.id, p.external_submission_id, p.decision_category, COUNT(DISTINCT r.id) as total_reviews
+        FROM paper p LEFT JOIN review r ON r.paper_id = p.id AND r.is_superseded = false
+        WHERE p.is_deleted = false AND p.edition_id = $1 GROUP BY p.id
+    `;
+    const result = await client.query(query, [eid]);
     return result.rows;
 }
 
@@ -340,42 +381,7 @@ async function getPapersViewList(params = {}, editionId = null) {
         : '';
 
     const query = `
-        WITH ReviewerStats AS (
-            SELECT
-                r.participant_id,
-                AVG(r.total_score) as rev_mean,
-                STDDEV_SAMP(r.total_score) as rev_std,
-                COUNT(r.id) as rev_count
-            FROM review r
-            JOIN paper p ON r.paper_id = p.id
-            WHERE r.is_superseded = false AND p.is_deleted = false AND p.edition_id = $1
-            GROUP BY r.participant_id
-            HAVING COUNT(r.id) >= 3 AND STDDEV_SAMP(r.total_score) > 0
-        ),
-        ConfStats AS (
-            SELECT
-                AVG(r.total_score) as conf_mean,
-                STDDEV_SAMP(r.total_score) as conf_std
-            FROM review r
-            JOIN paper p ON r.paper_id = p.id
-            WHERE r.is_superseded = false AND p.is_deleted = false AND p.edition_id = $1
-        ),
-        NormalizedReviews AS (
-            SELECT
-                r.id as review_id,
-                r.paper_id,
-                r.total_score as raw_score,
-                CASE
-                    WHEN rs.rev_count >= 3 AND rs.rev_std > 0 AND cs.conf_std > 0 THEN
-                        ROUND(CAST(cs.conf_mean + ((r.total_score - rs.rev_mean) / rs.rev_std) * cs.conf_std AS numeric), 2)
-                    ELSE r.total_score
-                END as normalized_score
-            FROM review r
-            JOIN paper p ON r.paper_id = p.id
-            CROSS JOIN ConfStats cs
-            LEFT JOIN ReviewerStats rs ON r.participant_id = rs.participant_id
-            WHERE r.is_superseded = false AND p.is_deleted = false AND p.edition_id = $1
-        )
+        WITH ${buildNormalizationCTEs()}
         SELECT
             p.id,
             p.external_submission_id,
@@ -399,9 +405,9 @@ async function getPapersViewList(params = {}, editionId = null) {
         LEFT JOIN NormalizedReviews nr ON nr.review_id = rv.id
         WHERE p.is_deleted = false AND p.edition_id = $1
         ${excludeDeskNoDecision}
+        ${whereExtra}
         GROUP BY p.id
         ${havingClause}
-        ${whereExtra}
         ${orderClause}
         ${limitClause} ${offsetClause}
     `;
@@ -489,5 +495,6 @@ module.exports = {
     getTopPapers,
     updatePaperDecision,
     getPapersViewList,
-    getPaperDetails
+    getPaperDetails,
+    getPaperCoverageStats
 };

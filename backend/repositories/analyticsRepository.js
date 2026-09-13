@@ -17,7 +17,8 @@ const {
     getPaperDebates,
     getPaperDetails,
     updatePaperDecision,
-    getTopPapers
+    getTopPapers,
+    getPaperCoverageStats
 } = require("./analytics/paperQueries");
 const {
     getExpertiseMismatches,
@@ -49,6 +50,7 @@ module.exports = {
     getTopReviewers,
     getSentimentMismatches,
     getReviewersForPapers,
+    getPaperCoverageStats,
     getAnonymizationSettings,
     maskNames
 };

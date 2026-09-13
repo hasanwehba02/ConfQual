@@ -68,7 +68,7 @@ describe('Alert thresholds & per-edition configuration', () => {
         }
     });
 
-    test('alert rule defaults are well-formed (numeric default, readable label, valid domain)', (t) => {
+    test('alert rule defaults are well-formed (numeric default, readable label, valid domain)', (_t) => {
         const keys = Object.keys(alertDefaults);
         assert.ok(keys.length >= 5, 'expected at least 5 alert rule defaults');
         for (const [key, def] of Object.entries(alertDefaults)) {

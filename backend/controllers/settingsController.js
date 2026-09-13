@@ -21,6 +21,7 @@ const updateSettings = asyncHandler(async (req, res) => {
         RETURNING id;
     `;
     await pool.query(query, [is_anonymized, decision_editing_enabled || false]);
+    require('../utils/dashboardCache').del();
     res.json({ success: true });
 });
 

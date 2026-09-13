@@ -31,6 +31,7 @@ router.get("/reviewers/:id/report", analyticsController.getReviewerReport);
 router.post("/reset", analyticsController.resetDb);
 
 router.post("/process-conference", upload.single('excelFile'), analyticsController.processUpload);
+router.get("/import-status/:id", analyticsController.getImportStatus);
 
 // Multi-conference management
 router.get("/conferences", analyticsController.listConferences);

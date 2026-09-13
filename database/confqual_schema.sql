@@ -160,7 +160,7 @@ CREATE TABLE paper (
     submitted_at TIMESTAMP,
     last_updated_at TIMESTAMP,
     decision TEXT,
-    decision_category TEXT,
+    decision_category TEXT CHECK (decision_category IN ('accept','reject','desk_reject','withdrawn','no_decision','no decision')),
     notified BOOLEAN,
     reviews_sent BOOLEAN,
     is_deleted BOOLEAN DEFAULT FALSE,
@@ -478,3 +478,25 @@ CREATE TABLE settings (
     anonymization_prefix TEXT DEFAULT 'CAiSE_26_Tech',
     decision_editing_enabled BOOLEAN DEFAULT false
 );
+
+-- Performance indexes for frequent WHERE/JOIN/filter patterns
+CREATE INDEX IF NOT EXISTS idx_paper_edition_deleted ON paper(edition_id, is_deleted);
+CREATE INDEX IF NOT EXISTS idx_review_paper_superseded ON review(paper_id, is_superseded);
+CREATE INDEX IF NOT EXISTS idx_review_participant ON review(participant_id, is_superseded);
+CREATE INDEX IF NOT EXISTS idx_assignment_paper ON assignment(paper_id);
+CREATE INDEX IF NOT EXISTS idx_assignment_participant ON assignment(participant_id);
+CREATE INDEX IF NOT EXISTS idx_comment_paper ON comment(paper_id);
+CREATE INDEX IF NOT EXISTS idx_comment_participant ON comment(participant_id);
+CREATE INDEX IF NOT EXISTS idx_conflict_paper ON conflict(paper_id);
+CREATE INDEX IF NOT EXISTS idx_bid_paper_participant ON bid(paper_id, participant_id);
+CREATE INDEX IF NOT EXISTS idx_participant_edition ON participant(edition_id);
+CREATE INDEX IF NOT EXISTS idx_paper_author_paper ON paper_author_new(paper_id);
+CREATE INDEX IF NOT EXISTS idx_paper_topic_paper ON paper_topic(paper_id);
+CREATE INDEX IF NOT EXISTS idx_meta_review_paper ON meta_review(paper_id);
+
+CREATE TABLE IF NOT EXISTS participant_topic (
+    participant_id INT NOT NULL REFERENCES participant(id) ON DELETE CASCADE,
+    topic_id INT NOT NULL REFERENCES topic(id) ON DELETE CASCADE,
+    PRIMARY KEY (participant_id, topic_id)
+);
+CREATE INDEX IF NOT EXISTS idx_participant_topic_topic ON participant_topic(topic_id);

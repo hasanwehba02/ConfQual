@@ -2,12 +2,18 @@ const client = require("../../config/database");
 
 // Helper: resolve editionId — defaults to most recently uploaded edition
 async function resolveEditionId(editionId) {
+    const isExplicit = editionId !== null && editionId !== undefined && editionId !== '' && !(typeof editionId === 'object' && editionId !== null && !editionId.editionId && !editionId.edition_id && !editionId.conferenceId && !editionId.conference_id);
     if (typeof editionId === 'object' && editionId !== null) {
         editionId = editionId.editionId || editionId.edition_id || editionId.conferenceId || editionId.conference_id || null;
     }
     if (editionId !== null && editionId !== undefined && editionId !== '') {
         const parsed = parseInt(editionId, 10);
-        if (!isNaN(parsed)) return parsed;
+        if (!isNaN(parsed)) {
+            const exists = await client.query(`SELECT id FROM edition WHERE id = $1`, [parsed]);
+            if (exists.rows.length > 0) return parsed;
+            // Explicit id requested but not found — do not fallback, signal missing
+            if (isExplicit) return null;
+        }
     }
     const result = await client.query(
         `SELECT id FROM edition ORDER BY uploaded_at DESC LIMIT 1`

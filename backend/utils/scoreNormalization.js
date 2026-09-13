@@ -40,6 +40,9 @@ function computeReviewerStats(reviews) {
  * @returns {number[]} one adjusted score per review (in input order)
  */
 function applyNormalization(reviews, reviewerStats, confStats) {
+    if (!Number.isFinite(confStats?.mean) || !Number.isFinite(confStats?.std)) {
+        return reviews.map((r) => (r.totalScore == null ? null : r.totalScore));
+    }
     return reviews.map((r) => {
         if (r.totalScore == null) return null;
         const st = reviewerStats.get(r.reviewerId);

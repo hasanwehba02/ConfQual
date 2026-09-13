@@ -5,10 +5,10 @@ const bidRepository = require("../../repositories/bidRepository");
 const paperRepository = require("../../repositories/paperRepository");
 const participantRepository = require("../../repositories/participantRepository");
 
-async function importBidsForSheet(workbook, sheet, edition) {
+async function importBidsForSheet(workbook, sheet, edition, context = {}) {
     if (!sheet) return;
-    const paperMap = await paperRepository.getIdMap(edition.id);
-    const participantMap = await participantRepository.getParticipantIdMap(edition.id);
+    const paperMap = context.paperMap ?? await paperRepository.getIdMap(edition.id);
+    const participantMap = context.participantMap ?? await participantRepository.getParticipantIdMap(edition.id);
     const headerMap = {};
     sheet.getRow(1).eachCell((cell, colNumber) => {
         if (cell.value) {
@@ -35,7 +35,7 @@ async function importBidsForSheet(workbook, sheet, edition) {
         dto.bid = String(dto.bid).trim();
         dtos.push(dto);
     }
-    const chunkSize = 200;
+    const chunkSize = 500;
     for (let i = 0; i < dtos.length; i += chunkSize) {
         const chunk = dtos.slice(i, i + chunkSize);
         imported += await bidRepository.bulkCreateBids(chunk);
@@ -44,7 +44,7 @@ async function importBidsForSheet(workbook, sheet, edition) {
     console.log(`Skipped bid rows: ${skipped}`);
 }
 
-async function importBids(edition) {
+async function importBids(edition, context = {}) {
     const workbook = await readWorkbook();
     const candidateSheets = [
         "Paper bidding", "Paper Bidding", "paper bidding",
@@ -52,7 +52,7 @@ async function importBids(edition) {
     ];
     const sheet = findWorksheet(workbook, candidateSheets);
     if (sheet) {
-        await importBidsForSheet(workbook, sheet, edition);
+        await importBidsForSheet(workbook, sheet, edition, context);
         console.log(`Bids imported successfully from sheet '${sheet.name}'.\n`);
     } else {
         console.log("No bids sheet found. Skipping.\n");

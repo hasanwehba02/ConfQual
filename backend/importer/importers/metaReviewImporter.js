@@ -5,10 +5,10 @@ const metaReviewRepository = require("../../repositories/metaReviewRepository");
 const paperRepository = require("../../repositories/paperRepository");
 const participantRepository = require("../../repositories/participantRepository");
 
-async function importMetaReviewsForSheet(workbook, sheet, edition) {
+async function importMetaReviewsForSheet(workbook, sheet, edition, context = {}) {
     if (!sheet) return;
-    const paperMap = await paperRepository.getIdMap(edition.id);
-    const participantMap = await participantRepository.getParticipantIdMap(edition.id);
+    const paperMap = context.paperMap ?? await paperRepository.getIdMap(edition.id);
+    const participantMap = context.participantMap ?? await participantRepository.getParticipantIdMap(edition.id);
     const headerMap = {};
     sheet.getRow(1).eachCell((cell, colNumber) => {
         if (cell.value) {
@@ -34,7 +34,7 @@ async function importMetaReviewsForSheet(workbook, sheet, edition) {
         }
         dtos.push(dto);
     }
-    const chunkSize = 200;
+    const chunkSize = 500;
     for (let i = 0; i < dtos.length; i += chunkSize) {
         const chunk = dtos.slice(i, i + chunkSize);
         imported += await metaReviewRepository.bulkCreateMetaReviews(chunk);
@@ -43,12 +43,12 @@ async function importMetaReviewsForSheet(workbook, sheet, edition) {
     console.log(`Skipped meta-review rows: ${skipped}`);
 }
 
-async function importMetaReviews(edition) {
+async function importMetaReviews(edition, context = {}) {
     const workbook = await readWorkbook();
     const candidateSheets = ["Metareviews", "Meta reviews", "meta reviews", "Metareview", "Meta Reviews", "metareviews", "Meta-reviews"];
     const sheet = findWorksheet(workbook, candidateSheets);
     if (sheet) {
-        await importMetaReviewsForSheet(workbook, sheet, edition);
+        await importMetaReviewsForSheet(workbook, sheet, edition, context);
         console.log(`Meta-reviews imported successfully from sheet '${sheet.name}'.\n`);
     } else {
         console.log("No meta-reviews sheet found. Skipping.\n");

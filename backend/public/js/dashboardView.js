@@ -26,7 +26,10 @@ window.updatePaperDecision = async function(internalId, newDecision) {
     }
 };
 
+let dashboardRequestSeq = 0;
 export async function loadDashboardData() {
+    const requestSeq = ++dashboardRequestSeq;
+    const requestedId = state.activeConferenceId;
     try {
         document.getElementById('loading-indicator')?.classList.remove('hidden');
         document.getElementById('dashboard-content').classList.add('hidden');
@@ -49,9 +52,30 @@ export async function loadDashboardData() {
             alertsList.innerHTML = '<div class="text-muted" style="padding: 1rem; text-align: center;"><i class="ph ph-spinner ph-spin"></i> Loading...</div>';
         }
 
-        const qs = state.activeConferenceId ? `?conferenceId=${state.activeConferenceId}` : '';
+        const qs = requestedId ? `?conferenceId=${requestedId}` : '';
         const res = await fetch(`/api/analytics/dashboard${qs}`);
         const data = await res.json();
+
+        // Guard: ignore stale responses if user switched conference while fetching
+        if (requestSeq !== dashboardRequestSeq || state.activeConferenceId !== requestedId) return;
+        // If backend couldn't resolve explicit id (deleted conference), data.conferenceId is null — fallback to latest
+        if (requestedId != null && data.conferenceId == null) {
+            console.warn(`Requested conference ${requestedId} not found — falling back to latest`);
+            state.activeConferenceId = data.conferenceId || null;
+            window.localStorage.removeItem('confqual.activeConferenceId');
+            await loadConferences();
+            // Retry once with latest (requestedId = null)
+            if (state.activeConferenceId) {
+                const retryQs = `?conferenceId=${state.activeConferenceId}`;
+                const retryRes = await fetch(`/api/analytics/dashboard${retryQs}`);
+                const retryData = await retryRes.json();
+                if (requestSeq !== dashboardRequestSeq) return;
+                Object.assign(data, retryData);
+            }
+        } else if (requestedId != null && data.conferenceId != null && String(data.conferenceId) !== String(requestedId)) {
+            console.warn(`Dashboard response conferenceId ${data.conferenceId} != requested ${requestedId} — ignoring stale cache/fallback`);
+            return;
+        }
 
         state.isCurrentAnonymized = !!data.is_anonymized;
         renderAlerts(data.alerts, state.isCurrentAnonymized);

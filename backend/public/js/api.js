@@ -39,21 +39,21 @@ export async function importData(formData) {
     return result;
 }
 
-export async function fetchPapers(limit = 10000, offset = 0, conferenceId = null) {
+export async function fetchPapers(limit = 50, offset = 0, conferenceId = null) {
     const cq = conferenceId ? `&conferenceId=${conferenceId}` : '';
     const res = await fetch(`/api/analytics/papers?limit=${limit}&offset=${offset}${cq}`);
     if (!res.ok) throw new Error('Failed to fetch papers');
     return res.json();
 }
 
-export async function fetchReviewers(limit = 10000, offset = 0, conferenceId = null) {
+export async function fetchReviewers(limit = 50, offset = 0, conferenceId = null) {
     const cq = conferenceId ? `&conferenceId=${conferenceId}` : '';
     const res = await fetch(`/api/analytics/reviewers?limit=${limit}&offset=${offset}${cq}`);
     if (!res.ok) throw new Error('Failed to fetch reviewers');
     return res.json();
 }
 
-export async function fetchSubmissions(limit = 10000, offset = 0, conferenceId = null) {
+export async function fetchSubmissions(limit = 50, offset = 0, conferenceId = null) {
     const cq = conferenceId ? `&conferenceId=${conferenceId}` : '';
     const res = await fetch(`/api/analytics/submissions?limit=${limit}&offset=${offset}${cq}`);
     if (!res.ok) throw new Error('Failed to fetch submissions');

@@ -99,6 +99,27 @@ export function wireUploadView() {
                 throw new Error(errData.error || 'Upload failed');
             }
 
+            const data = await response.json().catch(() => ({}));
+            // New 202 async path: poll import-status until done before refreshing UI
+            if (data.importId && data.pollUrl) {
+                let status = 'running';
+                while (status === 'running') {
+                    await new Promise(r => setTimeout(r, 800));
+                    try {
+                        const sRes = await fetch(data.pollUrl);
+                        if (sRes.ok) {
+                            const sData = await sRes.json();
+                            status = sData.status;
+                            if (status === 'error') throw new Error(sData.error || 'Import failed in background');
+                        } else {
+                            status = 'done';
+                        }
+                    } catch {
+                        status = 'done';
+                    }
+                }
+            }
+
             uploadDrawer.classList.remove('open');
             uploadDrawer.classList.add('closed');
             document.getElementById('empty-state').classList.add('hidden');

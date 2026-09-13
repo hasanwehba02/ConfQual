@@ -7,22 +7,31 @@ const { getAlerts } = require("./alertService");
 const { getSystemAnalytics } = require("./scorecardService");
 const { getAcademicQualityProfile } = require("./profileService");
 
+const dashboardCache = require("../../utils/dashboardCache");
+const { resolveEditionId } = require("../../repositories/analytics/helpers");
+
 async function getDashboardData(conferenceId = null) {
     const cid = conferenceId;
-    // 1. Fetch all base data ONCE
     const settings = await analyticsRepository.getAnonymizationSettings(cid);
+    const eid = await resolveEditionId(cid);
+    const cached = dashboardCache.get(eid, !!settings.is_anonymized);
+    if (cached) return cached;
+    return dashboardCache.coalesce(eid, !!settings.is_anonymized, async () => {
     const health = await getConferenceHealth(cid);
-    const papers = await getPaperDebates({ conferenceId: cid });
-    const reviewers = await getReviewerQuality({ conferenceId: cid, settings });
-    enrichReviewerBias(reviewers);
-    const mismatches = await getExpertiseMismatches(cid, settings);
-    const coiViolations = await analyticsRepository.getCOIViolations(cid, settings);
-    const missingMetareviews = await analyticsRepository.getMissingMetareviews(cid, settings);
-    const topReviewers = await analyticsRepository.getTopReviewers(cid);
-    const distributions = await analyticsRepository.getSystemDistributions(cid);
-    const diversity = await analyticsRepository.getGeographicDiversity(cid);
-    const submissions = await analyticsRepository.getSubmissions({ conferenceId: cid });
-    const sentimentMismatches = await analyticsRepository.getSentimentMismatches(cid, settings);
+    // Fetch independent datasets in parallel to reduce latency
+    const [papers, reviewersRaw, mismatches, coiViolations, missingMetareviews, topReviewers, distributions, diversity, submissions, sentimentMismatches] = await Promise.all([
+        getPaperDebates({ conferenceId: cid }),
+        getReviewerQuality({ conferenceId: cid, settings }),
+        getExpertiseMismatches(cid, settings),
+        analyticsRepository.getCOIViolations(cid, settings),
+        analyticsRepository.getMissingMetareviews(cid, settings),
+        analyticsRepository.getTopReviewers(cid),
+        analyticsRepository.getSystemDistributions(cid),
+        analyticsRepository.getGeographicDiversity(cid),
+        analyticsRepository.getSubmissions({ conferenceId: cid }),
+        analyticsRepository.getSentimentMismatches(cid, settings),
+    ]);
+    const reviewers = enrichReviewerBias(reviewersRaw);
 
     const prefetched = {
         health, papers, reviewers, mismatches, coiViolations, 
@@ -34,7 +43,7 @@ async function getDashboardData(conferenceId = null) {
     const systemAnalytics = await getSystemAnalytics(prefetched, cid);
     const qualityProfile = await getAcademicQualityProfile(prefetched, cid);
 
-    return {
+    const result = {
         conferenceId: health?.conferenceId,
         conferenceName: health?.conference_name,
         is_anonymized: !!settings.is_anonymized,
@@ -45,6 +54,9 @@ async function getDashboardData(conferenceId = null) {
         reviewers: { items: reviewers, totalCount: reviewers.length },
         submissions: { items: submissions, totalCount: submissions.length }
     };
+    dashboardCache.set(eid, !!settings.is_anonymized, result);
+    return result;
+    });
 }
 
 module.exports = { getDashboardData };

@@ -104,7 +104,7 @@ test('mapPaper normalizes decision categories and empty flags', () => {
     assert.strictEqual(mapped.reviewsSent, false);
 
     const desk = mapPaper(row({ 8: 'Desk Reject' }), 'c');
-    assert.strictEqual(desk.decisionCategory, 'desk reject');
+    assert.strictEqual(desk.decisionCategory, 'desk_reject');
 
     const none = mapPaper(row({ 8: 123 }), 'c');
     assert.strictEqual(none.decisionCategory, 'no decision');

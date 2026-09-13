@@ -210,8 +210,62 @@ async function bulkCreateParticipants(participants) {
     );
 }
 
+/**
+ * Bulk find-or-create participants for a single edition.
+ * Returns a Map: externalPersonId → participant row.
+ *
+ * @param {Array<{researcherId, editionId, externalPersonId}>} items
+ * @returns {Promise<Map<number, Object>>}
+ */
+async function bulkFindOrCreateParticipants(items) {
+    if (!items || items.length === 0) return new Map();
+
+    const researcherIds   = items.map(p => p.researcherId);
+    const editionIds      = items.map(p => p.editionId);
+    const externalIds     = items.map(p => p.externalPersonId || null);
+
+    // Single upsert — handles both unique constraints (researcher_id,edition_id) and (edition_id,external_person_id)
+    // Use DO NOTHING for any conflict, then coalesce external_person_id where missing
+    await client.query(`
+        INSERT INTO participant (researcher_id, edition_id, external_person_id)
+        SELECT * FROM unnest($1::int[], $2::int[], $3::int[])
+        ON CONFLICT DO NOTHING
+    `, [researcherIds, editionIds, externalIds]);
+
+    // Backfill external_person_id where we inserted with NULL or conflict skipped it
+    await client.query(`
+        UPDATE participant SET external_person_id = v.ext
+        FROM (SELECT * FROM unnest($1::int[], $2::int[], $3::int[]) AS t(rid, eid, ext)) v
+        WHERE participant.researcher_id = v.rid AND participant.edition_id = v.eid
+          AND participant.external_person_id IS NULL AND v.ext IS NOT NULL
+    `, [researcherIds, editionIds, externalIds]);
+
+    // Fetch back by both researcher and external id to handle either conflict path
+    const editionId = items[0].editionId;
+    const fetched = await client.query(
+        `SELECT id, researcher_id, external_person_id
+         FROM participant
+         WHERE edition_id = $1 AND (researcher_id = ANY($2::int[]) OR external_person_id = ANY($3::int[]))`,
+        [editionId, researcherIds, externalIds.filter(Boolean)]
+    );
+
+    const resultMap = new Map();
+    const byResearcher = new Map(fetched.rows.map(r => [r.researcher_id, r]));
+    const byExternal = new Map(fetched.rows.filter(r => r.external_person_id != null).map(r => [r.external_person_id, r]));
+
+    for (const item of items) {
+        let row = byResearcher.get(item.researcherId);
+        if (!row && item.externalPersonId) row = byExternal.get(item.externalPersonId);
+        if (row && item.externalPersonId) resultMap.set(item.externalPersonId, row);
+        else if (row) resultMap.set(item.researcherId, row);
+    }
+
+    return resultMap;
+}
+
 module.exports = {
     findOrCreateParticipant,
+    bulkFindOrCreateParticipants,
     getParticipantById,
     getParticipantsByEdition,
     getParticipantWithRoles,
@@ -221,3 +275,4 @@ module.exports = {
     bulkCreateAuthorParticipants,
     bulkCreateParticipants
 };
+

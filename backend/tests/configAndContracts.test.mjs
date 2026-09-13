@@ -1,5 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import analyticsRepository from '../repositories/analyticsRepository.js';
+import scorecardService from '../services/analytics/scorecardService.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -91,6 +93,75 @@ describe('source-level regression guards', () => {
         );
         assert.ok(ensureSection.includes('ON CONFLICT'),
             'ensureAlertRulesForEdition must use ON CONFLICT to be idempotent');
+    });
+});
+
+// ─── System analytics data reuse ─────────────────────────────────────────────
+
+describe('getSystemAnalytics data reuse', () => {
+    test('reuses prefetched health, papers, reviewers and mismatches instead of refetching', async () => {
+        const prefetched = {
+            health: { conferenceId: 1 },
+            papers: [{ id: 1 }],
+            reviewers: [{ id: 1 }],
+            mismatches: { totalMismatches: 0, details: [] },
+            topPapers: [],
+            topReviewers: [],
+            distributions: [],
+            sessionClusters: [],
+            coiViolations: [],
+            missingMetareviews: [],
+            coveragePapers: [{ id: 1, decision_category: 'accept', total_reviews: 3 }],
+            diversity: [],
+            submissions: [],
+            sentimentMismatches: []
+        };
+        const calls = [];
+        const original = { ...analyticsRepository };
+        const mockReturns = {
+            getPaperDebates: prefetched.papers,
+            getReviewerQuality: prefetched.reviewers,
+            getExpertiseMismatches: prefetched.mismatches,
+            getTopPapers: prefetched.topPapers,
+            getSessionClusters: prefetched.sessionClusters,
+            getPaperCoverageStats: prefetched.coveragePapers,
+            getCOIViolations: prefetched.coiViolations,
+            getMissingMetareviews: prefetched.missingMetareviews,
+            getTopReviewers: prefetched.topReviewers,
+            getSystemDistributions: prefetched.distributions,
+            getGeographicDiversity: prefetched.diversity,
+            getSubmissions: prefetched.submissions,
+            getSentimentMismatches: prefetched.sentimentMismatches,
+            getConferenceHealth: prefetched.health,
+            getAcceptanceRate: { total_submissions: 1, accepted_submissions: 0 },
+            getThematicCompetence: []
+        };
+        const mock = (name) => (..._args) => { calls.push(name); return Promise.resolve(mockReturns[name]); };
+        // Mock all DB-backed methods to prevent ECONNREFUSED in CI without DB
+        Object.assign(analyticsRepository, {
+            getPaperDebates: mock('getPaperDebates'),
+            getReviewerQuality: mock('getReviewerQuality'),
+            getExpertiseMismatches: mock('getExpertiseMismatches'),
+            getTopPapers: mock('getTopPapers'),
+            getSessionClusters: mock('getSessionClusters'),
+            getPaperCoverageStats: mock('getPaperCoverageStats'),
+            getCOIViolations: mock('getCOIViolations'),
+            getMissingMetareviews: mock('getMissingMetareviews'),
+            getTopReviewers: mock('getTopReviewers'),
+            getSystemDistributions: mock('getSystemDistributions'),
+            getGeographicDiversity: mock('getGeographicDiversity'),
+            getSubmissions: mock('getSubmissions'),
+            getSentimentMismatches: mock('getSentimentMismatches'),
+            getConferenceHealth: mock('getConferenceHealth'),
+            getAcceptanceRate: mock('getAcceptanceRate'),
+            getThematicCompetence: mock('getThematicCompetence')
+        });
+        try {
+            await scorecardService.getSystemAnalytics(prefetched, 1);
+            assert.deepEqual(calls, []);
+        } finally {
+            Object.assign(analyticsRepository, original);
+        }
     });
 });
 

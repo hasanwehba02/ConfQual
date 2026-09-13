@@ -5,10 +5,10 @@ const assignmentRepository = require("../../repositories/assignmentRepository");
 const paperRepository = require("../../repositories/paperRepository");
 const participantRepository = require("../../repositories/participantRepository");
 
-async function importAssignmentsForSheet(workbook, sheet, edition) {
+async function importAssignmentsForSheet(workbook, sheet, edition, context = {}) {
     if (!sheet) return;
-    const paperMap = await paperRepository.getIdMap(edition.id);
-    const participantMap = await participantRepository.getParticipantIdMap(edition.id);
+    const paperMap = context.paperMap ?? await paperRepository.getIdMap(edition.id);
+    const participantMap = context.participantMap ?? await participantRepository.getParticipantIdMap(edition.id);
     let imported = 0;
     let skipped = 0;
     const dtos = [];
@@ -27,7 +27,7 @@ async function importAssignmentsForSheet(workbook, sheet, edition) {
         }
         dtos.push(dto);
     }
-    const chunkSize = 200;
+    const chunkSize = 500;
     for (let i = 0; i < dtos.length; i += chunkSize) {
         const chunk = dtos.slice(i, i + chunkSize);
         imported += await assignmentRepository.bulkCreateAssignments(chunk);
@@ -35,7 +35,7 @@ async function importAssignmentsForSheet(workbook, sheet, edition) {
     console.log(`Imported assignments: ${imported}, skipped: ${skipped}`);
 }
 
-async function importAssignments(edition) {
+async function importAssignments(edition, context = {}) {
     const workbook = await readWorkbook();
     const candidateSheets = [
         "Submission assignment", "Submission assignments", "Submission_assignment",
@@ -43,7 +43,7 @@ async function importAssignments(edition) {
     ];
     const sheet = findWorksheet(workbook, candidateSheets);
     if (sheet) {
-        await importAssignmentsForSheet(workbook, sheet, edition);
+        await importAssignmentsForSheet(workbook, sheet, edition, context);
         console.log(`Assignments imported successfully from sheet '${sheet.name}'.\n`);
     } else {
         console.log("No assignments sheet found. Skipping.\n");

@@ -6,7 +6,7 @@ function normalizeDecision(decision) {
     if (lower.includes('withdrawn')) {
         return 'withdrawn';
     } else if (lower.includes('desk reject')) {
-        return 'desk reject';
+        return 'desk_reject';
     } else if (lower.includes('reject but accept to forum')) {
         return 'reject';
     } else if (lower.includes('reject')) {

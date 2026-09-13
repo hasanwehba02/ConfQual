@@ -2,7 +2,7 @@
 
 ConfQual is a local analytics tool for academic Program Chairs, Track Chairs, and Steering Committees. It provides statistical insights, reviewer calibration analysis, and quality auditing from peer-review data exported by systems like EasyChair.
 
-> Technical architecture, database schemas, and API documentation are available in the [System Architecture Guide](docs/ARCHITECTURE.md).
+> Technical architecture, database schemas, and API documentation are available in the [System Architecture Guide](docs/ARCHITECTURE.md) — recently updated for `participant_topic` expertise, corrected `paper.decision_category` (`desk_reject`), shared normalization CTEs (`AVG` vs `ADJ AVG`), and `202` async import with `GET /import-status` polling.
 
 ---
 
@@ -42,21 +42,11 @@ DATABASE_URL=postgresql://postgres:password@localhost:5432/confqual
 PORT=3000
 ```
 
-### 2. Database Migrations
-Run the base schema and incremental migrations:
+### 2. Database Setup
+Initialize the consolidated schema:
 
 ```bash
-# Base schema
 psql $DATABASE_URL -f database/confqual_schema.sql
-
-# Incremental migrations
-psql $DATABASE_URL -f database/migrations/001_multi_conference.sql
-psql $DATABASE_URL -f database/migrations/002_alert_rules.sql
-psql $DATABASE_URL -f database/migrations/003_conference_edition_researcher.sql
-psql $DATABASE_URL -f database/migrations/004_author_evaluator_scchair.sql
-psql $DATABASE_URL -f database/migrations/005_coi_person_level.sql
-psql $DATABASE_URL -f database/migrations/006_configuration_information.sql
-psql $DATABASE_URL -f database/migrations/007_notes.sql
 ```
 
 Verify connection:
@@ -107,8 +97,7 @@ conference-quality-poc/
 │   ├── tests/                   # Automated test suite
 │   └── utils/                   # Sentiment engine & statistical math
 ├── database/
-│   ├── confqual_schema.sql      # Initial database schema
-│   └── migrations/              # Incremental SQL migrations (001-007)
+│   └── confqual_schema.sql      # Consolidated database schema
 ├── LICENSE                      # MIT License
 └── README.md
 ```

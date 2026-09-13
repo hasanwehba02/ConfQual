@@ -12,6 +12,19 @@ async function ensureTopicExists(topicName) {
     return result.rows[0].id;
 }
 
+async function ensureTopicsExist(topicNames) {
+    const uniq = [...new Set(topicNames.filter(Boolean))];
+    if (uniq.length === 0) return {};
+    await client.query(
+        `INSERT INTO topic (name) SELECT unnest($1::text[]) ON CONFLICT (name) DO NOTHING`,
+        [uniq]
+    );
+    const res = await client.query(`SELECT id, name FROM topic WHERE name = ANY($1::text[])`, [uniq]);
+    const map = {};
+    for (const r of res.rows) map[r.name] = r.id;
+    return map;
+}
+
 async function createPaperTopic(paperId, topicId) {
     const query = `
         INSERT INTO paper_topic (paper_id, topic_id)
@@ -23,10 +36,10 @@ async function createPaperTopic(paperId, topicId) {
     return result.rows.length > 0 ? result.rows[0] : null;
 }
 
-async function createParticipantTopic(_participantId, _topicId) {
-    // Note: participant-level topics are tracked via evaluator or author_participant
-    // This is a placeholder - in the new model, topics may be tracked differently
-    return null;
+async function createParticipantTopic(participantId, topicId) {
+    const query = `INSERT INTO participant_topic (participant_id, topic_id) VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING *`;
+    const result = await client.query(query, [participantId, topicId]);
+    return result.rows.length > 0 ? result.rows[0] : null;
 }
 
 async function bulkCreatePaperTopics(topics) {
@@ -35,12 +48,13 @@ async function bulkCreatePaperTopics(topics) {
 }
 
 async function bulkCreateParticipantTopics(topics) {
-    // Placeholder for participant topics - may need schema support
-    return topics.length;
+    const rows = topics.map(t => [t.participantId, t.topicId]);
+    return await bulkInsert('participant_topic', ['participant_id', 'topic_id'], rows, '(participant_id, topic_id)');
 }
 
 module.exports = {
     ensureTopicExists,
+    ensureTopicsExist,
     createPaperTopic,
     createParticipantTopic,
     bulkCreatePaperTopics,

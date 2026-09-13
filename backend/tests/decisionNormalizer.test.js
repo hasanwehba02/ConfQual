@@ -14,8 +14,8 @@ test('should return reject for clear rejects', () => {
 });
 
 test('should return desk reject for desk rejects', () => {
-    assert.strictEqual(normalizeDecision('Desk Reject: Out of scope'), 'desk reject');
-    assert.strictEqual(normalizeDecision('desk reject'), 'desk reject');
+    assert.strictEqual(normalizeDecision('Desk Reject: Out of scope'), 'desk_reject');
+    assert.strictEqual(normalizeDecision('desk reject'), 'desk_reject');
 });
 
 test('should handle "reject but accept to forum" as reject', () => {

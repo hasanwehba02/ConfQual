@@ -33,20 +33,27 @@ async function getReviewerQuality(options = {}) {
         filterClause += ` AND ev.evaluator_role <> 'subreviewer' AND COALESCE(sc.sub_reviewer_count, 0) = 0`;
     }
 
-    const { clause: orderClause } = buildOrderBy(options.sortBy, options.sortOrder, 'avg_word_count DESC NULLS LAST');
+    const { clause: orderClause } = buildOrderBy(options.sortBy, options.sortOrder, 'avg_word_count DESC NULLS LAST, pt.id ASC');
 
-    const limitVal = parseInt(options.limit) || 'ALL';
-    const offsetVal = parseInt(options.offset) || 0;
+    let limitVal;
+    let offsetVal = parseInt(options.offset, 10);
+    if (!Number.isFinite(offsetVal) || offsetVal < 0) offsetVal = 0;
     let limitClause;
-    if (limitVal === 'ALL') {
+    let offsetClause = `OFFSET $${paramIdx}`;
+    // Internal analytics calls omit limit → return all rows. UI calls clamp to 50/100.
+    if (options.limit === undefined || options.limit === null || options.limit === '') {
         limitClause = 'LIMIT ALL';
+        values.push(offsetVal);
     } else {
+        limitVal = parseInt(options.limit, 10);
+        if (!Number.isFinite(limitVal) || limitVal < 0) limitVal = 50;
+        limitVal = Math.min(limitVal, 100);
         limitClause = `LIMIT $${paramIdx}`;
         values.push(limitVal);
         paramIdx++;
+        offsetClause = `OFFSET $${paramIdx}`;
+        values.push(offsetVal);
     }
-    const offsetClause = `OFFSET $${paramIdx}`;
-    values.push(offsetVal);
 
     const query = `
         WITH PaperStats AS (\n            SELECT r.paper_id, SUM(r.total_score) as sum_score, COUNT(r.id) as review_count
@@ -58,25 +65,15 @@ async function getReviewerQuality(options = {}) {
         ReviewerCalibration AS (
             SELECT
                 pt.id as participant_id,
-                ROUND(AVG(
-                    CASE
-                        WHEN ps.review_count <= 1 THEN r.total_score
-                        ELSE ((ps.sum_score - r.total_score) / (ps.review_count - 1))
-                    END
-                ), 2) as peers_avg,
-                ROUND(AVG(
-                    CASE
-                        WHEN ps.review_count <= 1 THEN 0
-                        ELSE r.total_score - ((ps.sum_score - r.total_score) / (ps.review_count - 1))
-                    END
-                ), 2) as calibration_index
+                ROUND(CAST(AVG(CASE WHEN ps.review_count > 1 THEN ((ps.sum_score - r.total_score)::float / (ps.review_count - 1)) END) AS numeric), 2) as peers_avg,
+                ROUND(CAST(AVG(CASE WHEN ps.review_count > 1 THEN r.total_score - ((ps.sum_score - r.total_score)::float / (ps.review_count - 1)) END) AS numeric), 2) as calibration_index
             FROM review r
-            JOIN paper p ON r.paper_id = p.id
-            JOIN participant pt ON pt.id = r.participant_id
+            JOIN paper p ON r.paper_id = p.id AND p.edition_id = $1 AND p.is_deleted = false
+            JOIN participant pt ON pt.id = r.participant_id AND pt.edition_id = $1
             JOIN PaperStats ps ON r.paper_id = ps.paper_id
             WHERE r.is_superseded = false
             GROUP BY pt.id
-            HAVING COUNT(r.id) > 1
+            HAVING COUNT(CASE WHEN ps.review_count > 1 THEN 1 END) >= 3
         ),
         ReviewerBidding AS (
             SELECT
@@ -154,7 +151,7 @@ async function getReviewerQuality(options = {}) {
             ev.evaluator_role as role,
             r.email,
             COUNT(DISTINCT rv.id) as total_reviews_completed,
-            ROUND(AVG(cardinality(regexp_split_to_array(trim(rv.review_text), '\\s+'))), 0) as avg_word_count,
+            ROUND(AVG(CASE WHEN rv.review_text IS NULL OR trim(rv.review_text) = '' THEN NULL ELSE cardinality(regexp_split_to_array(trim(rv.review_text), '\\s+')) END), 0) as avg_word_count,
             ROUND(AVG(rv.total_score), 2) as avg_score_given,
             ROUND(STDDEV(rv.total_score), 2) as reviewer_std,
             rcal.peers_avg,
@@ -207,24 +204,15 @@ async function getReviewerStatsById(reviewerId) {
         ReviewerCalibration AS (
             SELECT
                 pt.id as participant_id,
-                ROUND(AVG(
-                    CASE
-                        WHEN ps.review_count <= 1 THEN r.total_score
-                        ELSE ((ps.sum_score - r.total_score) / (ps.review_count - 1))
-                    END
-                ), 2) as peers_avg,
-                ROUND(AVG(
-                    CASE
-                        WHEN ps.review_count <= 1 THEN 0
-                        ELSE r.total_score - ((ps.sum_score - r.total_score) / (ps.review_count - 1))
-                    END
-                ), 2) as calibration_index
+                ROUND(CAST(AVG(CASE WHEN ps.review_count > 1 THEN ((ps.sum_score - r.total_score)::float / (ps.review_count - 1)) END) AS numeric), 2) as peers_avg,
+                ROUND(CAST(AVG(CASE WHEN ps.review_count > 1 THEN r.total_score - ((ps.sum_score - r.total_score)::float / (ps.review_count - 1)) END) AS numeric), 2) as calibration_index
             FROM review r
-            JOIN participant pt ON pt.id = r.participant_id
+            JOIN paper p ON r.paper_id = p.id AND p.is_deleted = false AND p.edition_id = (SELECT edition_id FROM participant WHERE id = $1)
+            JOIN participant pt ON pt.id = r.participant_id AND pt.edition_id = (SELECT edition_id FROM participant WHERE id = $1)
             JOIN PaperStats ps ON r.paper_id = ps.paper_id
             WHERE r.is_superseded = false
             GROUP BY pt.id
-            HAVING COUNT(r.id) > 1
+            HAVING COUNT(CASE WHEN ps.review_count > 1 THEN 1 END) >= 3
         ),
         ReviewerBidding AS (
             SELECT
@@ -235,6 +223,7 @@ async function getReviewerStatsById(reviewerId) {
                     ELSE NULL
                 END as bidding_match_percentage
             FROM assignment a
+            JOIN paper p ON p.id = a.paper_id AND p.edition_id = (SELECT edition_id FROM participant WHERE id = $1)
             LEFT JOIN bid b ON a.paper_id = b.paper_id
                 AND a.participant_id = b.participant_id
                 AND LOWER(b.bid) IN ('yes', 'maybe')
@@ -289,11 +278,12 @@ async function getTopReviewers(editionId = null) {
             SELECT
                 pt.id as participant_id,
                 COUNT(r.id) as reviews_done,
-                AVG(array_length(regexp_split_to_array(r.review_text, '\\s+'), 1)) as avg_word_count,
-                AVG(r.total_score - a.avg_score) as calibration_index
+                AVG(CASE WHEN r.review_text IS NULL OR trim(r.review_text) = '' THEN NULL ELSE array_length(regexp_split_to_array(trim(r.review_text), '\\s+'), 1) END) as avg_word_count,
+                AVG(CASE WHEN p.review_count > 1 THEN r.total_score - a.avg_score END) as calibration_index
             FROM review r
             JOIN participant pt ON pt.id = r.participant_id
             JOIN AvgScores a ON r.paper_id = a.paper_id
+            JOIN PaperStats p ON p.paper_id = r.paper_id
             WHERE r.is_superseded = false
             GROUP BY pt.id
         )

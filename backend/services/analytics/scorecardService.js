@@ -21,6 +21,7 @@ async function getQualityScorecard(health, prefetched = null, conferenceId = nul
     const mismatches = prefetched?.mismatches || await getExpertiseMismatches(cid);
     const coiViolations = prefetched?.coiViolations || await analyticsRepository.getCOIViolations(cid);
     const missingMetareviews = prefetched?.missingMetareviews || await analyticsRepository.getMissingMetareviews(cid);
+    const coveragePapers = prefetched?.coveragePapers || await analyticsRepository.getPaperCoverageStats(cid);
 
     const totalReviewers = parseInt(health?.total_reviewers) || 1;
     const totalAssignments = parseInt(health?.total_assignments) || 1;
@@ -33,10 +34,10 @@ async function getQualityScorecard(health, prefetched = null, conferenceId = nul
         discussion: { score: 100, deductions: [] }
     };
 
-    // Coverage: Percentage of valid papers with < 3 reviews
-    const validPapers = papers.filter(p => p.decision_category !== 'desk reject');
+    // Coverage: Percentage of valid papers with < 3 reviews (use all papers, not just debates >=2 reviews)
+    const validPapers = coveragePapers.filter(p => p.decision_category !== 'desk_reject');
     const totalValidPapers = validPapers.length > 0 ? validPapers.length : 1;
-    const missingReviews = validPapers.filter(p => p.total_reviews < 3);
+    const missingReviews = validPapers.filter(p => parseInt(p.total_reviews) < 3);
     if (missingReviews.length > 0) {
         const deduction = Math.round((missingReviews.length / totalValidPapers) * 100);
         scorecard.coverage.score -= deduction;
@@ -132,11 +133,11 @@ async function getQualityScorecard(health, prefetched = null, conferenceId = nul
         scorecard.discussion.score -= discussionDeduction;
     }
 
-    // Floor scores at 0
+    // Floor scores at 0 and ensure deduction contract is always object
     Object.keys(scorecard).forEach(k => {
         if (scorecard[k].score < 0) scorecard[k].score = 0;
         if (scorecard[k].deductions.length === 0) {
-            scorecard[k].deductions.push("Perfect score! No issues detected.");
+            scorecard[k].deductions.push({ text: "Perfect score! No issues detected.", affectedIds: [], target: null, filterKey: null });
         }
     });
 
@@ -156,15 +157,21 @@ async function getSystemAnalytics(prefetched = null, conferenceId = null) {
     // System Distributions
     const distributions = prefetched?.distributions || await analyticsRepository.getSystemDistributions(cid);
     
-    const topPapers = await analyticsRepository.getTopPapers(cid);
-    const sessionClusters = await analyticsRepository.getSessionClusters(cid);
-    
+    const [topPapers, sessionClusters, mismatches, debates, reviewers, coiViolations] = await Promise.all([
+        prefetched?.topPapers ? Promise.resolve(prefetched.topPapers) : analyticsRepository.getTopPapers(cid),
+        prefetched?.sessionClusters ? Promise.resolve(prefetched.sessionClusters) : analyticsRepository.getSessionClusters(cid),
+        prefetched?.mismatches ? Promise.resolve(prefetched.mismatches) : getExpertiseMismatches(cid),
+        prefetched?.papers ? Promise.resolve(prefetched.papers) : getPaperDebates({ conferenceId: cid }),
+        prefetched?.reviewers ? Promise.resolve(prefetched.reviewers) : getReviewerQuality({ conferenceId: cid }),
+        prefetched?.coiViolations ? Promise.resolve(prefetched.coiViolations) : analyticsRepository.getCOIViolations(cid),
+    ]);
+
     return {
         health,
-        mismatches: prefetched?.mismatches || await getExpertiseMismatches(cid),
-        debates: prefetched?.papers || await getPaperDebates({ conferenceId: cid }),
-        reviewers: enrichReviewerBias(prefetched?.reviewers || await getReviewerQuality({ conferenceId: cid })),
-        coiViolations: prefetched?.coiViolations || await analyticsRepository.getCOIViolations(cid),
+        mismatches,
+        debates,
+        reviewers: enrichReviewerBias(reviewers),
+        coiViolations,
         scorecard,
         distributions,
         topPapers,

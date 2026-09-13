@@ -15,7 +15,7 @@ async function getSummaryMetrics(editionId = null) {
             (SELECT COUNT(*) FROM review r JOIN paper p ON r.paper_id = p.id WHERE r.is_superseded = false AND p.edition_id = $1) as total_reviews,
             (SELECT ROUND(AVG(total_score), 2) FROM review r JOIN paper p ON r.paper_id = p.id WHERE r.is_superseded = false AND p.edition_id = $1) as overall_avg_score,
             (SELECT ROUND(STDDEV(total_score), 2) FROM review r JOIN paper p ON r.paper_id = p.id WHERE r.is_superseded = false AND p.edition_id = $1) as score_std_dev,
-            (SELECT COUNT(*) FROM alert_rule WHERE is_active = true AND (edition_id = $1 OR edition_id IS NULL)) as total_alerts_configured
+            (SELECT COUNT(*) FROM alert_rule WHERE is_enabled = true AND edition_id = $1) as total_alerts_configured
     `;
     const result = await client.query(query, [eid]);
     return result.rows[0];
@@ -128,12 +128,12 @@ async function getThematicCompetence(editionId = null) {
         SELECT
             t.name as topic_name,
             COUNT(DISTINCT pt.paper_id) as submitted_papers,
-            0 as available_experts
+            COUNT(DISTINCT pct.participant_id) as available_experts
         FROM topic t
         LEFT JOIN paper_topic pt ON t.id = pt.topic_id
-        WHERE (pt.paper_id IS NULL OR EXISTS (
-            SELECT 1 FROM paper p WHERE p.id = pt.paper_id AND p.edition_id = $1
-        ))
+            AND EXISTS (SELECT 1 FROM paper p WHERE p.id = pt.paper_id AND p.edition_id = $1)
+        LEFT JOIN participant_topic pct ON pct.topic_id = t.id
+            AND EXISTS (SELECT 1 FROM participant pa WHERE pa.id = pct.participant_id AND pa.edition_id = $1)
         GROUP BY t.id, t.name
         HAVING COUNT(DISTINCT pt.paper_id) > 0
         ORDER BY submitted_papers DESC
