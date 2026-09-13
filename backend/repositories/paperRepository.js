@@ -39,6 +39,52 @@ async function createPaper(paper) {
     return result.rows[0];
 }
 
+async function bulkCreatePapers(papers) {
+    if (!papers || papers.length === 0) return [];
+    const values = [];
+    const placeholders = [];
+    let paramIndex = 1;
+
+    for (const paper of papers) {
+        placeholders.push(`($${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++})`);
+        values.push(
+            paper.editionId,
+            paper.externalSubmissionId,
+            paper.title,
+            paper.submittedAt,
+            paper.lastUpdatedAt,
+            paper.decision,
+            paper.decisionCategory,
+            paper.notified,
+            paper.reviewsSent,
+            paper.isDeleted || false
+        );
+    }
+
+    const query = `
+        INSERT INTO paper (
+            edition_id,
+            external_submission_id,
+            title,
+            submitted_at,
+            last_updated_at,
+            decision,
+            decision_category,
+            notified,
+            reviews_sent,
+            is_deleted
+        )
+        VALUES ${placeholders.join(', ')}
+        ON CONFLICT (edition_id, external_submission_id)
+        DO UPDATE SET
+            decision_category = EXCLUDED.decision_category
+        RETURNING *;
+    `;
+
+    const result = await client.query(query, values);
+    return result.rows;
+}
+
 async function findByExternalSubmissionId(externalSubmissionId) {
     const query = `SELECT * FROM paper WHERE external_submission_id = $1`;
     const result = await client.query(query, [externalSubmissionId]);
@@ -55,4 +101,4 @@ async function getIdMap(editionId) {
     return map;
 }
 
-module.exports = { createPaper, findByExternalSubmissionId, getIdMap };
+module.exports = { createPaper, bulkCreatePapers, findByExternalSubmissionId, getIdMap };

@@ -42,9 +42,7 @@ async function findOrCreateParticipant({ researcherId, editionId, externalPerson
 
     try {
         const result = await client.query(
-            `INSERT INTO participant (researcher_id, edition_id, external_person_id)
-             VALUES ($1, $2, $3)
-             RETURNING *`,
+            `INSERT INTO participant (researcher_id, edition_id, external_person_id)\n             VALUES ($1, $2, $3)\n             RETURNING *`,
             [researcherId, editionId, externalPersonId || null]
         );
         return result.rows[0];
@@ -176,6 +174,22 @@ async function createAuthorParticipant(participantId) {
 }
 
 /**
+ * Bulk create author participant roles
+ */
+async function bulkCreateAuthorParticipants(participantIds) {
+    if (!participantIds || participantIds.length === 0) return 0;
+    const uniqueIds = Array.from(new Set(participantIds)).filter(Boolean);
+    if (uniqueIds.length === 0) return 0;
+    const result = await client.query(
+        `INSERT INTO author_participant (participant_id)
+         SELECT unnest($1::int[])
+         ON CONFLICT (participant_id) DO NOTHING`,
+        [uniqueIds]
+    );
+    return result.rowCount || 0;
+}
+
+/**
  * Bulk create participants for an edition
  */
 async function bulkCreateParticipants(participants) {
@@ -204,5 +218,6 @@ module.exports = {
     getParticipantIdMap,
     createEvaluator,
     createAuthorParticipant,
+    bulkCreateAuthorParticipants,
     bulkCreateParticipants
 };

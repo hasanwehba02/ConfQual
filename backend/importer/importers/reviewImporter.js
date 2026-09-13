@@ -54,15 +54,8 @@ async function importReviewsForSheet(workbook, sheetName, edition, isSuperseded 
         }
 
         dto.isSuperseded = isSuperseded;
+        dto.sentimentScore = analyticsMath.analyzeReviewSentimentSync(dto.reviewText || '');
         dtos.push(dto);
-    }
-
-    if (dtos.length > 0) {
-        const texts = dtos.map(d => d.reviewText || '');
-        const sentiments = await analyticsMath.batchAnalyzeReviewSentiment(texts);
-        for (let i = 0; i < dtos.length; i++) {
-            dtos[i].sentimentScore = sentiments[i];
-        }
     }
 
     const chunkSize = 200;

@@ -22,6 +22,7 @@ async function importProgramCommittee(edition) {
 
     let imported = 0;
     let skipped = 0;
+    const processedIds = new Set();
 
     for (let i = 2; i <= sheet.rowCount; i++) {
         const row = sheet.getRow(i);
@@ -31,6 +32,11 @@ async function importProgramCommittee(edition) {
             skipped++;
             continue;
         }
+
+        if (processedIds.has(member.externalPersonId)) {
+            continue;
+        }
+        processedIds.add(member.externalPersonId);
 
         try {
             // Find or create researcher

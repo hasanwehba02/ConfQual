@@ -36,11 +36,11 @@ async function runDiagnostics() {
     // 3. Check Schema
     console.log("\n⏳ Checking if the database schema is initialized...");
     try {
-        const res = await client.query("SELECT to_regclass('public.conference') as table_exists;");
+        const res = await client.query("SELECT to_regclass('public.edition') as table_exists;");
         if (res.rows[0].table_exists) {
-            console.log("Schema appears to be initialized (conference table exists).");
+            console.log("Schema appears to be initialized (edition table exists).");
         } else {
-            console.error("ERROR: The 'conference' table is missing!");
+            console.error("ERROR: The 'edition' table is missing!");
             console.error("   The database is empty. You need to run the schema script.");
             console.error("   Please execute the SQL commands in 'database/confqual_schema.sql' in your PostgreSQL / Supabase database.");
         }

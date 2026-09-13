@@ -44,6 +44,7 @@ function isSentimentMismatch(numericalScore, sentimentScore) {
 
 module.exports = {
     analyzeReviewSentiment,
+    analyzeReviewSentimentSync,
     analyzeReviewSentimentAsync,
     batchAnalyzeReviewSentiment,
     calculateCalibration,

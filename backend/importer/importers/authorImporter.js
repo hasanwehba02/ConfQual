@@ -62,10 +62,16 @@ async function importAuthors(edition) {
     // Step 1: Find or create researchers and participants
     const paperMap = await paperRepository.getIdMap(edition.id);
     const participantMap = {}; // externalPersonId -> participantId
+    const participantIds = [];
 
     for (const dto of dtos) {
         if (!dto.externalPersonId) {
             skipped++;
+            continue;
+        }
+
+        if (participantMap[dto.externalPersonId]) {
+            importedAuthors++;
             continue;
         }
 
@@ -87,15 +93,18 @@ async function importAuthors(edition) {
                 externalPersonId: dto.externalPersonId
             });
 
-            // Create author role if not exists
-            await participantRepository.createAuthorParticipant(participant.id);
-
             participantMap[dto.externalPersonId] = participant.id;
+            participantIds.push(participant.id);
             importedAuthors++;
         } catch (err) {
             console.error(`Error importing author: ${err.message}`);
             skipped++;
         }
+    }
+
+    // Bulk create author roles for all participants in this edition
+    if (participantIds.length > 0) {
+        await participantRepository.bulkCreateAuthorParticipants(participantIds);
     }
 
     // Step 2: Map relations and bulk insert paper_authors

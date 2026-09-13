@@ -35,17 +35,11 @@ async function importSubmissions(edition) {
         dtos.push(paper);
     }
 
-    const chunkSize = 30;
+    const chunkSize = 100;
     for (let i = 0; i < dtos.length; i += chunkSize) {
         const chunk = dtos.slice(i, i + chunkSize);
-        const results = [];
-        for (const paper of chunk) {
-            results.push(await paperRepository.createPaper(paper));
-        }
-        for (const savedPaper of results) {
-            if (savedPaper) imported++;
-            else skipped++;
-        }
+        const results = await paperRepository.bulkCreatePapers(chunk);
+        imported += results.length;
     }
 
     console.log(`Conference: ${edition.conferenceName || 'Unknown'} ${edition.year}`);
