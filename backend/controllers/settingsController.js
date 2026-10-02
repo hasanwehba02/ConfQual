@@ -12,9 +12,9 @@ const getSettings = asyncHandler(async (req, res) => {
 const updateSettings = asyncHandler(async (req, res) => {
     const { is_anonymized, decision_editing_enabled } = req.body;
     const query = `
-        INSERT INTO settings (id, is_anonymized, decision_editing_enabled)
-        VALUES (1, $1, $2)
-        ON CONFLICT (id)
+        INSERT INTO settings (is_anonymized, decision_editing_enabled)
+        VALUES ($1, $2)
+        ON CONFLICT (workspace_id)
         DO UPDATE SET
             is_anonymized = EXCLUDED.is_anonymized,
             decision_editing_enabled = EXCLUDED.decision_editing_enabled

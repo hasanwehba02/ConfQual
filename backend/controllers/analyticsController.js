@@ -109,8 +109,8 @@ const updatePaperDecision = asyncHandler(async (req, res) => {
 });
 
 const runImporter = require("../importer/runImporter");
-const importStatus = new Map();
-let importSeq = 0;
+const { ImportStatusStore } = require('../services/importStatusStore');
+const importStatus = new ImportStatusStore();
 
 const processUpload = asyncHandler(async (req, res) => {
     if (!req.file) throw new ValidationError("No file uploaded");
@@ -123,26 +123,28 @@ const processUpload = asyncHandler(async (req, res) => {
         year: req.body.conferenceYear ? parseInt(req.body.conferenceYear) : null
     };
 
-    const importId = String(++importSeq);
-    importStatus.set(importId, { status: 'running', startedAt: Date.now() });
+    const workspaceId = req.workspaceId;
+    const importId = importStatus.start(workspaceId);
     // Fire-and-forget: respond 202 immediately, poll via /import-status
     setImmediate(async () => {
         try {
-            await runImporter(req.file.path, meta);
+            await db.withWorkspace(workspaceId, () => runImporter(req.file.path, meta));
             dashboardCache.del();
-            importStatus.set(importId, { status: 'done', finishedAt: Date.now() });
+            importStatus.finish(importId, workspaceId);
         } catch (error) {
             console.error("Error during import:", error);
-            importStatus.set(importId, { status: 'error', error: error.message, finishedAt: Date.now() });
+            importStatus.fail(importId, workspaceId, error);
         }
     });
     res.status(202).json({ importId, message: "Import started", pollUrl: `/api/analytics/import-status/${importId}` });
 });
 
 const getImportStatus = asyncHandler(async (req, res) => {
-    const s = importStatus.get(req.params.id);
-    if (!s) return res.status(404).json({ error: "Import not found" });
-    res.json(s);
+    const status = importStatus.get(req.params.id, req.workspaceId);
+    if (!status) {
+        return res.status(404).json({ error: "Import not found" });
+    }
+    res.json(status);
 });
 
 const resetDatabase = require("../utils/resetDatabase");
@@ -150,7 +152,7 @@ const conferenceRepository = require("../repositories/conferenceRepository");
 
 const resetDb = asyncHandler(async (req, res) => {
     await resetDatabase();
-    res.json({ message: "Database reset successfully" });
+    res.json({ message: "Workspace data reset successfully" });
 });
 
 const listConferences = asyncHandler(async (req, res) => {

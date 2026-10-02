@@ -1,8 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import app from '../app.js';
+import appModule from '../app.js';
 import db from '../config/database.js';
+
+const app = appModule.createApp({
+    authMiddleware(req, res, next) {
+        req.user = {
+            sub: 'integration-test-user',
+            email: 'test@example.com',
+            app_metadata: { role: 'admin' }
+        };
+        next();
+    },
+    workspaceMiddleware(req, res, next) {
+        req.workspaceId = '11111111-1111-4111-8111-111111111111';
+        req.workspaceRole = 'admin';
+        next();
+    }
+});
 
 let server;
 let baseUrl;

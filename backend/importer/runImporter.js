@@ -16,6 +16,7 @@ const participantRepository = require("../repositories/participantRepository");
 const { setFilePath, runWithFileContext } = require("./workbookReader");
 
 async function runImporter(filePath, meta = {}) {
+    const workspaceId = client.getWorkspaceId();
     const executeImport = async () => {
         if (filePath) {
             setFilePath(filePath);
@@ -56,16 +57,18 @@ async function runImporter(filePath, meta = {}) {
             // Deferred sentiment enrichment — runs after COMMIT so HTTP response is not blocked
             setImmediate(async () => {
                 try {
-                    const { batchAnalyzeReviewSentiment } = require("../utils/analyticsMath");
-                    const rows = await client.query(`SELECT id, review_text FROM review WHERE sentiment_score IS NULL OR sentiment_score = 0 ORDER BY id`);
-                    if (rows.rows.length > 0) {
-                        const scores = await batchAnalyzeReviewSentiment(rows.rows.map(r => r.review_text || ''));
-                        for (let i = 0; i < rows.rows.length; i++) {
-                            const sc = scores[i] || 0;
-                            if (sc !== 0) await client.query(`UPDATE review SET sentiment_score=$1 WHERE id=$2`, [sc, rows.rows[i].id]);
+                    await client.withWorkspace(workspaceId, async () => {
+                        const { batchAnalyzeReviewSentiment } = require("../utils/analyticsMath");
+                        const rows = await client.query(`SELECT id, review_text FROM review WHERE sentiment_score IS NULL OR sentiment_score = 0 ORDER BY id`);
+                        if (rows.rows.length > 0) {
+                            const scores = await batchAnalyzeReviewSentiment(rows.rows.map(r => r.review_text || ''));
+                            for (let i = 0; i < rows.rows.length; i++) {
+                                const sc = scores[i] || 0;
+                                if (sc !== 0) await client.query(`UPDATE review SET sentiment_score=$1 WHERE id=$2`, [sc, rows.rows[i].id]);
+                            }
+                            console.log(`Deferred sentiment updated ${rows.rows.length} reviews`);
                         }
-                        console.log(`Deferred sentiment updated ${rows.rows.length} reviews`);
-                    }
+                    });
                 } catch (e) {
                     console.warn('Deferred sentiment failed:', e.message);
                 }
@@ -93,4 +96,3 @@ if (require.main === module) {
         process.exit(1);
     });
 }
-

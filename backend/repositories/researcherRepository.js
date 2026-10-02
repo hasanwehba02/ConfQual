@@ -16,12 +16,13 @@ function clearResearcherCache() {
 
 function cacheResearcher(researcher) {
     if (!researcher) return;
+    const workspaceId = client.getWorkspaceId();
     if (researcher.email) {
-        emailCache.set(researcher.email.trim().toLowerCase(), researcher);
+        emailCache.set(`${workspaceId}:${researcher.email.trim().toLowerCase()}`, researcher);
     }
     if (researcher.first_name || researcher.last_name) {
         const key = `${(researcher.first_name || '').trim().toLowerCase()}::${(researcher.last_name || '').trim().toLowerCase()}`;
-        nameCache.set(key, researcher);
+        nameCache.set(`${workspaceId}:${key}`, researcher);
     }
 }
 
@@ -31,19 +32,22 @@ function cacheResearcher(researcher) {
  * @returns {Object} researcher record
  */
 async function findOrCreateResearcher({ firstName, lastName, email, country, affiliation, webPage }) {
+    const workspaceId = client.getWorkspaceId();
     const fn = (firstName || '').trim();
     const ln = (lastName || '').trim();
     const normalizedEmail = email && email.trim() !== '' && email.toLowerCase() !== 'hidden'
         ? email.trim().toLowerCase()
         : null;
 
-    if (normalizedEmail && emailCache.has(normalizedEmail)) {
-        return emailCache.get(normalizedEmail);
+    const emailKey = `${workspaceId}:${normalizedEmail}`;
+    if (normalizedEmail && emailCache.has(emailKey)) {
+        return emailCache.get(emailKey);
     }
 
     const nameKey = `${fn.toLowerCase()}::${ln.toLowerCase()}`;
-    if (!normalizedEmail && nameCache.has(nameKey)) {
-        return nameCache.get(nameKey);
+    const scopedNameKey = `${workspaceId}:${nameKey}`;
+    if (!normalizedEmail && nameCache.has(scopedNameKey)) {
+        return nameCache.get(scopedNameKey);
     }
 
     // Try to find existing researcher by email (if provided and valid)
@@ -175,7 +179,7 @@ async function bulkFindOrCreateResearchers(items) {
             SELECT * FROM unnest(
                 $1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[]
             )
-            ON CONFLICT (email) WHERE email IS NOT NULL AND email <> 'hidden'
+            ON CONFLICT (workspace_id, email) WHERE email IS NOT NULL AND email <> 'hidden'
             DO UPDATE SET
                 first_name  = COALESCE(NULLIF(EXCLUDED.first_name,  ''), researcher.first_name),
                 last_name   = COALESCE(NULLIF(EXCLUDED.last_name,   ''), researcher.last_name),
@@ -217,4 +221,3 @@ module.exports = {
     searchResearchers,
     clearResearcherCache
 };
-

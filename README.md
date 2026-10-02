@@ -40,14 +40,25 @@ Create `backend/.env`:
 ```env
 DATABASE_URL=postgresql://postgres:password@localhost:5432/confqual
 PORT=3000
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 ```
+
+Create users through Supabase Authentication. Public signup is not exposed by
+ConfQual. Each new user receives a private workspace and becomes its admin.
+Workspace memberships hold `admin`, `chair`, or `viewer` roles.
 
 ### 2. Database Setup
 Initialize the consolidated schema:
 
 ```bash
-psql $DATABASE_URL -f database/confqual_schema.sql
+psql "$DATABASE_URL" -f database/confqual_schema.sql
+psql "$DATABASE_URL" -f database/migrations/001_workspaces_up.sql
 ```
+
+The workspace migration preserves existing rows inside a legacy workspace.
+The first authenticated user claims that workspace. Later users receive new,
+private workspaces. Run the migration before deploying workspace-aware code.
 
 Verify connection:
 ```bash

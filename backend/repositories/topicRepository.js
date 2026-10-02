@@ -5,7 +5,7 @@ async function ensureTopicExists(topicName) {
     const query = `
         INSERT INTO topic (name)
         VALUES ($1)
-        ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+        ON CONFLICT (workspace_id, name) DO UPDATE SET name = EXCLUDED.name
         RETURNING id;
     `;
     const result = await client.query(query, [topicName]);
@@ -16,7 +16,7 @@ async function ensureTopicsExist(topicNames) {
     const uniq = [...new Set(topicNames.filter(Boolean))];
     if (uniq.length === 0) return {};
     await client.query(
-        `INSERT INTO topic (name) SELECT unnest($1::text[]) ON CONFLICT (name) DO NOTHING`,
+        `INSERT INTO topic (name) SELECT unnest($1::text[]) ON CONFLICT (workspace_id, name) DO NOTHING`,
         [uniq]
     );
     const res = await client.query(`SELECT id, name FROM topic WHERE name = ANY($1::text[])`, [uniq]);

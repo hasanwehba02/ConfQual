@@ -16,11 +16,12 @@ const sslConfig = {
     rejectUnauthorized: caPath ? true : sslRejectUnauthorized,
     ...(caPath ? { ca: fs.readFileSync(caPath).toString() } : {})
 };
+const useSsl = process.env.DB_SSL !== 'false';
 
 const dbConfig = connStr
     ? {
         connectionString: connStr,
-        ssl: sslConfig,
+        ...(useSsl ? { ssl: sslConfig } : {}),
         max: 20
       }
     : {
@@ -36,6 +37,30 @@ const dbConfig = connStr
 const pool = new Pool(dbConfig);
 const als = new AsyncLocalStorage();
 
+async function applyWorkspaceScope(connection, workspaceId) {
+    await connection.query('SET LOCAL ROLE confqual_app');
+    await connection.query(
+        "SELECT set_config('app.current_workspace_id', $1, true)",
+        [workspaceId]
+    );
+}
+
+async function runScopedQuery(target, workspaceId, args) {
+    const connection = await target.connect();
+    try {
+        await connection.query('BEGIN');
+        await applyWorkspaceScope(connection, workspaceId);
+        const result = await connection.query(...args);
+        await connection.query('COMMIT');
+        return result;
+    } catch (error) {
+        await connection.query('ROLLBACK');
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
+
 // Handle idle client errors to prevent the application from crashing
 pool.on('error', (err, _client) => {
     console.error('Unexpected error on idle PostgreSQL client', err);
@@ -50,20 +75,30 @@ const clientProxy = new Proxy(pool, {
     get: function (target, prop, receiver) {
         if (prop === 'query') {
             return function (...args) {
-                const txClient = als.getStore();
-                if (txClient) {
-                    return txClient.query(...args);
+                const store = als.getStore();
+                if (store?.client) {
+                    return store.client.query(...args);
+                }
+                if (store?.workspaceId) {
+                    return runScopedQuery(target, store.workspaceId, args);
                 }
                 return target.query(...args);
             };
         }
         if (prop === 'withTransaction') {
             return async function (callback) {
+                const parentStore = als.getStore();
+                if (parentStore?.client) {
+                    return callback(parentStore.client);
+                }
                 const connection = await target.connect();
                 try {
                     await connection.query('BEGIN');
-                    // Run the callback inside the AsyncLocalStorage context
-                    const result = await als.run(connection, () => callback(connection));
+                    if (parentStore?.workspaceId) {
+                        await applyWorkspaceScope(connection, parentStore.workspaceId);
+                    }
+                    const store = { ...parentStore, client: connection };
+                    const result = await als.run(store, () => callback(connection));
                     await connection.query('COMMIT');
                     return result;
                 } catch (err) {
@@ -72,6 +107,17 @@ const clientProxy = new Proxy(pool, {
                 } finally {
                     connection.release();
                 }
+            };
+        }
+        if (prop === 'withWorkspace') {
+            return function (workspaceId, callback) {
+                const parentStore = als.getStore();
+                return als.run({ ...parentStore, workspaceId }, callback);
+            };
+        }
+        if (prop === 'getWorkspaceId') {
+            return function () {
+                return als.getStore()?.workspaceId || null;
             };
         }
 

@@ -1,5 +1,6 @@
 const express = require("express");
 const analyticsController = require("../controllers/analyticsController");
+const { requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -25,33 +26,33 @@ router.get("/late-submissions", analyticsController.getLateSubmissions);
 
 // Deep Drill-Down Endpoints
 router.get("/papers/:id", analyticsController.getPaperDetails);
-router.put("/papers/:id/decision", analyticsController.updatePaperDecision);
+router.put("/papers/:id/decision", requireRole('admin', 'chair'), analyticsController.updatePaperDecision);
 router.get("/reviewers/:id", analyticsController.getReviewerDetails);
 router.get("/reviewers/:id/report", analyticsController.getReviewerReport);
-router.post("/reset", analyticsController.resetDb);
+router.post("/reset", requireRole('admin'), analyticsController.resetDb);
 
-router.post("/process-conference", upload.single('excelFile'), analyticsController.processUpload);
+router.post("/process-conference", requireRole('admin', 'chair'), upload.single('excelFile'), analyticsController.processUpload);
 router.get("/import-status/:id", analyticsController.getImportStatus);
 
 // Multi-conference management
 router.get("/conferences", analyticsController.listConferences);
 router.get("/comparison", analyticsController.getComparison);
-router.put("/conferences/:id", analyticsController.updateConference);
-router.delete("/conferences/:id", analyticsController.deleteConference);
+router.put("/conferences/:id", requireRole('admin', 'chair'), analyticsController.updateConference);
+router.delete("/conferences/:id", requireRole('admin'), analyticsController.deleteConference);
 
 router.get("/alert-rules", analyticsController.getAlertRules);
-router.put("/alert-rules", analyticsController.updateAlertRules);
-router.post("/alert-rules", analyticsController.updateAlertRules);
+router.put("/alert-rules", requireRole('admin', 'chair'), analyticsController.updateAlertRules);
+router.post("/alert-rules", requireRole('admin', 'chair'), analyticsController.updateAlertRules);
 
 router.get("/notes", analyticsController.listNotes);
-router.post("/notes", analyticsController.createNote);
-router.put("/notes/:id", analyticsController.updateNote);
-router.delete("/notes/conference/:id", analyticsController.deleteNotesByConference);
-router.delete("/notes/:id", analyticsController.deleteNote);
-router.delete("/notes", analyticsController.deleteNotesByEdition);
+router.post("/notes", requireRole('admin', 'chair'), analyticsController.createNote);
+router.put("/notes/:id", requireRole('admin', 'chair'), analyticsController.updateNote);
+router.delete("/notes/conference/:id", requireRole('admin', 'chair'), analyticsController.deleteNotesByConference);
+router.delete("/notes/:id", requireRole('admin', 'chair'), analyticsController.deleteNote);
+router.delete("/notes", requireRole('admin', 'chair'), analyticsController.deleteNotesByEdition);
 
 router.get("/configuration", analyticsController.getConfiguration);
-router.put("/configuration", analyticsController.updateConfiguration);
+router.put("/configuration", requireRole('admin', 'chair'), analyticsController.updateConfiguration);
 
 const logRateLimiter = new Map();
 router.post("/log", (req, res) => {

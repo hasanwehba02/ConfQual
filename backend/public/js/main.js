@@ -22,6 +22,9 @@ import { wireProjectorModalClose } from './projector.js';
 import { wireEvents } from './events.js';
 import { attachSortHeaders } from './sortHeaders.js';
 import { checkExistingData } from './dashboardView.js';
+import { installAuthenticatedFetch, requireSession, signOut } from './auth.js';
+
+installAuthenticatedFetch();
 
 window.onerror = function(message, source, lineno, colno, error) {
     fetch('/api/analytics/log', {
@@ -38,7 +41,20 @@ window.addEventListener('unhandledrejection', function(event) {
     });
 });
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    let session;
+    try {
+        session = await requireSession();
+    } catch (error) {
+        document.body.textContent = error.message;
+        return;
+    }
+    if (!session) return;
+
+    const userLabel = document.getElementById('auth-user');
+    if (userLabel) userLabel.textContent = session.user.email || 'Signed in';
+    document.getElementById('logout-btn')?.addEventListener('click', signOut);
+
     wireEvents();
 
     attachSortHeaders({ tableSelector: '#tab-papers table', selectId: 'paper-sort', tabId: 'tab-papers', fetchFn: () => window.fetchPapers() });
