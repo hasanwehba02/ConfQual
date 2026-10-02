@@ -9,7 +9,9 @@ database/confqual_er_diagram_v1.png
 backend/server.log
 .worktrees/
 docs/
+AGENTS.md
 .cache/
+graphify-out/
 backend/.cache/
 .zed/
 .claude/

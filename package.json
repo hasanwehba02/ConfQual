@@ -1,0 +1,12 @@
+{
+  "name": "confqual-heroku",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "npm --prefix backend start",
+    "heroku-postbuild": "npm ci --omit=dev --prefix backend"
+  }
+}

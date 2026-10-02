@@ -6,7 +6,14 @@ env.cacheDir = path.join(__dirname, '..', '.cache');
 
 let classifierPromise = null;
 
+function isModelDisabled() {
+    return process.env.SENTIMENT_ANALYSIS_MODE === 'rules';
+}
+
 async function getClassifier() {
+    if (isModelDisabled()) {
+        throw new Error('Transformers.js sentiment model is disabled');
+    }
     if (!classifierPromise) {
         classifierPromise = pipeline(
             'sentiment-analysis',
@@ -129,6 +136,7 @@ async function batchAnalyzeReviewSentiment(texts) {
 
 module.exports = {
     getClassifier,
+    isModelDisabled,
     extractEvaluationText,
     analyzeReviewSentimentAsync,
     analyzeReviewSentimentSync,

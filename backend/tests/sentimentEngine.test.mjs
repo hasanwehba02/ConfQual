@@ -4,6 +4,7 @@ import {
     analyzeReviewSentimentAsync,
     analyzeReviewSentimentSync,
     batchAnalyzeReviewSentiment,
+    isModelDisabled,
 } from '../utils/sentimentEngine.js';
 import { isSentimentMismatch, calculateCalibration } from '../utils/analyticsMath.js';
 
@@ -17,6 +18,22 @@ test('analyzeReviewSentimentSync handles basic positive/negative strings', () =>
     assert.equal(analyzeReviewSentimentSync(''), 0);
     assert.equal(analyzeReviewSentimentSync(null), 0);
     assert.equal(analyzeReviewSentimentSync(undefined), 0);
+});
+
+test('rule-based mode avoids loading the Transformers.js model', async () => {
+    const previousMode = process.env.SENTIMENT_ANALYSIS_MODE;
+    process.env.SENTIMENT_ANALYSIS_MODE = 'rules';
+    try {
+        assert.equal(isModelDisabled(), true);
+        const result = await analyzeReviewSentimentAsync('The methodology is flawed and poor.');
+        assert.ok(result < 0, `Expected fallback negative score, got ${result}`);
+    } finally {
+        if (previousMode === undefined) {
+            delete process.env.SENTIMENT_ANALYSIS_MODE;
+        } else {
+            process.env.SENTIMENT_ANALYSIS_MODE = previousMode;
+        }
+    }
 });
 
 test('analyzeReviewSentimentAsync classifies positive and polite rejection text using Transformers.js', async () => {

@@ -11,10 +11,14 @@ if (require.main === module) {
         // Pre-warm the sentiment ML model in the background.
         // Eliminates the 30-60s cold-start penalty on the first Excel upload.
         // If it fails, reviewImporter falls back to the rule-based analyzer automatically.
-        const { getClassifier } = require('./utils/sentimentEngine');
-        getClassifier()
-            .then(() => console.log('Sentiment model ready.'))
-            .catch(err => console.warn('Sentiment model pre-warm failed (fallback will be used):', err.message));
+        const { getClassifier, isModelDisabled } = require('./utils/sentimentEngine');
+        if (isModelDisabled()) {
+            console.log('Using rule-based sentiment analysis.');
+        } else {
+            getClassifier()
+                .then(() => console.log('Sentiment model ready.'))
+                .catch(err => console.warn('Sentiment model pre-warm failed (fallback will be used):', err.message));
+        }
     });
 }
 
