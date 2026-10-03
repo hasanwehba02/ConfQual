@@ -502,14 +502,22 @@ window.openReviewerModal = async function(reviewerId, name) {
                 try {
                     const inc = includeTextCb && includeTextCb.checked ? '1' : '';
                     const cid = state.activeConferenceId ? `&conferenceId=${state.activeConferenceId}` : '';
+                    const response = await fetch(`/api/analytics/reviewers/${reviewerId}/report?includeReviewText=${inc}${cid}`);
+                    if (!response.ok) {
+                        const body = await response.json().catch(() => ({}));
+                        throw new Error(body.error || 'Failed to export PDF report');
+                    }
+
+                    const blobUrl = URL.createObjectURL(await response.blob());
                     const a = document.createElement('a');
-                    a.href = `/api/analytics/reviewers/${reviewerId}/report?includeReviewText=${inc}${cid}`;
-                    a.download = '';
-                    a.rel = 'noopener';
-                    a.target = '_blank';
+                    const disposition = response.headers.get('content-disposition') || '';
+                    const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+                    a.href = blobUrl;
+                    a.download = filenameMatch?.[1] || `Reviewer_${reviewerId}_report.pdf`;
                     document.body.appendChild(a);
                     a.click();
                     a.remove();
+                    URL.revokeObjectURL(blobUrl);
                 } catch (err) {
                     console.error('Error exporting PDF report:', err);
                     alert('Failed to export PDF report. Please try again.');
