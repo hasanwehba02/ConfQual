@@ -6,8 +6,24 @@ const router = express.Router();
 
 const multer = require("multer");
 const os = require("os");
+const path = require("path");
+const { ValidationError } = require("../utils/appError");
 
-const upload = multer({ dest: os.tmpdir() });
+const upload = multer({
+    dest: os.tmpdir(),
+    limits: { fileSize: 25 * 1024 * 1024, files: 1, fields: 3 },
+    fileFilter(_req, file, callback) {
+        const extension = path.extname(file.originalname || '').toLowerCase();
+        const allowedMimeTypes = new Set([
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-excel'
+        ]);
+        if (extension !== '.xlsx' || !allowedMimeTypes.has(file.mimetype)) {
+            return callback(new ValidationError('Only .xlsx conference files are accepted'));
+        }
+        callback(null, true);
+    }
+});
 
 router.get("/conference-health", analyticsController.getConferenceHealth);
 router.get("/reviewer-quality", analyticsController.getReviewerQuality);

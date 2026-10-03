@@ -80,6 +80,10 @@ npm start
 
 The application runs at `http://localhost:3000`.
 
+## Private deployment posture
+
+ConfQual contains confidential conference-review data and is intentionally not a public, indexable website. Production pages send `noindex` metadata and `robots.txt` blocks crawlers. The project intentionally does not publish a sitemap, public structured data, Open Graph promotion metadata, or `llms.txt`. Add canonical or social-preview metadata only if a stable custom domain and a separate public landing page are introduced.
+
 ### 4. Running Tests
 ```bash
 cd backend

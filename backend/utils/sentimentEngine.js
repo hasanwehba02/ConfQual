@@ -1,31 +1,9 @@
-const path = require('path');
-const { pipeline, env } = require('@xenova/transformers');
-
-// Ensure models are cached locally inside the project directory
-env.cacheDir = path.join(__dirname, '..', '.cache');
-
-let classifierPromise = null;
-
 function isModelDisabled() {
-    return process.env.SENTIMENT_ANALYSIS_MODE === 'rules';
+    return true;
 }
 
 async function getClassifier() {
-    if (isModelDisabled()) {
-        throw new Error('Transformers.js sentiment model is disabled');
-    }
-    if (!classifierPromise) {
-        classifierPromise = pipeline(
-            'sentiment-analysis',
-            'Xenova/distilbert-base-uncased-finetuned-sst-2-english',
-            { quantized: true }
-        ).catch(err => {
-            console.error('Failed to initialize Transformers.js sentiment pipeline:', err);
-            classifierPromise = null;
-            throw err;
-        });
-    }
-    return classifierPromise;
+    throw new Error('Transformer sentiment model is disabled');
 }
 
 /**
@@ -51,7 +29,7 @@ function analyzeReviewSentimentSync(text) {
     if (!targetText || typeof targetText !== 'string' || targetText.length === 0) return 0;
     const clean = targetText.toLowerCase();
     const pos = ['excellent', 'groundbreaking', 'solid', 'strong', 'clear', 'novel', 'insightful', 'rigorous', 'well written', 'great', 'valuable', 'thorough', 'accept', 'good'];
-    const neg = ['flawed', 'weak', 'poor', 'incorrect', 'lacks', 'rejection', 'reject', 'marginal', 'unclear', 'invalid', 'shallow', 'insufficient', 'confusing', 'limited'];
+    const neg = ['flawed', 'weak', 'poor', 'incorrect', 'lack', 'rejection', 'reject', 'marginal', 'unclear', 'invalid', 'shallow', 'insufficient', 'confusing', 'limited'];
 
     let score = 0;
     for (const w of pos) {

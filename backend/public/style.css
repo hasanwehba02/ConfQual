@@ -151,6 +151,19 @@ th, .metric-value, .brand {
     background: var(--bg-subtle);
 }
 
+.drawer-close-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    color: var(--text-main);
+    font-family: Arial, sans-serif;
+    font-size: 1.75rem;
+    font-weight: 600;
+    line-height: 1;
+}
+
 /* Header */
 .app-header {
     display: flex;

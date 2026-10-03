@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Private conference review quality analytics for authorized committee members.">
+    <meta name="robots" content="noindex, nofollow, noarchive">
     <title>ConfQual | Analytics</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -445,7 +448,7 @@
                     <div class="chart-card geo-diversity-card">
                         <h3 class="chart-title">Geographic Diversity</h3>
                         <div class="geo-diversity-content">
-                            <h1 id="international-percentage" class="geo-diversity-percentage">--%</h1>
+                            <div id="international-percentage" class="geo-diversity-percentage">--%</div>
                             <p class="geo-diversity-label">International Representation</p>
                             <p id="geographic-breakdown" class="geo-diversity-breakdown">--</p>
                         </div>
@@ -510,7 +513,7 @@
     <aside id="upload-drawer" class="context-drawer closed">
         <div class="drawer-header">
             <h2>Upload Dataset</h2>
-            <button id="close-upload-drawer" class="btn-icon"><i class="ph ph-x"></i></button>
+            <button id="close-upload-drawer" class="btn-icon drawer-close-button" type="button" aria-label="Close upload drawer">&times;</button>
         </div>
         <div class="drawer-body">
             <form id="upload-form">
@@ -552,7 +555,7 @@
     <aside id="edit-conference-drawer" class="context-drawer closed">
         <div class="drawer-header">
             <h2>Edit Conference</h2>
-            <button id="close-edit-drawer" class="btn-icon"><i class="ph ph-x"></i></button>
+            <button id="close-edit-drawer" class="btn-icon drawer-close-button" type="button" aria-label="Close conference editor">&times;</button>
         </div>
         <div class="drawer-body">
             <form id="edit-conference-form">
@@ -586,7 +589,7 @@
     <aside id="detail-drawer" class="context-drawer closed">
         <div class="drawer-header">
             <h2 id="detail-drawer-title">Details</h2>
-            <button id="close-detail-drawer" class="btn-icon"><i class="ph ph-x"></i></button>
+            <button id="close-detail-drawer" class="btn-icon drawer-close-button" type="button" aria-label="Close details">&times;</button>
         </div>
         <div class="drawer-body" id="detail-drawer-body">
             <div class="spinner"></div>
@@ -597,7 +600,7 @@
     <aside id="settings-drawer" class="context-drawer closed">
         <div class="drawer-header">
             <h2>Settings</h2>
-            <button id="close-settings-drawer" class="btn-icon"><i class="ph ph-x"></i></button>
+            <button id="close-settings-drawer" class="btn-icon drawer-close-button" type="button" aria-label="Close settings">&times;</button>
         </div>
         <div class="drawer-body">
             <form id="settings-form">
@@ -661,7 +664,7 @@
             <i class="ph ph-x"></i>
         </button>
         <div style="max-width: 1200px; margin: 0 auto; width: 100%;">
-            <h1 id="projector-title" style="color: white; font-size: 2.5rem; margin-bottom: 30px; border-bottom: 2px solid #334155; padding-bottom: 20px;">Paper Title</h1>
+            <h2 id="projector-title" style="color: white; font-size: 2.5rem; margin-bottom: 30px; border-bottom: 2px solid #334155; padding-bottom: 20px;">Paper Title</h2>
             
             <div id="projector-scores" style="display: flex; gap: 20px; margin-bottom: 40px; flex-wrap: wrap;">
                 <!-- Reviewer Score Cards -->

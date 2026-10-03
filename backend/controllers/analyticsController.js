@@ -134,6 +134,9 @@ const processUpload = asyncHandler(async (req, res) => {
         } catch (error) {
             console.error("Error during import:", error);
             importStatus.fail(importId, workspaceId, error);
+        } finally {
+            const fs = require('fs/promises');
+            await fs.unlink(req.file.path).catch(() => {});
         }
     });
     res.status(202).json({ importId, message: "Import started", pollUrl: `/api/analytics/import-status/${importId}` });

@@ -9,10 +9,25 @@ function asyncHandler(fn) {
 
 // eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
-    const status = err instanceof AppError ? err.statusCode : 500;
-    const message = err instanceof AppError ? err.message : 'Internal server error';
+    const isUploadLimit = err?.name === 'MulterError';
+    const status = err instanceof AppError
+        ? err.statusCode
+        : isUploadLimit
+            ? 400
+            : Number.isInteger(err?.status) && err.status >= 400 && err.status < 500
+                ? err.status
+                : 500;
+    const message = err instanceof AppError
+        ? err.message
+        : isUploadLimit
+            ? 'Invalid or oversized upload'
+            : status === 413
+                ? 'Request payload is too large'
+                : status < 500
+                    ? 'Invalid request'
+                    : 'Internal server error';
 
-    if (!(err instanceof AppError)) {
+    if (status >= 500 && !(err instanceof AppError)) {
         console.error(`Unhandled error on ${req.method} ${req.originalUrl}:`, err);
     } else if (status >= 500) {
         console.error(`Operational error on ${req.method} ${req.originalUrl}:`, err);

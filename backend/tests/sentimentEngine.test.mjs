@@ -36,7 +36,7 @@ test('rule-based mode avoids loading the Transformers.js model', async () => {
     }
 });
 
-test('analyzeReviewSentimentAsync classifies positive and polite rejection text using Transformers.js', async () => {
+test('analyzeReviewSentimentAsync classifies positive and polite rejection text', async () => {
     const pos = await analyzeReviewSentimentAsync('Outstanding work with thorough theoretical and empirical evaluation.');
     assert.ok(pos > 0, `Expected positive score, got ${pos}`);
 
