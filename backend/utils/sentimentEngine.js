@@ -1,9 +1,75 @@
-function isModelDisabled() {
-    return true;
+const fs = require('fs');
+const path = require('path');
+const { pipeline, env } = require('@xenova/transformers');
+
+const MODEL_ID = 'philschmid/MiniLM-L6-H384-uncased-sst2';
+const LOCAL_MODEL_ROOT = path.resolve(__dirname, '..', 'models');
+const REQUIRED_MODEL_FILES = Object.freeze([
+    'config.json',
+    'tokenizer.json',
+    'tokenizer_config.json',
+    path.join('onnx', 'model_quantized.onnx'),
+]);
+
+// Remote models stay disabled because conference information must remain private.
+env.allowRemoteModels = false;
+env.allowLocalModels = true;
+env.localModelPath = `${LOCAL_MODEL_ROOT}${path.sep}`;
+env.useFSCache = false;
+if (env.backends.onnx?.wasm) {
+    env.backends.onnx.wasm.wasmPaths = `${path.resolve(
+        path.dirname(require.resolve('@xenova/transformers')),
+        '..',
+        'dist'
+    )}${path.sep}`;
 }
 
+let classifierPromise = null;
+
+function isModelDisabled() {
+    return process.env.SENTIMENT_ANALYSIS_MODE === 'rules';
+}
+
+function assertLocalModelPresent() {
+    const modelDir = path.join(LOCAL_MODEL_ROOT, MODEL_ID);
+    const missing = REQUIRED_MODEL_FILES.filter(file => !fs.existsSync(path.join(modelDir, file)));
+    if (missing.length > 0) {
+        throw new Error(`Local sentiment model is incomplete; missing ${missing.length} required file(s).`);
+    }
+}
+
+async function createLocalClassifier() {
+    assertLocalModelPresent();
+    return pipeline('sentiment-analysis', MODEL_ID, {
+        quantized: true,
+        local_files_only: true,
+    });
+}
+
+let classifierFactory = createLocalClassifier;
+
 async function getClassifier() {
-    throw new Error('Transformer sentiment model is disabled');
+    if (isModelDisabled()) {
+        throw new Error('Transformer sentiment model is disabled');
+    }
+    if (!classifierPromise) {
+        classifierPromise = Promise.resolve()
+            .then(() => classifierFactory())
+            .catch(err => {
+                classifierPromise = null;
+                throw err;
+            });
+    }
+    return classifierPromise;
+}
+
+function setClassifierFactoryForTests(factory) {
+    classifierFactory = factory || createLocalClassifier;
+    classifierPromise = null;
+}
+
+function getSentimentModelId() {
+    return MODEL_ID;
 }
 
 /**
@@ -43,6 +109,7 @@ function analyzeReviewSentimentSync(text) {
 
 /**
  * Analyzes review sentiment using local deep learning ONNX model.
+ * Sentiment is a heuristic signal, not a definitive assessment of review quality or recommendation.
  * Returns a normalized score from -10.00 (strong negative) to +10.00 (strong positive).
  * @param {string} text
  * @returns {Promise<number>}
@@ -52,6 +119,7 @@ async function analyzeReviewSentimentAsync(text) {
     if (!targetText || typeof targetText !== 'string' || targetText.length === 0) {
         return 0;
     }
+    if (isModelDisabled()) return analyzeReviewSentimentSync(targetText);
 
     try {
         const classifier = await getClassifier();
@@ -63,8 +131,8 @@ async function analyzeReviewSentimentAsync(text) {
         const scaled = (score || 0) * 10;
         const normalized = label === 'POSITIVE' ? scaled : -scaled;
         return parseFloat(normalized.toFixed(2));
-    } catch (err) {
-        console.warn('Transformers.js analysis failed, falling back to sync analyzer:', err.message);
+    } catch {
+        console.warn('Local Transformers.js analysis unavailable; using local rule-based sentiment.');
         return analyzeReviewSentimentSync(targetText);
     }
 }
@@ -76,6 +144,7 @@ async function analyzeReviewSentimentAsync(text) {
  */
 async function batchAnalyzeReviewSentiment(texts) {
     if (!Array.isArray(texts) || texts.length === 0) return [];
+    if (isModelDisabled()) return texts.map(text => analyzeReviewSentimentSync(text));
     
     try {
         const classifier = await getClassifier();
@@ -106,15 +175,17 @@ async function batchAnalyzeReviewSentiment(texts) {
             }
         }
         return results;
-    } catch (err) {
-        console.warn('Batch Transformers.js analysis failed, falling back:', err.message);
+    } catch {
+        console.warn('Local Transformers.js batch analysis unavailable; using local rule-based sentiment.');
         return texts.map(t => analyzeReviewSentimentSync(t));
     }
 }
 
 module.exports = {
     getClassifier,
+    getSentimentModelId,
     isModelDisabled,
+    setClassifierFactoryForTests,
     extractEvaluationText,
     analyzeReviewSentimentAsync,
     analyzeReviewSentimentSync,

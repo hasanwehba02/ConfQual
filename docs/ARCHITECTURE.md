@@ -69,7 +69,7 @@ C4Container
 Review text and author information are strictly confidential before decision notifications are published. ConfQual operates under specific privacy constraints:
 
 1. **No External Network Calls**: All analytical and natural language processing tasks execute inside the Node process on localhost. No data is sent to external cloud APIs or third-party tracking services.
-2. **Local NLP Classification**: Review text sentiment is evaluated on the CPU using `@xenova/transformers` with a quantized `distilbert-base-uncased-finetuned-sst-2-english` model running on the ONNX runtime.
+2. **Local NLP Classification**: Review text sentiment is evaluated on the CPU using `@xenova/transformers` with a quantized `philschmid/MiniLM-L6-H384-uncased-sst2` model running on the ONNX runtime. This is a heuristic signal, not a definitive assessment of review quality or recommendation.
 3. **Database Anonymization Flag**: When the anonymization toggle is enabled, SQL queries mask author names, PC member identities, and email addresses (`maskNames`) before sending responses to the browser.
 
 ```mermaid

@@ -17,7 +17,7 @@ if (require.main === module) {
         } else {
             getClassifier()
                 .then(() => console.log('Sentiment model ready.'))
-                .catch(err => console.warn('Sentiment model pre-warm failed (fallback will be used):', err.message));
+                .catch(() => console.warn('Sentiment model pre-warm failed; local rule-based fallback will be used.'));
         }
     });
 }

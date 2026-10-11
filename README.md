@@ -9,7 +9,7 @@ ConfQual is a local analytics tool for academic Program Chairs, Track Chairs, an
 ## Key Features
 
 - **Reviewer Calibration & Bias Correction**: Calculates variance and z-score normalized grades to identify consistently harsh or lenient reviewers.
-- **Local Text Sentiment Analysis**: Runs an in-process quantized DistilBERT transformer model via `@xenova/transformers` (ONNX on CPU) to detect contradictions between review text and numerical scores.
+- **Local Text Sentiment Analysis**: Runs an in-process quantized MiniLM transformer model via `@xenova/transformers` (ONNX on CPU) as a heuristic signal for contradictions between review text and numerical scores.
 - **Multi-Edition Tracking & Scoped Notes**: Groups annual editions under a parent conference series, tracks returning researchers, and manages chair notes across years.
 - **Configurable Alert Thresholds**: Evaluates under-reviewed submissions, high score spreads, missing discussions, and unassigned submissions based on edition configuration.
 - **Reviewer Dossier Export**: Compiles reviewer performance metrics, calibration stats, and private notes into downloadable PDF reports.
@@ -21,7 +21,7 @@ ConfQual is a local analytics tool for academic Program Chairs, Track Chairs, an
 
 - **Backend**: Node.js 20+, Express 5
 - **Database**: PostgreSQL 14+ (`pg` client with connection pooling)
-- **Local NLP**: `@xenova/transformers` (quantized ONNX DistilBERT)
+- **Local NLP**: `@xenova/transformers` (quantized ONNX MiniLM)
 - **PDF Export**: Puppeteer (headless Chrome)
 - **Spreadsheet Parsing**: `exceljs`, `multer`
 - **Frontend**: Vanilla JavaScript (ES Modules), Chart.js, Phosphor Icons, CSS3

@@ -7,6 +7,6 @@
   },
   "scripts": {
     "start": "npm --prefix backend start",
-    "heroku-postbuild": "npm ci --omit=dev --prefix backend"
+    "heroku-postbuild": "npm ci --omit=dev --prefix backend && npm --prefix backend run model:setup"
   }
 }
