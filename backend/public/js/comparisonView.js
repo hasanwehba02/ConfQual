@@ -14,7 +14,7 @@ export async function loadComparisonTab() {
             return;
         }
 
-        tbody.innerHTML = data.map(c => {
+        tbody.innerHTML = data.map((c, index) => {
             const accRate = c.total_papers > 0 ? ((c.accepted_papers / c.total_papers) * 100).toFixed(1) : 'N/A';
             const uploadedAt = c.uploaded_at ? new Date(c.uploaded_at).toLocaleDateString() : '-';
             return `
@@ -30,12 +30,23 @@ export async function loadComparisonTab() {
                     <td>${c.avg_word_count != null ? Math.round(c.avg_word_count) : '-'}</td>
                     <td>${uploadedAt}</td>
                     <td>
-                        <button class="btn btn-outline btn-sm" style="font-size:0.7rem;padding:2px 8px;" onclick="selectConference(${c.id})">View</button>
-                        <button class="btn btn-outline btn-sm" style="font-size:0.7rem;padding:2px 8px;color:var(--text-muted);" onclick="openEditConferenceDrawer(${c.id}, '${escapeHtml(c.name || '').replace(/'/g, "\\'")}', '${escapeHtml(c.short_name || '').replace(/'/g, "\\'")}', '${c.year || ''}')">Edit</button>
+                        <button class="btn btn-outline btn-sm" style="font-size:0.7rem;padding:2px 8px;" data-action="view" data-index="${index}">View</button>
+                        <button class="btn btn-outline btn-sm" style="font-size:0.7rem;padding:2px 8px;color:var(--text-muted);" data-action="edit" data-index="${index}">Edit</button>
                     </td>
                 </tr>
             `;
         }).join('');
+
+        tbody.onclick = event => {
+            const button = event.target.closest('button[data-action][data-index]');
+            if (!button || !tbody.contains(button)) return;
+            const conference = data[Number(button.dataset.index)];
+            if (!conference) return;
+            if (button.dataset.action === 'view') window.selectConference(conference.id);
+            if (button.dataset.action === 'edit') {
+                window.openEditConferenceDrawer(conference.id, conference.name || '', conference.short_name || '', conference.year || '');
+            }
+        };
 
         // Render comparison charts
         renderComparisonCharts(data);

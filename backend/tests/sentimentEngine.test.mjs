@@ -15,7 +15,7 @@ import {
 import { isSentimentMismatch, calculateCalibration } from '../utils/analyticsMath.js';
 
 const require = createRequire(import.meta.url);
-const { env } = require('@xenova/transformers');
+const { env } = require('@huggingface/transformers');
 const EXPECTED_MODEL_ID = 'philschmid/MiniLM-L6-H384-uncased-sst2';
 
 test('Transformers.js permits only local model and runtime resources', () => {
@@ -24,7 +24,7 @@ test('Transformers.js permits only local model and runtime resources', () => {
     assert.equal(env.allowLocalModels, true);
     assert.equal(path.isAbsolute(env.localModelPath), true);
     assert.match(env.localModelPath, /backend[/\\]models[/\\]$/);
-    assert.equal(path.isAbsolute(env.backends.onnx.wasm.wasmPaths), true);
+    assert.equal(env.useFSCache, false);
 });
 
 test('getClassifier lazy-loads one shared local classifier', async () => {

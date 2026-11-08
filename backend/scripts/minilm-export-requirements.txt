@@ -1,5 +1,9 @@
-torch==2.5.1
-transformers==4.46.3
-huggingface-hub==0.36.2
-onnx==1.17.0
-onnxruntime==1.20.1
+torch==2.15.0
+transformers==5.22.2
+huggingface-hub==2.4.0
+onnx==1.23.2
+onnxruntime==1.31.1
+requests==2.34.2
+certifi==2026.10.23
+httpcore2==2.16.0
+httpx2==2.16.0

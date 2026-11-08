@@ -21,11 +21,6 @@ async function resolveEditionId(editionId) {
     return result.rows[0]?.id || null;
 }
 
-// Backward-compatible alias
-async function resolveConferenceId(editionId) {
-    return resolveEditionId(editionId);
-}
-
 function assertSafeNumber(val, name = 'value') {
     const num = Number(val);
     if (!Number.isFinite(num)) {
@@ -188,7 +183,6 @@ function getFilterModes(options = {}) {
 
 module.exports = {
     resolveEditionId,
-    resolveConferenceId,
     assertSafeNumber,
     getAlertRules,
     ensureAlertRulesForEdition,

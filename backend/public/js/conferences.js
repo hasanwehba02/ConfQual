@@ -5,11 +5,6 @@ import { invalidateFilterLabels } from './filterMenu.js';
 
 const ACTIVE_CONF_STORAGE_KEY = 'confqual.activeConferenceId';
 
-export function currentConferenceLabel() {
-    const c = state.loadedConferences.find(x => x.id == state.activeConferenceId);
-    return c ? [c.short_name || c.name, c.year].filter(Boolean).join(" '") : '';
-}
-
 export async function loadConferences() {
     try {
         const conferences = await fetchConferences();

@@ -67,7 +67,7 @@ async function importAuthors(edition) {
     // Deduplicate by externalPersonId before bulk ops
     const uniqueByExtId = new Map(); // externalPersonId -> first dto with that id
     for (const dto of dtos) {
-        if (!dto.externalPersonId) { skipped++; continue; }
+        if (!dto.externalPersonId) continue;
         if (!uniqueByExtId.has(dto.externalPersonId)) {
             uniqueByExtId.set(dto.externalPersonId, dto);
         }
@@ -90,7 +90,7 @@ async function importAuthors(edition) {
     const participantInputs = [];
     for (let i = 0; i < uniqueDtos.length; i++) {
         const researcher = researcherMap.get(i);
-        if (!researcher) { skipped++; continue; }
+        if (!researcher) continue;
         participantInputs.push({
             researcherId:     researcher.id,
             editionId:        edition.id,

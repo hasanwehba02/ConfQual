@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { pipeline, env } = require('@xenova/transformers');
+const { pipeline, env } = require('@huggingface/transformers');
 
 const MODEL_ID = 'philschmid/MiniLM-L6-H384-uncased-sst2';
 const LOCAL_MODEL_ROOT = path.resolve(__dirname, '..', 'models');
@@ -16,13 +16,6 @@ env.allowRemoteModels = false;
 env.allowLocalModels = true;
 env.localModelPath = `${LOCAL_MODEL_ROOT}${path.sep}`;
 env.useFSCache = false;
-if (env.backends.onnx?.wasm) {
-    env.backends.onnx.wasm.wasmPaths = `${path.resolve(
-        path.dirname(require.resolve('@xenova/transformers')),
-        '..',
-        'dist'
-    )}${path.sep}`;
-}
 
 let classifierPromise = null;
 
@@ -41,7 +34,7 @@ function assertLocalModelPresent() {
 async function createLocalClassifier() {
     assertLocalModelPresent();
     return pipeline('sentiment-analysis', MODEL_ID, {
-        quantized: true,
+        dtype: 'q8',
         local_files_only: true,
     });
 }

@@ -191,6 +191,13 @@ test('API Endpoints Integration Suite', async (t) => {
             return;
         }
 
+        const series = await db.query("INSERT INTO conference_series (name, acronym) VALUES ('API Test ' || random(), 'API') RETURNING id");
+        st.after(async () => { await db.query('DELETE FROM conference_series WHERE id = $1', [series.rows[0].id]); });
+        const edition = await db.query('INSERT INTO edition (conference_id, year) VALUES ($1, 2026) RETURNING id', [series.rows[0].id]);
+        const researcher = await db.query("INSERT INTO researcher (first_name, last_name, email) VALUES ('API', 'Test', 'api-' || random() || '@example.com') RETURNING id");
+        st.after(async () => { await db.query('DELETE FROM researcher WHERE id = $1', [researcher.rows[0].id]); });
+        const participant = await db.query('INSERT INTO participant (researcher_id, edition_id) VALUES ($1, $2) RETURNING id', [researcher.rows[0].id, edition.rows[0].id]);
+
         // 1. GET /api/analytics/notes
         const listRes = await fetch(`${baseUrl}/api/analytics/notes`);
         assert.equal(listRes.status, 200);
@@ -209,7 +216,7 @@ test('API Endpoints Integration Suite', async (t) => {
         const createRes = await fetch(`${baseUrl}/api/analytics/notes`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: 'API Route Test Note' })
+            body: JSON.stringify({ text: 'API Route Test Note', editionId: edition.rows[0].id, authorParticipantId: participant.rows[0].id })
         });
         assert.equal(createRes.status, 200);
         const createdNote = await createRes.json();

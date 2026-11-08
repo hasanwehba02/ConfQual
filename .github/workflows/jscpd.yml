@@ -1,0 +1,23 @@
+name: jscpd
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  duplication:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: kucherenko/jscpd@v5
+        with:
+          path: backend
+          config: .jscpd.json
+          format: javascript,typescript
+          threshold: 5
+          upload-sarif: false
+          upload-report: false

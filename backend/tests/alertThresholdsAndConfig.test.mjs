@@ -1,13 +1,23 @@
 import { describe, test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import app from '../app.js';
+import appModule from '../app.js';
 import db from '../config/database.js';
 import helpers from '../repositories/analytics/helpers.js';
 import configRepo from '../repositories/configurationRepository.js';
 import alertDefaults from '../config/alertRuleDefaults.js';
 
 const { getAlertRules, ensureAlertRulesForEdition, resolveEditionId, getAnonymizationSettings } = helpers;
+const app = appModule.createApp({
+    authMiddleware(req, _res, next) {
+        req.user = { sub: 'integration-test-user', app_metadata: { role: 'admin' } };
+        next();
+    },
+    workspaceMiddleware(req, _res, next) {
+        req.workspaceRole = 'admin';
+        next();
+    }
+});
 
 /**
  * Tests for the per-edition alert thresholds (alert_rule) and Configuration

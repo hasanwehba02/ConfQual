@@ -9,7 +9,7 @@ const FILES = [
     ['config.json', 830, '3b31ca2ace86e10d0a738e72ce52143b09bbba9e7100306eff91448e1d64ca9f'],
     ['tokenizer.json', 466247, 'be50c3628f2bf5bb5e3a7f17b1f74611b2561a3a27eeab05e5aa30f411572037'],
     ['tokenizer_config.json', 512, 'c12bf6c7c8a25f696582ac6d9fc38c606c93a8a5bdf71bcdf6af35a37c3c6e4e'],
-    ['onnx/model_quantized.onnx', 23075378, 'f446516c826577aaa42b2bc6e874b9fc4c9d3fc836d80a540707a289f42184b9'],
+    ['onnx/model_quantized.onnx', 23036118, '98d3f28e2f02dca8ab0f6eba76e6cf48e57bbd4945dd3d967233e0a6ce6191be'],
 ];
 
 async function sha256(filePath) {

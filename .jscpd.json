@@ -1,0 +1,14 @@
+{
+  "gitignore": true,
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/coverage/**",
+    "backend/.cache/**",
+    "backend/models/Xenova/**",
+    "backend/models/philschmid/**",
+    "backend/public/vendor/**",
+    "**/*.min.js",
+    "**/*.generated.*"
+  ]
+}

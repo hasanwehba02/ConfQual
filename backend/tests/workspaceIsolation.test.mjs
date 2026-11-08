@@ -127,7 +127,7 @@ test('first user claims legacy workspace and next user receives private workspac
 
     const marker = `bootstrap-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const legacy = await db.query(
-        `SELECT w.id
+        `SELECT w.id, w.owner_user_id, w.name, w.is_legacy
          FROM workspace w
          WHERE w.is_legacy = true
            AND NOT EXISTS (
@@ -161,9 +161,14 @@ test('first user claims legacy workspace and next user receives private workspac
         assert.notEqual(bob.workspaceId, alice.workspaceId);
         assert.equal(bob.role, 'admin');
     } finally {
+        await db.query('DELETE FROM workspace_member WHERE workspace_id = $1 AND user_id = $2', [legacyId, aliceUserId]);
+        await db.query(
+            'UPDATE workspace SET owner_user_id = $1, name = $2, is_legacy = $3 WHERE id = $4',
+            [legacy.rows[0].owner_user_id, legacy.rows[0].name, legacy.rows[0].is_legacy, legacyId]
+        );
         await db.query(
             'DELETE FROM workspace WHERE id = ANY($1::uuid[])',
-            [[legacyId, bobWorkspaceId].filter(Boolean)]
+            [[bobWorkspaceId].filter(Boolean)]
         );
     }
 });

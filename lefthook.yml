@@ -1,0 +1,19 @@
+pre-commit:
+  jobs:
+    - name: gitleaks-staged
+      run: |
+        command -v gitleaks >/dev/null 2>&1 || { echo "Install Gitleaks CLI (https://github.com/gitleaks/gitleaks#installing) to run the staged secret check." >&2; exit 127; }
+        gitleaks git --staged --redact --no-banner
+
+pre-push:
+  jobs:
+    - name: knip
+      root: backend
+      run: npm run knip -- --no-progress --no-exit-code
+    - name: jscpd
+      root: backend
+      run: npm run jscpd
+    - name: osv-scanner
+      run: |
+        command -v osv-scanner >/dev/null 2>&1 || { echo "Install OSV-Scanner v2 CLI (https://github.com/google/osv-scanner) to run the dependency check." >&2; exit 127; }
+        osv-scanner scan source --recursive .

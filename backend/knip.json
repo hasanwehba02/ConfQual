@@ -1,0 +1,7 @@
+{
+  "entry": [
+    "public/js/main.js",
+    "public/js/login.js",
+    "scripts/anonymizeData.js"
+  ]
+}

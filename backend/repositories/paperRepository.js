@@ -1,44 +1,5 @@
 const client = require("../config/database");
 
-async function createPaper(paper) {
-    const query = `
-        INSERT INTO paper (
-            edition_id,
-            external_submission_id,
-            title,
-            submitted_at,
-            last_updated_at,
-            decision,
-            decision_category,
-            notified,
-            reviews_sent,
-            is_deleted
-        )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-        ON CONFLICT (edition_id, external_submission_id)
-        DO UPDATE SET
-            decision_category = EXCLUDED.decision_category
-        RETURNING *;
-    `;
-
-    const values = [
-        paper.editionId,
-        paper.externalSubmissionId,
-        paper.title,
-        paper.submittedAt,
-        paper.lastUpdatedAt,
-        paper.decision,
-        paper.decisionCategory,
-        paper.notified,
-        paper.reviewsSent,
-        paper.isDeleted || false
-    ];
-
-    const result = await client.query(query, values);
-    if (result.rows.length === 0) return null;
-    return result.rows[0];
-}
-
 async function bulkCreatePapers(papers) {
     if (!papers || papers.length === 0) return [];
     const values = [];
@@ -85,12 +46,6 @@ async function bulkCreatePapers(papers) {
     return result.rows;
 }
 
-async function findByExternalSubmissionId(externalSubmissionId) {
-    const query = `SELECT * FROM paper WHERE external_submission_id = $1`;
-    const result = await client.query(query, [externalSubmissionId]);
-    return result.rows.length ? result.rows[0] : null;
-}
-
 async function getIdMap(editionId) {
     const query = `SELECT external_submission_id, id FROM paper WHERE edition_id = $1`;
     const result = await client.query(query, [editionId]);
@@ -101,4 +56,4 @@ async function getIdMap(editionId) {
     return map;
 }
 
-module.exports = { createPaper, bulkCreatePapers, findByExternalSubmissionId, getIdMap };
+module.exports = { bulkCreatePapers, getIdMap };

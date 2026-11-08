@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 import hashlib
 import json
-import os
 from pathlib import Path
 import shutil
-import subprocess
-import sys
 import tempfile
 
 from huggingface_hub import snapshot_download
 import onnx
 from onnxruntime.quantization import QuantType, quantize_dynamic
+import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 MODEL_ID = "philschmid/MiniLM-L6-H384-uncased-sst2"
 MODEL_REVISION = "0c0ecdc39368f87291727ec084111e89e30b45b2"
@@ -18,7 +17,7 @@ EXPECTED_FILES = {
     "config.json": (830, "3b31ca2ace86e10d0a738e72ce52143b09bbba9e7100306eff91448e1d64ca9f"),
     "tokenizer.json": (466247, "be50c3628f2bf5bb5e3a7f17b1f74611b2561a3a27eeab05e5aa30f411572037"),
     "tokenizer_config.json": (512, "c12bf6c7c8a25f696582ac6d9fc38c606c93a8a5bdf71bcdf6af35a37c3c6e4e"),
-    "onnx/model_quantized.onnx": (23075378, "f446516c826577aaa42b2bc6e874b9fc4c9d3fc836d80a540707a289f42184b9"),
+    "onnx/model_quantized.onnx": (23036118, "98d3f28e2f02dca8ab0f6eba76e6cf48e57bbd4945dd3d967233e0a6ce6191be"),
 }
 OUTPUT_DIR = Path(__file__).resolve().parents[1] / "models" / MODEL_ID
 
@@ -46,26 +45,30 @@ def main():
             local_dir=source,
         )
 
-        environment = os.environ.copy()
-        environment["HF_HOME"] = str(temporary / "cache")
-        subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "transformers.onnx",
-                "--model",
-                str(source),
-                "--feature",
-                "sequence-classification",
-                "--opset",
-                "14",
-                "--framework",
-                "pt",
-                "--export_with_transformers",
-                str(exported),
-            ],
-            check=True,
-            env=environment,
+        model = AutoModelForSequenceClassification.from_pretrained(
+            source, use_safetensors=False, attn_implementation="eager"
+        ).eval()
+        inputs = AutoTokenizer.from_pretrained(source)(
+            "A good conference review.",
+            return_tensors="pt",
+            padding="max_length",
+            max_length=128,
+            truncation=True,
+        )
+        input_names = ["input_ids", "attention_mask", "token_type_ids"]
+        exported.mkdir()
+        torch.onnx.export(
+            model,
+            tuple(inputs[name] for name in input_names),
+            str(exported / "model.onnx"),
+            input_names=input_names,
+            output_names=["logits"],
+            dynamic_axes={
+                **{name: {0: "batch", 1: "sequence"} for name in input_names},
+                "logits": {0: "batch"},
+            },
+            opset_version=14,
+            dynamo=False,
         )
 
         (packaged / "onnx").mkdir(parents=True)

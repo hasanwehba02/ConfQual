@@ -9,11 +9,6 @@ const client = require("../config/database");
 const emailCache = new Map();
 const nameCache = new Map();
 
-function clearResearcherCache() {
-    emailCache.clear();
-    nameCache.clear();
-}
-
 function cacheResearcher(researcher) {
     if (!researcher) return;
     const workspaceId = client.getWorkspaceId();
@@ -99,43 +94,6 @@ async function findOrCreateResearcher({ firstName, lastName, email, country, aff
 }
 
 /**
- * Find researcher by email
- */
-async function findByEmail(email) {
-    if (!email) return null;
-    const result = await client.query(
-        `SELECT * FROM researcher WHERE LOWER(TRIM(email)) = LOWER(TRIM($1))`,
-        [email]
-    );
-    return result.rows.length > 0 ? result.rows[0] : null;
-}
-
-/**
- * Find researcher by ID
- */
-async function findById(id) {
-    const result = await client.query(
-        `SELECT * FROM researcher WHERE id = $1`,
-        [id]
-    );
-    return result.rows.length > 0 ? result.rows[0] : null;
-}
-
-/**
- * Search researchers by name or email
- */
-async function searchResearchers(query, limit = 20) {
-    const result = await client.query(
-        `SELECT * FROM researcher
-         WHERE first_name ILIKE $1 OR last_name ILIKE $1 OR email ILIKE $1
-         ORDER BY last_name, first_name
-         LIMIT $2`,
-        [`%${query}%`, limit]
-    );
-    return result.rows;
-}
-
-/**
  * Bulk find-or-create researchers.
  * Returns a Map keyed by the input index → researcher row.
  *
@@ -216,8 +174,4 @@ async function bulkFindOrCreateResearchers(items) {
 module.exports = {
     findOrCreateResearcher,
     bulkFindOrCreateResearchers,
-    findByEmail,
-    findById,
-    searchResearchers,
-    clearResearcherCache
 };
