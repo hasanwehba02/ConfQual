@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Verify your ConfQual sign-in with an authenticator app.">
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <title>Verify sign-in | ConfQual</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="style.css">
+    <script src="/vendor/supabase.js"></script>
+</head>
+<body class="auth-page">
+    <main class="auth-card">
+        <div class="brand auth-brand"><span class="auth-mark"></span>ConfQual</div>
+        <h1>Verify sign-in</h1>
+        <p id="mfa-description" class="text-muted">Checking your authenticator setup…</p>
+        <section id="mfa-enroll" hidden>
+            <p class="mt-4">Set up an authenticator app to access this workspace.</p>
+            <button id="mfa-enroll-btn" class="btn btn-primary mt-4" type="button">Set up authenticator</button>
+        </section>
+        <section id="mfa-setup" hidden>
+            <p class="mt-4">Scan this code in your authenticator app, then enter its six-digit code.</p>
+            <img id="mfa-qr" class="mt-4" width="180" height="180" alt="Authenticator setup QR code">
+            <p class="mt-4">Manual setup key: <code id="mfa-secret"></code></p>
+        </section>
+        <form id="mfa-form" class="auth-form" hidden>
+            <label>Authenticator code
+                <input name="code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required>
+            </label>
+            <button class="btn btn-primary w-full" type="submit">Verify</button>
+        </form>
+        <p id="mfa-message" class="auth-error mt-4" role="alert"></p>
+        <button id="mfa-signout" class="btn btn-outline mt-4" type="button">Sign out</button>
+    </main>
+    <script type="module" src="js/mfa.js"></script>
+</body>
+</html>

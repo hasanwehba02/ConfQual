@@ -9,6 +9,7 @@ const app = appModule.createApp({
         req.user = {
             sub: 'integration-test-user',
             email: 'test@example.com',
+            aal: 'aal2',
             app_metadata: { role: 'admin' }
         };
         next();

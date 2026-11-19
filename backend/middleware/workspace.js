@@ -9,7 +9,7 @@ function createWorkspaceMiddleware(resolve = workspaceService.resolveWorkspace) 
 
         try {
             const membership = await resolve(req.user);
-            if (!membership?.workspaceId) {
+            if (!membership?.workspaceId || !['admin', 'chair', 'viewer'].includes(membership.role)) {
                 return res.status(403).json({ error: 'Workspace access required' });
             }
 

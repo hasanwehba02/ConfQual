@@ -5,7 +5,7 @@ const path = require('path');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
 const authRoutes = require('./routes/authRoutes');
-const { requireAuth } = require('./middleware/auth');
+const { requireAuth, requirePrivilegedMfa } = require('./middleware/auth');
 const { requireWorkspace } = require('./middleware/workspace');
 
 function createApp({
@@ -53,9 +53,9 @@ function createApp({
     app.use(express.static(path.join(__dirname, 'public')));
 
     app.get('/api/auth/config', authRoutes.getConfig);
-    app.get('/api/auth/me', authMiddleware, authRoutes.getCurrentUser);
-    app.use('/api/analytics', authMiddleware, workspaceMiddleware, analyticsRoutes);
-    app.use('/api/settings', authMiddleware, workspaceMiddleware, settingsRoutes);
+    app.get('/api/auth/me', authMiddleware, workspaceMiddleware, authRoutes.getCurrentUser);
+    app.use('/api/analytics', authMiddleware, workspaceMiddleware, requirePrivilegedMfa, analyticsRoutes);
+    app.use('/api/settings', authMiddleware, workspaceMiddleware, requirePrivilegedMfa, settingsRoutes);
 
     app.use('/api', (_req, res) => {
         res.status(404).json({ error: 'API endpoint not found' });

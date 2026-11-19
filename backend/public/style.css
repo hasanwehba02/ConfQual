@@ -83,6 +83,8 @@ th, .metric-value, .brand {
 .auth-mark { width: 14px; height: 14px; background: var(--primary); display: inline-block; }
 .auth-card h1 { margin-bottom: 0.25rem; }
 .auth-form { display: grid; gap: 1rem; margin-top: 1.5rem; }
+.auth-card [hidden] { display: none !important; }
+.auth-card code { overflow-wrap: anywhere; }
 .auth-form label { display: grid; gap: 0.4rem; font-size: 0.875rem; font-weight: 500; }
 .auth-form input {
     width: 100%;

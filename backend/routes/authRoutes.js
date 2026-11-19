@@ -1,5 +1,3 @@
-const { getRole } = require('../middleware/auth');
-
 function getConfig(req, res) {
     const url = process.env.SUPABASE_URL;
     const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
@@ -15,7 +13,8 @@ function getCurrentUser(req, res) {
     res.json({
         id: req.user.sub,
         email: req.user.email || null,
-        role: getRole(req.user)
+        role: req.workspaceRole,
+        aal: req.user.aal || 'aal1'
     });
 }
 

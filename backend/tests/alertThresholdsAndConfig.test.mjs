@@ -10,7 +10,7 @@ import alertDefaults from '../config/alertRuleDefaults.js';
 const { getAlertRules, ensureAlertRulesForEdition, resolveEditionId, getAnonymizationSettings } = helpers;
 const app = appModule.createApp({
     authMiddleware(req, _res, next) {
-        req.user = { sub: 'integration-test-user', app_metadata: { role: 'admin' } };
+        req.user = { sub: 'integration-test-user', aal: 'aal2', app_metadata: { role: 'admin' } };
         next();
     },
     workspaceMiddleware(req, _res, next) {

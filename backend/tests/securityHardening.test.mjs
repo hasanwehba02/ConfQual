@@ -6,7 +6,7 @@ import db from '../config/database.js';
 
 const app = appModule.createApp({
     authMiddleware(req, _res, next) {
-        req.user = { sub: 'security-test-user' };
+        req.user = { sub: 'security-test-user', aal: 'aal2' };
         next();
     },
     workspaceMiddleware(req, _res, next) {

@@ -25,10 +25,28 @@ export async function getSession() {
     return data.session;
 }
 
+export async function getWorkspaceAccount(session) {
+    const response = await nativeFetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+    });
+    const account = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(account.error || 'Unable to verify workspace access');
+    return account;
+}
+
+export function needsMfa(account) {
+    return ['admin', 'chair'].includes(account.role) && account.aal !== 'aal2';
+}
+
 export async function requireSession() {
     const session = await getSession();
     if (!session) {
         window.location.replace('/login.html');
+        return null;
+    }
+    const account = await getWorkspaceAccount(session);
+    if (needsMfa(account)) {
+        window.location.replace('/mfa.html');
         return null;
     }
     return session;
@@ -36,7 +54,8 @@ export async function requireSession() {
 
 export async function signOut() {
     const supabase = await getSupabase();
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
     window.location.replace('/login.html');
 }
 

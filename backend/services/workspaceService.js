@@ -26,36 +26,13 @@ async function resolveWorkspace(user) {
             };
         }
 
-        const legacy = await client.query(
-            `SELECT w.id
-             FROM workspace w
-             WHERE w.is_legacy = true
-               AND NOT EXISTS (
-                   SELECT 1 FROM workspace_member wm WHERE wm.workspace_id = w.id
-               )
-             ORDER BY w.created_at ASC
-             LIMIT 1
-             FOR UPDATE`,
-            []
+        const created = await client.query(
+            `INSERT INTO workspace (owner_user_id, name)
+             VALUES ($1, $2)
+             RETURNING id`,
+            [user.sub, workspaceName(user)]
         );
-
-        let workspaceId = legacy.rows[0]?.id;
-        if (workspaceId) {
-            await client.query(
-                `UPDATE workspace
-                 SET owner_user_id = $1, name = $2, is_legacy = false
-                 WHERE id = $3`,
-                [user.sub, workspaceName(user), workspaceId]
-            );
-        } else {
-            const created = await client.query(
-                `INSERT INTO workspace (owner_user_id, name)
-                 VALUES ($1, $2)
-                 RETURNING id`,
-                [user.sub, workspaceName(user)]
-            );
-            workspaceId = created.rows[0].id;
-        }
+        const workspaceId = created.rows[0].id;
 
         await client.query(
             `INSERT INTO workspace_member (workspace_id, user_id, role)

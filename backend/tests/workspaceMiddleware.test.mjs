@@ -53,3 +53,14 @@ test('workspace role overrides global token role', () => {
     assert.equal(nextCalled, false);
     assert.equal(res.statusCode, 403);
 });
+
+test('workspace middleware rejects a membership without a recognized role', async () => {
+    const req = { user: { sub: 'user-alice' } };
+    const res = response();
+    let nextCalled = false;
+    await createWorkspaceMiddleware(async () => ({
+        workspaceId: '11111111-1111-4111-8111-111111111111', role: undefined
+    }))(req, res, () => { nextCalled = true; });
+    assert.equal(res.statusCode, 403);
+    assert.equal(nextCalled, false);
+});
