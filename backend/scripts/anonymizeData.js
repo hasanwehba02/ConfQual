@@ -59,7 +59,7 @@ async function anonymizeData() {
             process.exit(0);
         }
     } catch (err) {
-        console.error("Error during data anonymization:", err);
+        console.error("Error during data anonymization");
         if (require.main === module) {
             process.exit(1);
         }

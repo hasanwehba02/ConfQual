@@ -1,5 +1,4 @@
-require("dotenv").config();
-const { Pool } = require("pg");
+const pool = require('./config/database');
 
 async function runDiagnostics() {
     console.log("DIAGNOSTICS: Checking Database Setup\n");
@@ -16,19 +15,14 @@ async function runDiagnostics() {
     }
 
     // 2. Try Connecting
-    let options = { connectionString: connStr };
-    options.ssl = { rejectUnauthorized: false };
-
     console.log("\n⏳ Attempting to connect to the database...");
-    const pool = new Pool(options);
 
     let client;
     try {
         client = await pool.connect();
         console.log("Successfully connected to PostgreSQL!");
-    } catch (err) {
+    } catch {
         console.error("ERROR: Could not connect to the database.");
-        console.error("   Details:", err.message);
         console.error("   Check if your connection string is correct and the database is accessible.");
         process.exit(1);
     }
@@ -44,12 +38,11 @@ async function runDiagnostics() {
             console.error("   The database is empty. You need to run the schema script.");
             console.error("   Please execute the SQL commands in 'database/confqual_schema.sql' in your PostgreSQL / Supabase database.");
         }
-    } catch (err) {
+    } catch {
         console.error("ERROR: Failed to query the database tables.");
-        console.error(err.message);
     } finally {
         client.release();
-        pool.end();
+        await pool.end();
     }
 
     console.log("\n=========================================");

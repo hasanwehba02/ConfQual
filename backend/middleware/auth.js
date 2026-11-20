@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const db = require('../config/database');
 
 let supabase;
 
@@ -52,6 +53,7 @@ function createAuthMiddleware(getClaims, getUser) {
             }
 
             req.user = claims;
+            req.authUser = verifiedUser.data.user;
             next();
         } catch (error) {
             next(error);
@@ -92,12 +94,43 @@ function requireRole(...allowedRoles) {
     };
 }
 
-function requirePrivilegedMfa(req, res, next) {
-    if (!['admin', 'chair', 'viewer'].includes(req.workspaceRole)) {
-        return res.status(403).json({ error: 'Workspace access required' });
-    }
-    if ((['admin', 'chair'].includes(req.workspaceRole) || req.supportAccess) && req.user?.aal !== 'aal2') {
-        return res.status(403).json({ error: 'Multi-factor authentication required', code: 'mfa_required' });
+function hasVerifiedTotp(user) {
+    return Array.isArray(user?.amr) && user.amr.some(method => method?.method === 'totp');
+}
+
+function createPrivilegedMfaMiddleware(getSessionFactorId = ({ sessionId, userId }) =>
+    db.getSessionFactorId(sessionId, userId)) {
+    return async function requirePrivilegedMfa(req, res, next) {
+        if (!['admin', 'chair', 'viewer'].includes(req.workspaceRole)) {
+            return res.status(403).json({ error: 'Workspace access required' });
+        }
+        const privileged = ['admin', 'chair'].includes(req.workspaceRole) || req.supportAccess;
+        if (!privileged) return next();
+
+        const approvedFactorId = req.authUser?.app_metadata?.confqual_approved_totp_factor_id;
+        if (req.user?.aal !== 'aal2' || !hasVerifiedTotp(req.user) ||
+            typeof approvedFactorId !== 'string' || !approvedFactorId) {
+            return res.status(403).json({ error: 'Multi-factor authentication required', code: 'mfa_required' });
+        }
+
+        try {
+            const sessionFactorId = await getSessionFactorId({ sessionId: req.user.session_id, userId: req.user.sub });
+            if (sessionFactorId !== approvedFactorId) {
+                return res.status(403).json({ error: 'Multi-factor authentication required', code: 'mfa_required' });
+            }
+            return next();
+        } catch (error) {
+            return next(error);
+        }
+    };
+}
+
+function requireTrustedSetup(req, res, next) {
+    if (req.authUser?.app_metadata?.confqual_access_approved !== true) {
+        return res.status(403).json({
+            error: 'Workspace access is waiting for operator approval',
+            code: 'access_pending'
+        });
     }
     next();
 }
@@ -105,7 +138,9 @@ function requirePrivilegedMfa(req, res, next) {
 module.exports = {
     createAuthMiddleware,
     getRole,
+    hasVerifiedTotp,
     requireAuth,
     requireRole,
-    requirePrivilegedMfa
+    createPrivilegedMfaMiddleware,
+    requireTrustedSetup
 };

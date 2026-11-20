@@ -3,6 +3,7 @@ const reportService = require("../services/reportService");
 const { renderPdf } = require("../utils/pdfRenderer");
 const { NotFoundError, ServiceUnavailableError, ForbiddenError, ValidationError } = require("../utils/appError");
 const { asyncHandler } = require("../middleware/errorHandler");
+const fs = require('fs/promises');
 
 const getConferenceHealth = asyncHandler(async (req, res) => {
     res.json(await analyticsService.getConferenceHealth(req.query.conferenceId));
@@ -100,6 +101,7 @@ const updatePaperDecision = asyncHandler(async (req, res) => {
     const normalized = normalizeDecision(decision);
     try {
         const updated = await analyticsService.updatePaperDecision(id, normalized);
+        if (!updated) throw new NotFoundError('Paper not found');
         dashboardCache.del();
         res.json(updated);
     } catch (error) {
@@ -112,33 +114,41 @@ const runImporter = require("../importer/runImporter");
 const { ImportStatusStore } = require('../services/importStatusStore');
 const importStatus = new ImportStatusStore();
 
+async function removeTempUpload(filePath) {
+    await fs.unlink(filePath).catch(() => console.error('Temporary upload cleanup failed'));
+}
+
 const processUpload = asyncHandler(async (req, res) => {
     if (!req.file) throw new ValidationError("No file uploaded");
+    const filePath = req.file.path;
+    let importId;
+    try {
+        console.log('Processing uploaded file');
+        const meta = {
+            name: req.body.conferenceName || null,
+            shortName: req.body.conferenceShortName || null,
+            year: req.body.conferenceYear ? parseInt(req.body.conferenceYear) : null
+        };
 
-    console.log(`Processing uploaded file: ${req.file.path}`);
-
-    const meta = {
-        name: req.body.conferenceName || null,
-        shortName: req.body.conferenceShortName || null,
-        year: req.body.conferenceYear ? parseInt(req.body.conferenceYear) : null
-    };
-
-    const workspaceId = req.workspaceId;
-    const importId = importStatus.start(workspaceId);
-    // Fire-and-forget: respond 202 immediately, poll via /import-status
-    setImmediate(async () => {
-        try {
-            await db.withWorkspace(workspaceId, () => runImporter(req.file.path, meta));
-            dashboardCache.del();
-            importStatus.finish(importId, workspaceId);
-        } catch (error) {
-            console.error("Error during import:", error);
-            importStatus.fail(importId, workspaceId, error);
-        } finally {
-            const fs = require('fs/promises');
-            await fs.unlink(req.file.path).catch(() => {});
-        }
-    });
+        const workspaceId = req.workspaceId;
+        importId = importStatus.start(workspaceId);
+        // Fire-and-forget: respond 202 immediately, poll via /import-status
+        setImmediate(async () => {
+            try {
+                await db.withWorkspace(workspaceId, () => runImporter(filePath, meta));
+                dashboardCache.del();
+                importStatus.finish(importId, workspaceId);
+            } catch {
+                console.error("Error during import");
+                importStatus.fail(importId, workspaceId);
+            } finally {
+                await removeTempUpload(filePath);
+            }
+        });
+    } catch (error) {
+        await removeTempUpload(filePath);
+        throw error;
+    }
     res.status(202).json({ importId, message: "Import started", pollUrl: `/api/analytics/import-status/${importId}` });
 });
 
@@ -167,13 +177,15 @@ const getComparison = asyncHandler(async (req, res) => {
 });
 
 const deleteConference = asyncHandler(async (req, res) => {
-    await conferenceRepository.deleteConference(req.params.id);
+    const deleted = await conferenceRepository.deleteConference(req.params.id);
+    if (!deleted) throw new NotFoundError('Conference not found');
     dashboardCache.del();
     res.json({ message: "Conference deleted successfully" });
 });
 
 const updateConference = asyncHandler(async (req, res) => {
     const updated = await conferenceRepository.updateConference(req.params.id, req.body);
+    if (!updated) throw new NotFoundError('Conference not found');
     dashboardCache.del();
     res.json(updated);
 });

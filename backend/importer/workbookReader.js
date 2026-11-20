@@ -33,7 +33,7 @@ async function readWorkbook() {
 
     await workbook.xlsx.readFile(filePath);
 
-    console.log(`Workbook loaded successfully from ${filePath}`);
+    console.log('Workbook loaded successfully');
 
     if (store) {
         store.workbook = workbook;

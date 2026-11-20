@@ -27,10 +27,9 @@ function errorHandler(err, req, res, next) {
                     ? 'Invalid request'
                     : 'Internal server error';
 
-    if (status >= 500 && !(err instanceof AppError)) {
-        console.error(`Unhandled error on ${req.method} ${req.originalUrl}:`, err);
-    } else if (status >= 500) {
-        console.error(`Operational error on ${req.method} ${req.originalUrl}:`, err);
+    if (status >= 500) {
+        // URLs, error messages, and stack traces can contain tokens or records.
+        console.error(`Request failed: ${req.method} ${status}`);
     }
 
     res.status(status).json({ error: message });

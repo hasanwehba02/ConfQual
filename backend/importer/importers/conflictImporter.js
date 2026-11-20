@@ -52,7 +52,7 @@ async function importConflicts(edition, context = {}) {
     const sheet = findWorksheet(workbook, candidateSheets);
     if (sheet) {
         await importConflictsForSheet(workbook, sheet, edition, context);
-        console.log(`Conflicts imported successfully from sheet '${sheet.name}'.\n`);
+        console.log('Conflicts imported successfully.\n');
     } else {
         console.log("No conflicts sheet found. Skipping.\n");
     }

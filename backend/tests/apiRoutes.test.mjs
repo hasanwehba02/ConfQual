@@ -5,13 +5,16 @@ import appModule from '../app.js';
 import db from '../config/database.js';
 
 const app = appModule.createApp({
+    privilegedMfaMiddleware(_req, _res, next) { next(); },
     authMiddleware(req, res, next) {
         req.user = {
             sub: 'integration-test-user',
             email: 'test@example.com',
             aal: 'aal2',
-            app_metadata: { role: 'admin' }
+            amr: [{ method: 'totp' }],
+            app_metadata: { role: 'admin', confqual_access_approved: true }
         };
+        req.authUser = { id: 'integration-test-user', app_metadata: { confqual_access_approved: true } };
         next();
     },
     workspaceMiddleware(req, res, next) {

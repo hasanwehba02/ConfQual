@@ -45,10 +45,11 @@ async function applyWorkspaceScope(connection, workspaceId) {
     );
 }
 
-async function runScopedQuery(target, workspaceId, args) {
+async function runScopedQuery(target, workspaceId, readOnly, args) {
     const connection = await target.connect();
     try {
         await connection.query('BEGIN');
+        if (readOnly) await connection.query('SET TRANSACTION READ ONLY');
         await applyWorkspaceScope(connection, workspaceId);
         const result = await connection.query(...args);
         await connection.query('COMMIT');
@@ -62,8 +63,8 @@ async function runScopedQuery(target, workspaceId, args) {
 }
 
 // Handle idle client errors to prevent the application from crashing
-pool.on('error', (err, _client) => {
-    console.error('Unexpected error on idle PostgreSQL client', err);
+pool.on('error', () => {
+    console.error('Unexpected error on idle PostgreSQL client');
 });
 
 pool.on('connect', () => {
@@ -80,9 +81,18 @@ const clientProxy = new Proxy(pool, {
                     return store.client.query(...args);
                 }
                 if (store?.workspaceId) {
-                    return runScopedQuery(target, store.workspaceId, args);
+                    return runScopedQuery(target, store.workspaceId, store.readOnly, args);
                 }
                 return target.query(...args);
+            };
+        }
+        if (prop === 'getSessionFactorId') {
+            return async function (sessionId, userId) {
+                const result = await target.query(
+                    'SELECT factor_id FROM auth.sessions WHERE id = $1 AND user_id = $2',
+                    [sessionId, userId]
+                );
+                return result.rows[0]?.factor_id || null;
             };
         }
         if (prop === 'withTransaction') {
@@ -94,6 +104,9 @@ const clientProxy = new Proxy(pool, {
                 const connection = await target.connect();
                 try {
                     await connection.query('BEGIN');
+                    if (parentStore?.readOnly) {
+                        await connection.query('SET TRANSACTION READ ONLY');
+                    }
                     if (parentStore?.workspaceId) {
                         await applyWorkspaceScope(connection, parentStore.workspaceId);
                     }
@@ -113,6 +126,12 @@ const clientProxy = new Proxy(pool, {
             return function (workspaceId, callback) {
                 const parentStore = als.getStore();
                 return als.run({ ...parentStore, workspaceId }, callback);
+            };
+        }
+        if (prop === 'withReadOnlyWorkspace') {
+            return function (workspaceId, callback) {
+                const parentStore = als.getStore();
+                return als.run({ ...parentStore, workspaceId, readOnly: true }, callback);
             };
         }
         if (prop === 'getWorkspaceId') {

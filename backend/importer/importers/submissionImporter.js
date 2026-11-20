@@ -42,7 +42,6 @@ async function importSubmissions(edition) {
         imported += results.length;
     }
 
-    console.log(`Conference: ${edition.conferenceName || 'Unknown'} ${edition.year}`);
     console.log(`Imported papers: ${imported}`);
     console.log(`Skipped rows: ${skipped}`);
     console.log("Submissions imported successfully.\n");

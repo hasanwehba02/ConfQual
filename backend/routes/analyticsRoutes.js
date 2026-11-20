@@ -85,7 +85,8 @@ router.post("/log", (req, res) => {
         }
     }
     logRateLimiter.set(ip, entry);
-    console.log("FRONTEND LOG:", req.body);
+    // Browser-provided diagnostics may contain credentials or conference data.
+    // Acknowledge legacy clients without persisting their untrusted payloads.
     res.sendStatus(200); 
 });
 module.exports = router;

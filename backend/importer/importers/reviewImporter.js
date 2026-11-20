@@ -48,8 +48,8 @@ async function importReviewsForSheet(workbook, sheetName, edition, isSuperseded 
                 if (participant) {
                     participantMap[dto.subReviewerPersonId] = participant.id;
                 }
-            } catch (err) {
-                console.warn(`Could not create sub-reviewer participant: ${err.message}`);
+            } catch {
+                console.warn('Could not create sub-reviewer participant');
             }
         }
 

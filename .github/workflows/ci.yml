@@ -29,6 +29,8 @@ jobs:
       DATABASE_URL: postgresql://postgres:test@localhost:5432/confqual_test
       DB_SSL: "false"
       CONFQUAL_RUN_DESTRUCTIVE_DB_TESTS: "true"
+      CONFQUAL_DIRECT_ID_TEST_DB: "true"
+      CONFQUAL_SUPPORT_TEST_DB: "true"
 
     defaults:
       run:
@@ -54,7 +56,12 @@ jobs:
       run: npm run lint
 
     - name: Initialize test database
-      run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f ../database/confqual_schema.sql -f ../database/migrations/001_workspaces_up.sql -f tests/analytics-fixture.sql
+      run: |
+        psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN;"
+        psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f ../database/confqual_schema.sql -f ../database/migrations/001_workspaces_up.sql -f ../database/migrations/002_support_access_up.sql -f ../database/migrations/003_preserve_support_audit_up.sql
+        psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO anon, authenticated; GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;"
+        psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f ../database/migrations/004_revoke_data_api_access_up.sql -f tests/analytics-fixture.sql
+        psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN IF has_table_privilege('anon', 'workspace', 'SELECT') OR has_table_privilege('authenticated', 'workspace', 'SELECT') OR has_function_privilege('anon', 'public.confqual_current_workspace_id()', 'EXECUTE') OR has_function_privilege('authenticated', 'public.confqual_current_workspace_id()', 'EXECUTE') THEN RAISE EXCEPTION 'Supabase Data API roles can access workspace authorization'; END IF; END \$\$;"
       
     - name: Run Tests
       run: npm test

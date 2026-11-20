@@ -22,17 +22,35 @@ async function initialize() {
     const session = await getSession();
     if (!session) return window.location.replace('/login.html');
     const account = await getWorkspaceAccount(session);
-    if (!needsMfa(account)) return window.location.replace('/');
+    if (!account.trustedSetupApproved && !account.mfaSetupAuthorized) {
+        description.textContent = 'Workspace access is waiting for an operator to verify your identity through a separate channel and authorize authenticator setup.';
+        return;
+    }
+    if (account.trustedSetupApproved && !needsMfa(account)) return window.location.replace('/');
+    if (!needsMfa(account) && account.mfaSetupAuthorized) {
+        description.textContent = 'Your authenticator is verified. Workspace access is waiting for operator approval.';
+        return;
+    }
 
     supabase = await getSupabase();
     const { data, error } = await supabase.auth.mfa.listFactors();
     if (error) throw error;
-    const verified = data.totp?.[0];
+    const verified = account.trustedSetupApproved
+        ? data.totp?.find(factor => factor.id === account.approvedTotpFactorId)
+        : data.totp?.[0];
     if (verified) {
         factorId = verified.id;
         description.textContent = 'Enter the code from your authenticator app.';
         form.hidden = false;
     } else {
+        if (account.trustedSetupApproved) {
+            description.textContent = 'The operator-approved authenticator is unavailable. Contact the operator to begin account recovery.';
+            return;
+        }
+        if (!account.mfaSetupAuthorized) {
+            description.textContent = 'No verified authenticator is available. Contact the operator to begin account recovery.';
+            return;
+        }
         description.textContent = 'An authenticator app is required for this workspace role.';
         enrollSection.hidden = false;
     }
@@ -85,6 +103,12 @@ form.addEventListener('submit', async (event) => {
         const session = await getSession();
         const account = await getWorkspaceAccount(session);
         if (needsMfa(account)) throw new Error('Verification did not update this session. Try again.');
+        if (!account.trustedSetupApproved) {
+            description.textContent = 'Your authenticator is verified. Workspace access is waiting for operator approval.';
+            form.hidden = true;
+            setupSection.hidden = true;
+            return;
+        }
         window.location.replace('/');
     } catch (error) {
         message.textContent = error.message || 'Verification failed';

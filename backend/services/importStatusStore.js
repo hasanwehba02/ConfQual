@@ -16,12 +16,12 @@ class ImportStatusStore {
         return true;
     }
 
-    fail(id, workspaceId, error) {
+    fail(id, workspaceId) {
         if (!this.owns(id, workspaceId)) return false;
         this.items.set(id, {
             workspaceId,
             status: 'error',
-            error: error instanceof Error ? error.message : String(error),
+            error: 'Import failed',
             finishedAt: Date.now()
         });
         return true;

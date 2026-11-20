@@ -49,7 +49,7 @@ async function importMetaReviews(edition, context = {}) {
     const sheet = findWorksheet(workbook, candidateSheets);
     if (sheet) {
         await importMetaReviewsForSheet(workbook, sheet, edition, context);
-        console.log(`Meta-reviews imported successfully from sheet '${sheet.name}'.\n`);
+        console.log('Meta-reviews imported successfully.\n');
     } else {
         console.log("No meta-reviews sheet found. Skipping.\n");
     }

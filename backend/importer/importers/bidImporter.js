@@ -53,7 +53,7 @@ async function importBids(edition, context = {}) {
     const sheet = findWorksheet(workbook, candidateSheets);
     if (sheet) {
         await importBidsForSheet(workbook, sheet, edition, context);
-        console.log(`Bids imported successfully from sheet '${sheet.name}'.\n`);
+        console.log('Bids imported successfully.\n');
     } else {
         console.log("No bids sheet found. Skipping.\n");
     }

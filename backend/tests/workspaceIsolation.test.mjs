@@ -108,7 +108,7 @@ test('repository reads and deletes stay inside active workspace', async (t) => {
     }
 });
 
-test('first user claims legacy workspace and next user receives private workspace', async (t) => {
+test('new users cannot claim an unassigned legacy workspace', async (t) => {
     if (process.env.CONFQUAL_RUN_DESTRUCTIVE_DB_TESTS !== 'true') {
         t.skip('Runs only against disposable database');
         return;
@@ -143,6 +143,7 @@ test('first user claims legacy workspace and next user receives private workspac
     const legacyId = legacy.rows[0].id;
     const aliceUserId = '11111111-1111-4111-8111-111111111111';
     const bobUserId = '22222222-2222-4222-8222-222222222222';
+    let aliceWorkspaceId;
     let bobWorkspaceId;
 
     try {
@@ -154,21 +155,20 @@ test('first user claims legacy workspace and next user receives private workspac
             sub: bobUserId,
             email: `${marker}-bob@example.com`
         });
+        aliceWorkspaceId = alice.workspaceId;
         bobWorkspaceId = bob.workspaceId;
 
-        assert.equal(alice.workspaceId, legacyId);
+        assert.notEqual(alice.workspaceId, legacyId);
         assert.equal(alice.role, 'admin');
         assert.notEqual(bob.workspaceId, alice.workspaceId);
+        assert.notEqual(bob.workspaceId, legacyId);
         assert.equal(bob.role, 'admin');
+        const after = await db.query('SELECT owner_user_id, name, is_legacy FROM workspace WHERE id = $1', [legacyId]);
+        assert.deepEqual(after.rows[0], { owner_user_id: legacy.rows[0].owner_user_id, name: legacy.rows[0].name, is_legacy: legacy.rows[0].is_legacy });
     } finally {
-        await db.query('DELETE FROM workspace_member WHERE workspace_id = $1 AND user_id = $2', [legacyId, aliceUserId]);
-        await db.query(
-            'UPDATE workspace SET owner_user_id = $1, name = $2, is_legacy = $3 WHERE id = $4',
-            [legacy.rows[0].owner_user_id, legacy.rows[0].name, legacy.rows[0].is_legacy, legacyId]
-        );
         await db.query(
             'DELETE FROM workspace WHERE id = ANY($1::uuid[])',
-            [[bobWorkspaceId].filter(Boolean)]
+            [[aliceWorkspaceId, bobWorkspaceId].filter(Boolean)]
         );
     }
 });

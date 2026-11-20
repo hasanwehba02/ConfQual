@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import authModule from '../middleware/auth.js';
 
-const { createAuthMiddleware, requireRole, requirePrivilegedMfa } = authModule;
+const { createAuthMiddleware, requireRole, createPrivilegedMfaMiddleware, requireTrustedSetup } = authModule;
 
-function request({ authorization, user } = {}) {
+function request({ authorization, user, authUser } = {}) {
     return {
         user,
+        authUser,
         get(name) {
             return name.toLowerCase() === 'authorization' ? authorization : undefined;
         }
@@ -65,7 +66,7 @@ test('requireAuth attaches verified claims', async () => {
     const middleware = createAuthMiddleware(async (token) => {
         assert.equal(token, 'valid-token');
         return { data: { claims }, error: null };
-    }, async () => ({ data: { user: { id: 'user-123' } }, error: null }));
+    }, async () => ({ data: { user: { id: 'user-123', app_metadata: { confqual_access_approved: false } } }, error: null }));
     const req = request({ authorization: 'Bearer valid-token' });
     const res = response();
     let nextCalled = false;
@@ -73,6 +74,7 @@ test('requireAuth attaches verified claims', async () => {
     await middleware(req, res, () => { nextCalled = true; });
 
     assert.deepEqual(req.user, claims);
+    assert.equal(req.authUser.id, 'user-123');
     assert.equal(nextCalled, true);
 });
 
@@ -133,25 +135,56 @@ test('requireRole permits matching role and rejects other roles', () => {
     assert.deepEqual(res.body, { error: 'Forbidden' });
 });
 
-test('privileged workspace roles and support access require verified AAL2', () => {
+test('privileged workspace roles and support access require the approved verified factor', async () => {
     const cases = [
         { role: 'admin', aal: 'aal1', allowed: false },
         { role: 'chair', aal: undefined, allowed: false },
-        { role: 'admin', aal: 'aal2', allowed: true },
+        { role: 'admin', aal: 'aal2', amr: [{ method: 'totp' }], factorId: 'factor-1', allowed: true },
+        { role: 'admin', aal: 'aal2', amr: [{ method: 'totp' }], factorId: 'other-factor', allowed: false },
+        { role: 'admin', aal: 'aal2', amr: [{ method: 'phone' }], factorId: 'factor-1', allowed: false },
         { role: 'viewer', aal: 'aal1', allowed: true },
         { role: undefined, aal: 'aal2', allowed: false },
         { role: 'viewer', aal: 'aal1', supportAccess: { grantId: 'grant' }, allowed: false },
-        { role: 'viewer', aal: 'aal2', supportAccess: { grantId: 'grant' }, allowed: true }
+        { role: 'viewer', aal: 'aal2', amr: [{ method: 'totp' }], factorId: 'factor-1', supportAccess: { grantId: 'grant' }, allowed: true },
+        { role: 'viewer', aal: 'aal2', amr: [{ method: 'totp' }], factorId: 'other-factor', supportAccess: { grantId: 'grant' }, allowed: false },
+        { role: 'viewer', aal: 'aal2', amr: [{ method: 'phone' }], factorId: 'factor-1', supportAccess: { grantId: 'grant' }, allowed: false }
     ];
-    for (const { role, aal, supportAccess, allowed } of cases) {
-        const req = { user: { sub: 'user', aal }, workspaceRole: role, supportAccess };
+    for (const { role, aal, amr, factorId, supportAccess, allowed } of cases) {
+        const middleware = createPrivilegedMfaMiddleware(async () => factorId || null);
+        const req = {
+            user: { sub: 'user', session_id: 'session', aal, amr },
+            authUser: { app_metadata: { confqual_approved_totp_factor_id: 'factor-1' } },
+            workspaceRole: role,
+            supportAccess
+        };
         const res = response();
         let nextCalled = false;
-        requirePrivilegedMfa(req, res, () => { nextCalled = true; });
+        await middleware(req, res, () => { nextCalled = true; });
         assert.equal(nextCalled, allowed, `${role}/${aal}/${Boolean(supportAccess)}`);
         if (!allowed) {
             assert.equal(res.statusCode, 403);
             if (role) assert.equal(res.body.code, 'mfa_required');
         }
     }
+});
+
+test('trusted setup uses current provider metadata instead of stale JWT claims', () => {
+    for (const approved of [undefined, false, 'true']) {
+        const res = response();
+        let nextCalled = false;
+        requireTrustedSetup({ authUser: { app_metadata: { confqual_access_approved: approved } } }, res, () => { nextCalled = true; });
+        assert.equal(nextCalled, false);
+        assert.equal(res.statusCode, 403);
+        assert.equal(res.body.code, 'access_pending');
+    }
+
+    let nextCalled = false;
+    requireTrustedSetup({
+        user: { app_metadata: { confqual_access_approved: true } },
+        authUser: { app_metadata: { confqual_access_approved: false } }
+    }, response(), () => { nextCalled = true; });
+    assert.equal(nextCalled, false);
+
+    requireTrustedSetup({ authUser: { app_metadata: { confqual_access_approved: true } } }, response(), () => { nextCalled = true; });
+    assert.equal(nextCalled, true);
 });

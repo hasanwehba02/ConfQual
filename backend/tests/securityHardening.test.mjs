@@ -5,8 +5,10 @@ import appModule from '../app.js';
 import db from '../config/database.js';
 
 const app = appModule.createApp({
+    privilegedMfaMiddleware(_req, _res, next) { next(); },
     authMiddleware(req, _res, next) {
-        req.user = { sub: 'security-test-user', aal: 'aal2' };
+        req.user = { sub: 'security-test-user', aal: 'aal2', amr: [{ method: 'totp' }], app_metadata: { confqual_access_approved: true } };
+        req.authUser = { id: 'security-test-user', app_metadata: { confqual_access_approved: true } };
         next();
     },
     workspaceMiddleware(req, _res, next) {
@@ -39,6 +41,7 @@ test('responses include baseline browser security headers', async () => {
     assert.equal(response.headers.get('x-frame-options'), 'DENY');
     assert.ok(response.headers.get('strict-transport-security'));
     assert.ok(response.headers.get('ratelimit-policy'));
+    assert.equal(response.headers.get('cache-control'), 'no-store');
     const csp = response.headers.get('content-security-policy');
     assert.match(csp, /default-src 'self'/);
     assert.match(csp, /object-src 'none'/);
@@ -84,4 +87,14 @@ test('favicon is present and cacheable as an SVG', async () => {
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-type'), /image\/svg\+xml/);
     assert.match(await response.text(), /<svg/);
+});
+
+test('browser libraries and icon fonts are served locally', async () => {
+    const page = await (await fetch(`${baseUrl}/`)).text();
+    assert.doesNotMatch(page, /https:\/\/(?:unpkg\.com|cdn\.jsdelivr\.net|fonts\.googleapis\.com)/);
+    for (const asset of ['/vendor/chart.umd.js', '/vendor/icons/regular/style.css', '/vendor/icons/regular/Phosphor.woff2', '/vendor/icons/fill/style.css', '/vendor/icons/fill/Phosphor-Fill.woff2']) {
+        const response = await fetch(`${baseUrl}${asset}`);
+        assert.equal(response.status, 200, asset);
+        assert.doesNotMatch(response.headers.get('content-security-policy'), /unpkg\.com|cdn\.jsdelivr\.net|fonts\.googleapis\.com/);
+    }
 });

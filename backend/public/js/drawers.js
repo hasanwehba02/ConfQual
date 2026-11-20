@@ -425,7 +425,7 @@ window.openReviewerModal = async function(reviewerId, name) {
                         </div>
                         <div class="detail-text" style="margin-bottom: 0.5rem;">${escapeHtml(a.title)}</div>
                         <div class="detail-text" style="font-family: 'Roboto Mono', monospace; font-size: 0.75rem;">
-                            <strong>BID STATUS:</strong> ${a.bid_status ?? 'NO BID'}
+                            <strong>BID STATUS:</strong> ${escapeHtml(a.bid_status ?? 'NO BID')}
                         </div>
                         ${a.review_text ? `<div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border-light); font-size: 0.85rem;"><strong>Review:</strong><br/>${escapeHtml(a.review_text).replace(/\n/g, '<br/>')}</div>` : ''}
                         ${commentsHtml}
@@ -458,7 +458,7 @@ window.openReviewerModal = async function(reviewerId, name) {
                     <div class="detail-item" style="padding: 0.75rem;">
                         <div class="detail-item-header" style="margin-bottom: 0.25rem;">
                             <span>#${b.external_submission_id}</span>
-                            <span style="color: ${bidColor}; font-weight: bold; text-transform: uppercase;">${b.bid}</span>
+                            <span style="color: ${bidColor}; font-weight: bold; text-transform: uppercase;">${escapeHtml(b.bid)}</span>
                         </div>
                         <div class="detail-text" style="font-size: 0.8rem;">${escapeHtml(b.title)}</div>
                     </div>

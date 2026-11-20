@@ -5,12 +5,15 @@ const path = require('path');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
 const authRoutes = require('./routes/authRoutes');
-const { requireAuth, requirePrivilegedMfa } = require('./middleware/auth');
+const supportRoutes = require('./routes/supportRoutes');
+const { requireAuth, createPrivilegedMfaMiddleware, requireTrustedSetup } = require('./middleware/auth');
 const { requireWorkspace } = require('./middleware/workspace');
+const { createSupportWorkspaceMiddleware } = require('./middleware/supportWorkspace');
 
 function createApp({
     authMiddleware = requireAuth,
-    workspaceMiddleware = requireWorkspace
+    workspaceMiddleware = requireWorkspace,
+    privilegedMfaMiddleware = createPrivilegedMfaMiddleware()
 } = {}) {
     const app = express();
     const supabaseOrigin = (() => {
@@ -21,15 +24,18 @@ function createApp({
         }
     })();
 
-    app.set('trust proxy', 1);
+    let trustProxy = false;
+    if (process.env.DYNO) trustProxy = 1;
+    else if (process.env.CONFQUAL_TRUST_PROXY === 'loopback') trustProxy = 'loopback';
+    app.set('trust proxy', trustProxy);
     app.use(helmet({
         frameguard: { action: 'deny' },
         contentSecurityPolicy: {
             directives: {
                 defaultSrc: ["'self'"],
-                scriptSrc: ["'self'", 'https://unpkg.com', 'https://cdn.jsdelivr.net'],
-                styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-                fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+                scriptSrc: ["'self'"],
+                styleSrc: ["'self'", "'unsafe-inline'"],
+                fontSrc: ["'self'", 'data:'],
                 imgSrc: ["'self'", 'data:', 'blob:'],
                 connectSrc: ["'self'", ...(supabaseOrigin ? [supabaseOrigin] : [])],
                 objectSrc: ["'none'"],
@@ -45,17 +51,29 @@ function createApp({
         standardHeaders: 'draft-8',
         legacyHeaders: false
     }));
+    app.use('/api', (_req, res, next) => {
+        res.set('Cache-Control', 'no-store');
+        next();
+    });
     app.use(express.json({ limit: '1mb' }));
     app.get('/vendor/supabase.js', (req, res) => {
         const supabaseEntry = require.resolve('@supabase/supabase-js');
         res.sendFile(path.join(path.dirname(supabaseEntry), 'umd', 'supabase.js'));
     });
+    app.get('/vendor/chart.umd.js', (_req, res) => {
+        res.sendFile(path.join(path.dirname(require.resolve('chart.js')), 'chart.umd.js'));
+    });
+    for (const weight of ['regular', 'fill']) {
+        app.use(`/vendor/icons/${weight}`, express.static(path.dirname(require.resolve(`@phosphor-icons/web/${weight}`))));
+    }
     app.use(express.static(path.join(__dirname, 'public')));
 
     app.get('/api/auth/config', authRoutes.getConfig);
     app.get('/api/auth/me', authMiddleware, workspaceMiddleware, authRoutes.getCurrentUser);
-    app.use('/api/analytics', authMiddleware, workspaceMiddleware, requirePrivilegedMfa, analyticsRoutes);
-    app.use('/api/settings', authMiddleware, workspaceMiddleware, requirePrivilegedMfa, settingsRoutes);
+    app.use('/api/support', authMiddleware, workspaceMiddleware, requireTrustedSetup, privilegedMfaMiddleware, supportRoutes);
+    const supportWorkspace = createSupportWorkspaceMiddleware(workspaceMiddleware);
+    app.use('/api/analytics', authMiddleware, requireTrustedSetup, supportWorkspace('analytics:read'), privilegedMfaMiddleware, analyticsRoutes);
+    app.use('/api/settings', authMiddleware, requireTrustedSetup, supportWorkspace('settings:read'), privilegedMfaMiddleware, settingsRoutes);
 
     app.use('/api', (_req, res) => {
         res.status(404).json({ error: 'API endpoint not found' });

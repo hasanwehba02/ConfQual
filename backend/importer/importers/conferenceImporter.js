@@ -56,14 +56,14 @@ async function importConference(meta = {}) {
         year: year
     });
 
-    console.log(`Conference: ${series.name} (${series.acronym}) - Edition: ${edition.year} (id=${edition.id})`);
+    console.log('Conference imported');
 
     // Seed alert rules for this edition
     try {
         const { ensureAlertRulesForEdition } = require("../../repositories/analytics/helpers");
         await ensureAlertRulesForEdition(edition.id);
-    } catch (e) {
-        console.warn('Could not seed alert rules:', e.message);
+    } catch {
+        console.warn('Could not seed alert rules');
     }
 
     // Return edition object with series info for use by other importers

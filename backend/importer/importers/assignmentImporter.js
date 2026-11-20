@@ -44,7 +44,7 @@ async function importAssignments(edition, context = {}) {
     const sheet = findWorksheet(workbook, candidateSheets);
     if (sheet) {
         await importAssignmentsForSheet(workbook, sheet, edition, context);
-        console.log(`Assignments imported successfully from sheet '${sheet.name}'.\n`);
+        console.log('Assignments imported successfully.\n');
     } else {
         console.log("No assignments sheet found. Skipping.\n");
     }

@@ -9,8 +9,10 @@ import alertDefaults from '../config/alertRuleDefaults.js';
 
 const { getAlertRules, ensureAlertRulesForEdition, resolveEditionId, getAnonymizationSettings } = helpers;
 const app = appModule.createApp({
+    privilegedMfaMiddleware(_req, _res, next) { next(); },
     authMiddleware(req, _res, next) {
-        req.user = { sub: 'integration-test-user', aal: 'aal2', app_metadata: { role: 'admin' } };
+        req.user = { sub: 'integration-test-user', aal: 'aal2', amr: [{ method: 'totp' }], app_metadata: { role: 'admin', confqual_access_approved: true } };
+        req.authUser = { id: 'integration-test-user', app_metadata: { confqual_access_approved: true } };
         next();
     },
     workspaceMiddleware(req, _res, next) {

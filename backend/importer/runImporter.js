@@ -69,12 +69,12 @@ async function runImporter(filePath, meta = {}) {
                             console.log(`Deferred sentiment updated ${rows.rows.length} reviews`);
                         }
                     });
-                } catch (e) {
-                    console.warn('Deferred sentiment failed:', e.message);
+                } catch {
+                    console.warn('Deferred sentiment failed');
                 }
             });
         } catch (error) {
-            console.error("\nImport Failed!", error);
+            console.error("\nImport failed");
             throw error;
         }
     };
@@ -91,8 +91,8 @@ if (require.main === module) {
     const args = process.argv.slice(2);
     runImporter(args[0]).then(() => {
         process.exit(0);
-    }).catch(err => {
-        console.error(err);
+    }).catch(() => {
+        console.error('Import failed');
         process.exit(1);
     });
 }

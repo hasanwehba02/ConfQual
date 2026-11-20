@@ -306,18 +306,17 @@ async function getTopReviewers(editionId = null) {
 }
 
 async function getReviewerDetails(reviewerId, editionId = null) {
-    const settings = await getAnonymizationSettings(editionId);
-
     const query = `
-        SELECT pt.id, pt.external_person_id, r.first_name, r.last_name, ev.evaluator_role as role, r.email
+        SELECT pt.id, pt.edition_id, pt.external_person_id, r.first_name, r.last_name, ev.evaluator_role as role, r.email
         FROM participant pt
         JOIN researcher r ON r.id = pt.researcher_id
         LEFT JOIN evaluator ev ON ev.participant_id = pt.id
-        WHERE pt.id = $1
+        WHERE pt.id = $1 AND ($2::text IS NULL OR pt.edition_id::text = $2)
     `;
-    const reviewerRes = await client.query(query, [reviewerId]);
+    const reviewerRes = await client.query(query, [reviewerId, editionId || null]);
     if (reviewerRes.rows.length === 0) return null;
 
+    const settings = await getAnonymizationSettings(reviewerRes.rows[0].edition_id);
     const reviewer = maskNames(reviewerRes.rows, settings, 'id')[0];
 
     const assignmentsQuery = `

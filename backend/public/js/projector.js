@@ -1,3 +1,5 @@
+import { escapeHtml } from './utils.js';
+
 window.openProjectorView = async function(externalId) {
     try {
         const res = await fetch(`/api/analytics/papers/${externalId}`);
@@ -26,8 +28,8 @@ window.openProjectorView = async function(externalId) {
                 const scoreColor = r.total_score >= 1 ? '#10b981' : (r.total_score <= -1 ? '#ef4444' : '#64748b');
                 scoresContainer.innerHTML += `
                     <div style="background: #1e293b; border-left: 4px solid ${scoreColor}; padding: 15px 25px; border-radius: 8px; text-align: center; flex: 1; min-width: 150px;">
-                        <div style="font-size: 0.9rem; color: #94a3b8; margin-bottom: 5px; text-transform: uppercase;">${r.reviewer_name}</div>
-                        <div style="font-size: 2.5rem; font-weight: bold; color: white;">${r.total_score > 0 ? '+'+r.total_score : r.total_score}</div>
+                        <div style="font-size: 0.9rem; color: #94a3b8; margin-bottom: 5px; text-transform: uppercase;">${escapeHtml(r.reviewer_name)}</div>
+                        <div style="font-size: 2.5rem; font-weight: bold; color: white;">${escapeHtml(r.total_score > 0 ? '+'+r.total_score : r.total_score)}</div>
                     </div>
                 `;
             });
@@ -38,12 +40,12 @@ window.openProjectorView = async function(externalId) {
             if (highest.total_score - lowest.total_score > 1) {
                 disagreementsContainer.innerHTML = `
                     <div style="background: #1e293b; padding: 20px; border-radius: 8px; border-left: 4px solid #10b981;">
-                        <h4 style="color: #10b981; margin-top: 0;">Highest Score: ${highest.total_score > 0 ? '+'+highest.total_score : highest.total_score} (${highest.reviewer_name})</h4>
-                        <p style="color: #e2e8f0; line-height: 1.6; font-size: 1.1rem; margin-bottom: 0;">"${highest.text}"</p>
+                        <h4 style="color: #10b981; margin-top: 0;">Highest Score: ${escapeHtml(highest.total_score > 0 ? '+'+highest.total_score : highest.total_score)} (${escapeHtml(highest.reviewer_name)})</h4>
+                        <p style="color: #e2e8f0; line-height: 1.6; font-size: 1.1rem; margin-bottom: 0;">"${escapeHtml(highest.text)}"</p>
                     </div>
                     <div style="background: #1e293b; padding: 20px; border-radius: 8px; border-left: 4px solid #ef4444;">
-                        <h4 style="color: #ef4444; margin-top: 0;">Lowest Score: ${lowest.total_score > 0 ? '+'+lowest.total_score : lowest.total_score} (${lowest.reviewer_name})</h4>
-                        <p style="color: #e2e8f0; line-height: 1.6; font-size: 1.1rem; margin-bottom: 0;">"${lowest.text}"</p>
+                        <h4 style="color: #ef4444; margin-top: 0;">Lowest Score: ${escapeHtml(lowest.total_score > 0 ? '+'+lowest.total_score : lowest.total_score)} (${escapeHtml(lowest.reviewer_name)})</h4>
+                        <p style="color: #e2e8f0; line-height: 1.6; font-size: 1.1rem; margin-bottom: 0;">"${escapeHtml(lowest.text)}"</p>
                     </div>
                 `;
             } else {

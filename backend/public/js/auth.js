@@ -35,7 +35,8 @@ export async function getWorkspaceAccount(session) {
 }
 
 export function needsMfa(account) {
-    return ['admin', 'chair'].includes(account.role) && account.aal !== 'aal2';
+    const verified = account.aal === 'aal2' && account.totpVerified === true;
+    return (account.mfaSetupAuthorized || ['admin', 'chair'].includes(account.role)) && !verified;
 }
 
 export async function requireSession() {
@@ -45,6 +46,10 @@ export async function requireSession() {
         return null;
     }
     const account = await getWorkspaceAccount(session);
+    if (!account.trustedSetupApproved) {
+        window.location.replace('/mfa.html');
+        return null;
+    }
     if (needsMfa(account)) {
         window.location.replace('/mfa.html');
         return null;

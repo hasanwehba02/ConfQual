@@ -258,7 +258,7 @@ export function renderQualityProfile(profile) {
             : `<span>${topic.available_experts}</span>`;
 
         tr.innerHTML = `
-            <td style="font-family: 'Roboto Mono', monospace;">${topic.topic_name}</td>
+            <td style="font-family: 'Roboto Mono', monospace;">${escapeHtml(topic.topic_name)}</td>
             <td style="font-family: 'Roboto Mono', monospace;">${topic.submitted_papers}</td>
             <td style="font-family: 'Roboto Mono', monospace;">${expertHtml}</td>
         `;
@@ -269,7 +269,7 @@ export function renderQualityProfile(profile) {
 
     let geoBreakdown = `TOTAL PC: ${profile.internationalization.domesticCount + profile.internationalization.internationalCount} | COUNTRIES: ${profile.internationalization.totalCountries}<br>`;
     if (profile.internationalization.domesticCountry !== 'Unknown') {
-        geoBreakdown += `DOMESTIC (${profile.internationalization.domesticCountry}): ${profile.internationalization.domesticCount} | INTL: ${profile.internationalization.internationalCount}`;
+        geoBreakdown += `DOMESTIC (${escapeHtml(profile.internationalization.domesticCountry)}): ${profile.internationalization.domesticCount} | INTL: ${profile.internationalization.internationalCount}`;
     }
     document.getElementById('geographic-breakdown').innerHTML = geoBreakdown;
 }
@@ -390,16 +390,23 @@ export function renderAwardsTab(data) {
     const revBody = document.getElementById('top-reviewers-body');
     if (revBody) {
         if (data.topReviewers && data.topReviewers.length > 0) {
-            revBody.innerHTML = data.topReviewers.map(r => `
-                <tr onclick="openReviewerModal('${r.id}', '${r.first_name} ${r.last_name}')" style="cursor:pointer;">
-                    <td style="font-weight: bold;">${r.first_name} ${r.last_name}</td>
+            revBody.innerHTML = data.topReviewers.map((r, index) => `
+                <tr data-index="${index}" style="cursor:pointer;">
+                    <td style="font-weight: bold;">${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</td>
                     <td style="font-family: 'Roboto Mono', monospace;">${r.reviews_done}</td>
                     <td style="font-family: 'Roboto Mono', monospace;">${r.avg_word_count}</td>
                     <td style="font-family: 'Roboto Mono', monospace;">${parseFloat(r.calibration_index||0).toFixed(2)}</td>
                 </tr>
             `).join('');
+            revBody.onclick = event => {
+                const row = event.target.closest('tr[data-index]');
+                if (!row || !revBody.contains(row)) return;
+                const reviewer = data.topReviewers[Number(row.dataset.index)];
+                if (reviewer) window.openReviewerModal(reviewer.id, `${reviewer.first_name} ${reviewer.last_name}`);
+            };
         } else {
             revBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No candidate reviewers found</td></tr>';
+            revBody.onclick = null;
         }
     }
 
@@ -407,16 +414,23 @@ export function renderAwardsTab(data) {
     const papBody = document.getElementById('top-papers-body');
     if (papBody) {
         if (data.topPapers && data.topPapers.length > 0) {
-            papBody.innerHTML = data.topPapers.map(p => `
-                <tr onclick="openPaperModal('${p.id}')" style="cursor:pointer;">
+            papBody.innerHTML = data.topPapers.map((p, index) => `
+                <tr data-index="${index}" style="cursor:pointer;">
                     <td style="font-family: 'Roboto Mono', monospace;">${p.id}</td>
-                    <td style="font-weight: bold;">${p.title}</td>
+                    <td style="font-weight: bold;">${escapeHtml(p.title)}</td>
                     <td style="font-family: 'Roboto Mono', monospace;">${parseFloat(p.avg_score||0).toFixed(2)}</td>
                     <td style="font-family: 'Roboto Mono', monospace;">${parseFloat(p.spread||0).toFixed(2)}</td>
                 </tr>
             `).join('');
+            papBody.onclick = event => {
+                const row = event.target.closest('tr[data-index]');
+                if (!row || !papBody.contains(row)) return;
+                const paper = data.topPapers[Number(row.dataset.index)];
+                if (paper) window.openPaperModal(paper.id);
+            };
         } else {
             papBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No candidate papers found</td></tr>';
+            papBody.onclick = null;
         }
     }
 
